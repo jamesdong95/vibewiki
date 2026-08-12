@@ -1,0 +1,109 @@
+{
+  "fixture": "next-ts-demo",
+  "questions": [
+    {
+      "evidence_requirements": [
+        "literal /api/users call",
+        "users route handler call/import",
+        "users service write",
+        "User schema model"
+      ],
+      "expected_status": "inferred",
+      "id": "GQ-001",
+      "question": "Which files and entity are directly connected to the /signup flow?",
+      "required_relations": [
+        "calls",
+        "imports",
+        "writes"
+      ],
+      "subjects": [
+        "route:page:/signup",
+        "route:handler:/api/users",
+        "function:src/services/users.ts:createUser",
+        "data_entity:prisma:User"
+      ],
+      "unknown_behavior": "If any required hop cannot be cited, return unknown for the complete connection rather than filling the gap by name similarity."
+    },
+    {
+      "evidence_requirements": [
+        "literal /api/orders call",
+        "orders route handler call/import",
+        "orders service write",
+        "Order schema model"
+      ],
+      "expected_status": "inferred",
+      "id": "GQ-002",
+      "question": "Which files and entity are directly connected to the /checkout flow?",
+      "required_relations": [
+        "calls",
+        "imports",
+        "writes"
+      ],
+      "subjects": [
+        "route:page:/checkout",
+        "route:handler:/api/orders",
+        "function:src/services/orders.ts:createOrder",
+        "data_entity:prisma:Order"
+      ],
+      "unknown_behavior": "Do not infer payment, fulfillment, or runtime success from this static connection."
+    },
+    {
+      "evidence_requirements": [
+        "User schema model",
+        "verified downstream relation chain",
+        "signup test reference"
+      ],
+      "expected_status": "inferred",
+      "id": "GQ-003",
+      "question": "What could be impacted if the User/users entity changes?",
+      "required_relations": [
+        "writes",
+        "tested_by"
+      ],
+      "subjects": [
+        "data_entity:prisma:User",
+        "function:src/services/users.ts:createUser",
+        "route:handler:/api/users",
+        "route:page:/signup",
+        "test:tests/signup.test.ts"
+      ],
+      "unknown_behavior": "Return a candidate static impact neighborhood and state that runtime-only consumers may be missing; never call it exhaustive."
+    },
+    {
+      "evidence_requirements": [
+        "signup test imports SignupPage and createUser",
+        "orders test imports CheckoutPage and createOrder"
+      ],
+      "expected_status": "verified",
+      "id": "GQ-004",
+      "question": "Which tests directly cover the signup and checkout/order paths?",
+      "required_relations": [
+        "tested_by"
+      ],
+      "subjects": [
+        "route:page:/signup",
+        "test:tests/signup.test.ts",
+        "route:page:/checkout",
+        "test:tests/orders.test.ts"
+      ],
+      "unknown_behavior": "If a direct test reference cannot be cited, mark that coverage result unknown instead of assuming coverage from a filename."
+    },
+    {
+      "evidence_requirements": [
+        "admin page exists",
+        "no verified test link observed"
+      ],
+      "expected_status": "unknown",
+      "id": "GQ-005",
+      "question": "Is the /admin page covered by a test?",
+      "required_relations": [
+        "tested_by"
+      ],
+      "subjects": [
+        "route:page:/admin"
+      ],
+      "unknown_behavior": "Use unknown/not_observed. Absence of a discovered link is not proof that no test exists anywhere."
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,503 @@
+{
+  "facts": [
+    {
+      "attributes": {
+        "file": "app/checkout/page.tsx",
+        "method": "POST",
+        "path": "/api/orders"
+      },
+      "evidence": [
+        {
+          "kind": "api_call",
+          "line_end": 12,
+          "line_start": 12,
+          "path": "app/checkout/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "kind": "api_call",
+      "semantic_key": "api_call:app/checkout/page.tsx:/api/orders",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/signup/page.tsx",
+        "method": "POST",
+        "path": "/api/users"
+      },
+      "evidence": [
+        {
+          "kind": "api_call",
+          "line_end": 15,
+          "line_start": 15,
+          "path": "app/signup/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "kind": "api_call",
+      "semantic_key": "api_call:app/signup/page.tsx:/api/users",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "prisma/schema.prisma",
+        "model": "Order"
+      },
+      "evidence": [
+        {
+          "kind": "schema_model",
+          "line_end": 22,
+          "line_start": 17,
+          "path": "prisma/schema.prisma",
+          "status": "verified"
+        }
+      ],
+      "kind": "data_entity",
+      "semantic_key": "data_entity:prisma:Order",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "prisma/schema.prisma",
+        "model": "User"
+      },
+      "evidence": [
+        {
+          "kind": "schema_model",
+          "line_end": 14,
+          "line_start": 10,
+          "path": "prisma/schema.prisma",
+          "status": "verified"
+        }
+      ],
+      "kind": "data_entity",
+      "semantic_key": "data_entity:prisma:User",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "src/services/orders.ts",
+        "name": "createOrder"
+      },
+      "evidence": [
+        {
+          "kind": "function",
+          "line_end": 10,
+          "line_start": 9,
+          "path": "src/services/orders.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "function",
+      "semantic_key": "function:src/services/orders.ts:createOrder",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "src/services/users.ts",
+        "name": "createUser"
+      },
+      "evidence": [
+        {
+          "kind": "function",
+          "line_end": 9,
+          "line_start": 8,
+          "path": "src/services/users.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "function",
+      "semantic_key": "function:src/services/users.ts:createUser",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "src/services/users.ts",
+        "name": "listUsers"
+      },
+      "evidence": [
+        {
+          "kind": "function",
+          "line_end": 13,
+          "line_start": 12,
+          "path": "src/services/users.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "function",
+      "semantic_key": "function:src/services/users.ts:listUsers",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/api/orders/route.ts",
+        "methods": [
+          "POST"
+        ],
+        "path": "/api/orders"
+      },
+      "evidence": [
+        {
+          "kind": "route_handler",
+          "line_end": 6,
+          "line_start": 3,
+          "path": "app/api/orders/route.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "route",
+      "semantic_key": "route:handler:/api/orders",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/api/users/route.ts",
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "path": "/api/users"
+      },
+      "evidence": [
+        {
+          "kind": "route_handler",
+          "line_end": 5,
+          "line_start": 3,
+          "path": "app/api/users/route.ts",
+          "status": "verified"
+        },
+        {
+          "kind": "route_handler",
+          "line_end": 11,
+          "line_start": 8,
+          "path": "app/api/users/route.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "route",
+      "semantic_key": "route:handler:/api/users",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/page.tsx",
+        "path": "/"
+      },
+      "evidence": [
+        {
+          "kind": "page_declaration",
+          "line_end": 3,
+          "line_start": 3,
+          "path": "app/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "kind": "route",
+      "semantic_key": "route:page:/",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/admin/page.tsx",
+        "path": "/admin"
+      },
+      "evidence": [
+        {
+          "kind": "page_declaration",
+          "line_end": 1,
+          "line_start": 1,
+          "path": "app/admin/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "kind": "route",
+      "semantic_key": "route:page:/admin",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/checkout/page.tsx",
+        "path": "/checkout"
+      },
+      "evidence": [
+        {
+          "kind": "page_declaration",
+          "line_end": 8,
+          "line_start": 8,
+          "path": "app/checkout/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "kind": "route",
+      "semantic_key": "route:page:/checkout",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "app/signup/page.tsx",
+        "path": "/signup"
+      },
+      "evidence": [
+        {
+          "kind": "page_declaration",
+          "line_end": 9,
+          "line_start": 9,
+          "path": "app/signup/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "kind": "route",
+      "semantic_key": "route:page:/signup",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "tests/orders.test.ts",
+        "name": "orders flow"
+      },
+      "evidence": [
+        {
+          "kind": "test_reference",
+          "line_end": 2,
+          "line_start": 2,
+          "path": "tests/orders.test.ts",
+          "status": "verified"
+        },
+        {
+          "kind": "test_reference",
+          "line_end": 3,
+          "line_start": 3,
+          "path": "tests/orders.test.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "test",
+      "semantic_key": "test:tests/orders.test.ts",
+      "status": "verified"
+    },
+    {
+      "attributes": {
+        "file": "tests/signup.test.ts",
+        "name": "signup flow"
+      },
+      "evidence": [
+        {
+          "kind": "test_reference",
+          "line_end": 2,
+          "line_start": 2,
+          "path": "tests/signup.test.ts",
+          "status": "verified"
+        },
+        {
+          "kind": "test_reference",
+          "line_end": 3,
+          "line_start": 3,
+          "path": "tests/signup.test.ts",
+          "status": "verified"
+        }
+      ],
+      "kind": "test",
+      "semantic_key": "test:tests/signup.test.ts",
+      "status": "verified"
+    }
+  ],
+  "fixture": "next-ts-demo",
+  "relations": [
+    {
+      "evidence": [
+        {
+          "kind": "schema_model",
+          "line_end": 17,
+          "line_start": 17,
+          "path": "prisma/schema.prisma",
+          "status": "verified"
+        },
+        {
+          "kind": "write",
+          "line_end": 10,
+          "line_start": 10,
+          "path": "src/services/orders.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "writes",
+      "source": "function:src/services/orders.ts:createOrder",
+      "status": "verified",
+      "target": "data_entity:prisma:Order"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "schema_model",
+          "line_end": 10,
+          "line_start": 10,
+          "path": "prisma/schema.prisma",
+          "status": "verified"
+        },
+        {
+          "kind": "write",
+          "line_end": 9,
+          "line_start": 9,
+          "path": "src/services/users.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "writes",
+      "source": "function:src/services/users.ts:createUser",
+      "status": "verified",
+      "target": "data_entity:prisma:User"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "call",
+          "line_end": 5,
+          "line_start": 5,
+          "path": "app/api/orders/route.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "calls",
+      "source": "route:handler:/api/orders",
+      "status": "verified",
+      "target": "function:src/services/orders.ts:createOrder"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "import",
+          "line_end": 1,
+          "line_start": 1,
+          "path": "app/api/orders/route.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "imports",
+      "source": "route:handler:/api/orders",
+      "status": "verified",
+      "target": "function:src/services/orders.ts:createOrder"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "call",
+          "line_end": 10,
+          "line_start": 10,
+          "path": "app/api/users/route.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "calls",
+      "source": "route:handler:/api/users",
+      "status": "verified",
+      "target": "function:src/services/users.ts:createUser"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "import",
+          "line_end": 1,
+          "line_start": 1,
+          "path": "app/api/users/route.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "imports",
+      "source": "route:handler:/api/users",
+      "status": "verified",
+      "target": "function:src/services/users.ts:createUser"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "api_call",
+          "line_end": 12,
+          "line_start": 12,
+          "path": "app/checkout/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "relation": "calls",
+      "source": "route:page:/checkout",
+      "status": "verified",
+      "target": "route:handler:/api/orders"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "test_reference",
+          "line_end": 2,
+          "line_start": 2,
+          "path": "tests/orders.test.ts",
+          "status": "verified"
+        },
+        {
+          "kind": "test_reference",
+          "line_end": 3,
+          "line_start": 3,
+          "path": "tests/orders.test.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "tested_by",
+      "source": "route:page:/checkout",
+      "status": "verified",
+      "target": "test:tests/orders.test.ts"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "api_call",
+          "line_end": 15,
+          "line_start": 15,
+          "path": "app/signup/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "relation": "calls",
+      "source": "route:page:/signup",
+      "status": "verified",
+      "target": "route:handler:/api/users"
+    },
+    {
+      "evidence": [
+        {
+          "kind": "test_reference",
+          "line_end": 2,
+          "line_start": 2,
+          "path": "tests/signup.test.ts",
+          "status": "verified"
+        },
+        {
+          "kind": "test_reference",
+          "line_end": 3,
+          "line_start": 3,
+          "path": "tests/signup.test.ts",
+          "status": "verified"
+        }
+      ],
+      "relation": "tested_by",
+      "source": "route:page:/signup",
+      "status": "verified",
+      "target": "test:tests/signup.test.ts"
+    }
+  ],
+  "schema_version": 1,
+  "unknowns": [
+    {
+      "evidence": [
+        {
+          "kind": "coverage_subject",
+          "line_end": 1,
+          "line_start": 1,
+          "path": "app/admin/page.tsx",
+          "status": "verified"
+        }
+      ],
+      "reason": "not_observed: no test import or path reference for this page exists in the fixture",
+      "status": "unknown",
+      "subject": "coverage:page:/admin",
+      "type": "test_coverage"
+    }
+  ]
+}
