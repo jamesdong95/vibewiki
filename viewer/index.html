@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0e1214" />
+  <title>VibeWiki — Product intelligence</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1112;
+      --bg-raised: #101618;
+      --panel: #131a1d;
+      --panel-2: #182124;
+      --panel-3: #1d292d;
+      --ink: #edf3ec;
+      --ink-soft: #c5cfca;
+      --muted: #819097;
+      --muted-2: #5e6b70;
+      --line: rgba(177, 207, 199, 0.13);
+      --line-strong: rgba(177, 207, 199, 0.24);
+      --lime: #d8f98b;
+      --lime-soft: rgba(216, 249, 139, 0.13);
+      --cyan: #a6e9ef;
+      --cyan-soft: rgba(166, 233, 239, 0.11);
+      --orange: #ffb681;
+      --orange-soft: rgba(255, 182, 129, 0.12);
+      --red: #ff8c88;
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.26);
+      --radius: 14px;
+      --mono: "SFMono-Regular", "JetBrains Mono", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 64% -10%, rgba(166, 233, 239, 0.07), transparent 34%),
+        radial-gradient(circle at 16% 88%, rgba(216, 249, 139, 0.045), transparent 31%),
+        var(--bg);
+      font-family: var(--sans);
+      font-size: 13px;
+      letter-spacing: -0.01em;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.22;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(to bottom, black, transparent 86%);
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--lime);
+      outline-offset: 2px;
+    }
+
+    .app-shell {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 236px minmax(560px, 1fr) 326px;
+      height: 100vh;
+      min-height: 680px;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+      padding: 26px 15px 18px;
+      border-right: 1px solid var(--line);
+      background: rgba(13, 17, 18, 0.76);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 10px;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: 1px solid rgba(216, 249, 139, 0.65);
+      border-radius: 9px;
+      color: var(--lime);
+      background: var(--lime-soft);
+      box-shadow: 0 0 0 5px rgba(216, 249, 139, 0.035);
+    }
+
+    .brand-mark svg { width: 17px; height: 17px; }
+    .brand-name { font-size: 15px; font-weight: 720; letter-spacing: -0.035em; }
+    .brand-subtitle {
+      margin-top: 2px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .project-switcher {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .project-switcher:hover { border-color: var(--line-strong); background: var(--panel-2); }
+    .project-switcher strong { display: block; font-size: 12px; font-weight: 630; }
+    .project-switcher small { display: block; margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .chevron { color: var(--muted); font-size: 16px; }
+
+    .nav-group { display: grid; gap: 5px; }
+    .nav-label {
+      padding: 0 11px 8px;
+      color: var(--muted-2);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      width: 100%;
+      min-height: 40px;
+      padding: 0 11px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      transition: background .2s ease, color .2s ease, border-color .2s ease, transform .2s ease;
+    }
+
+    .nav-item:hover { color: var(--ink-soft); background: rgba(255,255,255,0.035); }
+    .nav-item.active {
+      color: var(--ink);
+      border-color: rgba(216, 249, 139, 0.19);
+      background: linear-gradient(90deg, rgba(216, 249, 139, 0.13), rgba(216, 249, 139, 0.035));
+      box-shadow: inset 2px 0 0 var(--lime);
+    }
+
+    .nav-icon {
+      display: grid;
+      place-items: center;
+      width: 18px;
+      color: currentColor;
+      opacity: 0.82;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .nav-item.active .nav-icon { color: var(--lime); opacity: 1; }
+    .nav-item span:last-child { flex: 1; }
+    .nav-count { color: var(--muted-2); font-family: var(--mono); font-size: 10px; }
+
+    .runtime-card {
+      margin-top: auto;
+      padding: 14px;
+      border: 1px solid rgba(166, 233, 239, 0.15);
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(166, 233, 239, 0.09), rgba(255,255,255,0.02));
+    }
+
+    .runtime-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .runtime-title { color: var(--ink-soft); font-size: 11px; font-weight: 650; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 4px rgba(216,249,139,0.12); }
+    .runtime-card p { margin: 9px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .runtime-meta { display: flex; align-items: center; gap: 7px; color: var(--cyan); font-family: var(--mono); font-size: 9px; }
+    .lock { color: var(--muted); }
+
+    .workspace { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 76px;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(13,17,18,0.4);
+      backdrop-filter: blur(18px);
+    }
+
+    .crumbs { display: flex; align-items: center; gap: 9px; min-width: 188px; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; }
+    .crumbs strong { color: var(--ink-soft); font-weight: 560; }
+    .crumb-separator { color: var(--muted-2); }
+    .top-search { position: relative; flex: 1; max-width: 540px; margin: 0 auto; }
+    .top-search input {
+      width: 100%;
+      height: 38px;
+      padding: 0 92px 0 37px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--ink);
+      background: rgba(255,255,255,0.035);
+    }
+    .top-search input::placeholder { color: var(--muted-2); }
+    .search-icon { position: absolute; left: 14px; top: 11px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+    .shortcut { position: absolute; right: 9px; top: 8px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted-2); font-family: var(--mono); font-size: 9px; }
+
+    .top-actions { display: flex; align-items: center; gap: 8px; min-width: 188px; justify-content: flex-end; }
+    .icon-button, .text-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.025);
+      cursor: pointer;
+      transition: border-color .2s ease, background .2s ease, color .2s ease, transform .2s ease;
+    }
+    .icon-button { width: 36px; color: var(--muted); font-family: var(--mono); }
+    .icon-button:hover, .text-button:hover { color: var(--ink); border-color: var(--line-strong); background: var(--panel-2); }
+    .text-button { gap: 8px; padding: 0 12px; color: var(--ink-soft); font-size: 11px; font-weight: 620; }
+    .text-button.primary { color: #18200f; border-color: var(--lime); background: var(--lime); }
+    .text-button.primary:hover { background: #e4ffa2; transform: translateY(-1px); }
+    .text-button svg, .icon-button svg { width: 14px; height: 14px; }
+
+    .main-scroll { overflow: auto; padding: 30px 30px 44px; }
+    .main-scroll::-webkit-scrollbar, .inspector::-webkit-scrollbar { width: 8px; }
+    .main-scroll::-webkit-scrollbar-thumb, .inspector::-webkit-scrollbar-thumb { background: var(--panel-3); border: 2px solid transparent; border-radius: 8px; background-clip: padding-box; }
+
+    .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 22px; }
+    .eyebrow { margin-bottom: 9px; color: var(--lime); font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(25px, 3vw, 34px); font-weight: 650; letter-spacing: -0.055em; line-height: 1; }
+    .heading-copy { max-width: 620px; margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .heading-copy strong { color: var(--ink-soft); font-weight: 580; }
+    .heading-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-bottom: 25px; }
+    .stat {
+      min-height: 76px;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.038), rgba(255,255,255,0.012));
+    }
+    .stat-label { color: var(--muted); font-size: 10px; }
+    .stat-bottom { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; }
+    .stat-value { font-family: var(--mono); font-size: 21px; letter-spacing: -0.06em; }
+    .stat-trend { color: var(--lime); font-family: var(--mono); font-size: 9px; }
+    .stat-trend.warn { color: var(--orange); }
+
+    .workspace-tabs { display: flex; align-items: center; gap: 18px; height: 39px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+    .workspace-tab { position: relative; height: 39px; padding: 0 2px; border: 0; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
+    .workspace-tab:hover { color: var(--ink-soft); }
+    .workspace-tab.active { color: var(--ink); }
+    .workspace-tab.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--lime); }
+
+    .graph-card { position: relative; min-height: 510px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(16,22,24,0.78); box-shadow: var(--shadow); }
+    .graph-card::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 46%, rgba(216,249,139,0.055), transparent 34%); }
+    .graph-toolbar { position: absolute; z-index: 3; top: 16px; right: 16px; left: 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .graph-legend { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 10px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .legend-dot.verified { background: var(--lime); }
+    .legend-dot.inferred { background: var(--orange); }
+    .legend-dot.unknown { background: var(--muted-2); }
+    .graph-tools { display: flex; gap: 5px; }
+    .graph-tool { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(13,17,18,0.72); cursor: pointer; }
+    .graph-tool:hover { color: var(--ink); border-color: var(--line-strong); }
+    .graph-viewport { position: absolute; inset: 0; overflow: hidden; }
+    .graph-canvas { position: absolute; inset: 0; transform-origin: 50% 50%; transition: transform .25s ease; }
+    .graph-canvas::before {
+      content: "";
+      position: absolute;
+      inset: 57px 0 0;
+      opacity: 0.5;
+      background-image: radial-gradient(rgba(178,205,198,0.15) 0.8px, transparent 0.8px);
+      background-size: 20px 20px;
+      mask-image: linear-gradient(to bottom, black, transparent 92%);
+    }
+    .graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.9; }
+    .graph-lines line { fill: none; stroke: rgba(166,233,239,0.34); stroke-width: 1.4; stroke-dasharray: 4 5; }
+    .graph-lines line.active-line { stroke: rgba(216,249,139,0.78); stroke-width: 1.8; stroke-dasharray: none; }
+    .graph-lines circle { fill: var(--panel-2); stroke: rgba(166,233,239,0.5); stroke-width: 1.3; }
+
+    .node {
+      position: absolute;
+      z-index: 2;
+      width: 148px;
+      min-height: 70px;
+      padding: 11px 12px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: var(--ink-soft);
+      background: rgba(22,31,34,0.92);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.19);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color .2s ease, background .2s ease, transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+    }
+    .node:hover { border-color: rgba(216,249,139,0.55); background: #1b282b; transform: translateY(-3px); box-shadow: 0 11px 28px rgba(0,0,0,0.3); }
+    .node.selected { border-color: var(--lime); background: linear-gradient(145deg, rgba(216,249,139,0.15), rgba(22,31,34,0.95) 70%); box-shadow: 0 0 0 4px rgba(216,249,139,0.08), 0 15px 30px rgba(0,0,0,0.28); }
+    .node.dimmed { opacity: 0.14; pointer-events: none; }
+    .node-type { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; color: var(--muted); font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .node-confidence { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); }
+    .node-confidence.inferred { background: var(--orange); }
+    .node-confidence.unknown { background: var(--muted-2); }
+    .node-title { color: var(--ink); font-size: 12px; font-weight: 650; line-height: 1.22; }
+    .node-meta { overflow: hidden; margin-top: 7px; color: var(--muted-2); font-family: var(--mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+
+    .graph-caption { position: absolute; z-index: 3; right: 18px; bottom: 16px; left: 18px; display: flex; justify-content: space-between; gap: 12px; color: var(--muted-2); font-family: var(--mono); font-size: 9px; }
+    .graph-caption span:last-child { color: var(--muted); }
+
+    .inspector { overflow: auto; padding: 26px 20px 30px; border-left: 1px solid var(--line); background: rgba(13,17,18,0.62); }
+    .inspector-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-bottom: 19px; border-bottom: 1px solid var(--line); }
+    .inspector-kicker { margin-bottom: 7px; color: var(--muted); font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; }
+    .inspector h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.045em; }
+    .confidence-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid rgba(216,249,139,0.18); border-radius: 6px; color: var(--lime); background: var(--lime-soft); font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+    .confidence-badge.inferred { color: var(--orange); border-color: rgba(255,182,129,0.2); background: var(--orange-soft); }
+    .inspector-section { padding: 19px 0; border-bottom: 1px solid var(--line); }
+    .inspector-label { margin-bottom: 10px; color: var(--muted-2); font-family: var(--mono); font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; }
+    .inspector-copy { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+    .evidence-list { display: grid; gap: 8px; }
+    .evidence-row { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); cursor: pointer; }
+    .evidence-row:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.04); }
+    .file-icon { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: var(--cyan); background: var(--cyan-soft); font-family: var(--mono); font-size: 8px; }
+    .evidence-info { min-width: 0; flex: 1; }
+    .evidence-path { overflow: hidden; color: var(--ink-soft); font-family: var(--mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+    .evidence-line { margin-top: 3px; color: var(--muted-2); font-family: var(--mono); font-size: 8px; }
+    .external-arrow { color: var(--muted-2); font-family: var(--mono); }
+    .impact-list { display: grid; gap: 8px; }
+    .impact-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 11px; }
+    .impact-row span:last-child { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .inspector-footer { padding-top: 19px; }
+    .mini-prompt { display: flex; align-items: center; gap: 8px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: rgba(255,255,255,0.025); }
+    .mini-prompt input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 11px; }
+    .mini-prompt input::placeholder { color: var(--muted-2); }
+    .mini-prompt button { border: 0; color: var(--lime); background: transparent; cursor: pointer; font-family: var(--mono); font-size: 11px; }
+
+    .toast { position: fixed; z-index: 20; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 12px 14px; border: 1px solid rgba(216,249,139,0.25); border-radius: 9px; color: var(--ink); background: #1a2521; box-shadow: var(--shadow); opacity: 0; transform: translateY(9px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast-mark { color: var(--lime); font-family: var(--mono); }
+
+    .modal-backdrop { position: fixed; z-index: 15; inset: 0; display: grid; place-items: start center; padding-top: 13vh; background: rgba(2,4,5,0.62); backdrop-filter: blur(8px); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+    .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+    .command-modal { width: min(560px, calc(100vw - 32px)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 13px; background: #141c1f; box-shadow: 0 28px 90px rgba(0,0,0,0.5); transform: translateY(-12px); transition: transform .2s ease; }
+    .modal-backdrop.open .command-modal { transform: translateY(0); }
+    .command-input { display: flex; align-items: center; gap: 10px; padding: 15px 16px; border-bottom: 1px solid var(--line); }
+    .command-input span { color: var(--lime); font-family: var(--mono); }
+    .command-input input { width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 13px; }
+    .command-input input::placeholder { color: var(--muted); }
+    .command-list { display: grid; gap: 3px; padding: 8px; }
+    .command-item { display: flex; align-items: center; gap: 11px; padding: 11px 10px; border: 1px solid transparent; border-radius: 8px; color: var(--ink-soft); background: transparent; cursor: pointer; text-align: left; }
+    .command-item:hover { border-color: rgba(216,249,139,0.17); background: var(--lime-soft); }
+    .command-key { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; color: var(--lime); font-family: var(--mono); font-size: 9px; }
+    .command-item small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+
+    @media (max-width: 1240px) {
+      .app-shell { grid-template-columns: 218px minmax(520px, 1fr) 286px; }
+      .topbar { padding: 0 20px; }
+      .main-scroll { padding-right: 22px; padding-left: 22px; }
+      .node { width: 132px; }
+    }
+
+    @media (max-width: 1040px) {
+      .app-shell { grid-template-columns: 218px minmax(520px, 1fr); }
+      .inspector { display: none; }
+    }
+
+    @media (max-width: 760px) {
+      body { overflow: auto; }
+      .app-shell { display: block; min-height: 100vh; }
+      .sidebar { position: relative; display: block; padding: 17px 15px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { display: inline-flex; }
+      .project-switcher { display: none; }
+      .nav-group, .runtime-card { display: none; }
+      .sidebar::after { content: "PRODUCT MAP  ·  34 concepts  ·  local"; position: absolute; top: 28px; right: 15px; color: var(--muted); font-family: var(--mono); font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
+      .topbar { height: auto; min-height: 64px; padding: 12px 15px; flex-wrap: wrap; }
+      .crumbs { min-width: 0; }
+      .top-actions { min-width: 0; margin-left: auto; }
+      .top-search { order: 3; flex-basis: 100%; max-width: none; }
+      .main-scroll { padding: 24px 15px 35px; }
+      .section-heading { display: block; }
+      .heading-actions { margin-top: 17px; }
+      .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .graph-card { min-height: 520px; }
+      .graph-caption { display: block; line-height: 1.7; }
+      .graph-caption span { display: block; }
+      .node { width: 126px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 6.5 12 3l7 3.5v11L12 21l-7-3.5z"/>
+            <path d="m5 6.5 7 3.7 7-3.7M12 10.2V21"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name">VibeWiki</div>
+          <div class="brand-subtitle">product intelligence</div>
+        </div>
+      </div>
+
+      <button class="project-switcher" type="button" data-toast="Project switcher is a prototype control.">
+        <span>
+          <strong>PocketBudget</strong>
+          <small>main · local workspace</small>
+        </span>
+        <span class="chevron">⌄</span>
+      </button>
+
+      <nav class="nav-group" aria-label="Workspace">
+        <div class="nav-label">Workspace</div>
+        <button class="nav-item active" type="button" data-view="Product map">
+          <span class="nav-icon">◇</span><span>Product map</span><span class="nav-count">34</span>
+        </button>
+        <button class="nav-item" type="button" data-view="User flows">
+          <span class="nav-icon">↝</span><span>User flows</span><span class="nav-count">08</span>
+        </button>
+        <button class="nav-item" type="button" data-view="Architecture">
+          <span class="nav-icon">⌘</span><span>Architecture</span><span class="nav-count">19</span>
+        </button>
+        <button class="nav-item" type="button" data-view="Data model">
+          <span class="nav-icon">▱</span><span>Data model</span><span class="nav-count">12</span>
+        </button>
+      </nav>
+
+      <nav class="nav-group" aria-label="Knowledge">
+        <div class="nav-label">Knowledge</div>
+        <button class="nav-item" type="button" data-view="Evidence">
+          <span class="nav-icon">⊙</span><span>Evidence</span><span class="nav-count">78</span>
+        </button>
+        <button class="nav-item" type="button" data-view="Unknowns">
+          <span class="nav-icon">?</span><span>Unknowns</span><span class="nav-count">06</span>
+        </button>
+        <button class="nav-item" type="button" data-view="Scan history">
+          <span class="nav-icon">◷</span><span>Scan history</span><span class="nav-count">14</span>
+        </button>
+      </nav>
+
+      <div class="runtime-card">
+        <div class="runtime-top">
+          <span class="runtime-title">Local runtime</span>
+          <span class="status-dot" title="Connected"></span>
+        </div>
+        <p>Source stays on this machine. No cloud API is required for the current workspace.</p>
+        <div class="runtime-meta"><span class="lock">▣</span><span>Ollama · qwen2.5:7b</span></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="crumbs"><strong>POCKETBUDGET</strong><span class="crumb-separator">/</span><span id="current-view">PRODUCT MAP</span></div>
+        <div class="top-search">
+          <span class="search-icon">⌕</span>
+          <input id="graph-search" type="search" placeholder="Search concepts, routes, files…" autocomplete="off" aria-label="Search concepts, routes, files" />
+          <span class="shortcut">⌘ K</span>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
+          <button class="icon-button" type="button" data-toast="No unsynced changes. Local index is current." aria-label="Notifications" title="Notifications">◌</button>
+          <button class="text-button" type="button" data-toast="Share is disabled in local-only preview.">Share</button>
+        </div>
+      </header>
+
+      <div class="main-scroll">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">Living product wiki / snapshot 14</div>
+            <h1 id="page-title">See what your app actually does.</h1>
+            <p class="heading-copy">A local, evidence-backed map of <strong>PocketBudget</strong> — from user intent to the exact source files that implement it.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="text-button" type="button" id="ask-button"><span>Ask your product</span><span style="color:var(--muted);font-family:var(--mono);font-size:10px;">↵</span></button>
+            <button class="text-button primary" type="button" id="scan-button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12a8 8 0 0 1 14.5-4.7M20 12a8 8 0 0 1-14.5 4.7"/><path d="M18.5 4.5v3h-3M5.5 19.5v-3h3"/></svg>
+              <span>Scan latest</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="stats-row" aria-label="Workspace summary">
+          <div class="stat"><div class="stat-label">Concepts discovered</div><div class="stat-bottom"><span class="stat-value">34</span><span class="stat-trend">+4 this scan</span></div></div>
+          <div class="stat"><div class="stat-label">Evidence links</div><div class="stat-bottom"><span class="stat-value">78</span><span class="stat-trend">92% verified</span></div></div>
+          <div class="stat"><div class="stat-label">User flows</div><div class="stat-bottom"><span class="stat-value">08</span><span class="stat-trend">mapped</span></div></div>
+          <div class="stat"><div class="stat-label">Needs human review</div><div class="stat-bottom"><span class="stat-value">06</span><span class="stat-trend warn">2 new</span></div></div>
+        </div>
+
+        <div class="workspace-tabs" role="tablist" aria-label="Product map views">
+          <button class="workspace-tab active" type="button" role="tab">Overview</button>
+          <button class="workspace-tab" type="button" role="tab">By user goal</button>
+          <button class="workspace-tab" type="button" role="tab">By implementation</button>
+          <button class="workspace-tab" type="button" role="tab">Unverified</button>
+        </div>
+
+        <section class="graph-card" aria-label="Interactive product graph">
+          <div class="graph-toolbar">
+            <div class="graph-legend">
+              <span class="legend-item"><i class="legend-dot verified"></i>verified</span>
+              <span class="legend-item"><i class="legend-dot inferred"></i>inferred</span>
+              <span class="legend-item"><i class="legend-dot unknown"></i>unknown</span>
+            </div>
+            <div class="graph-tools" aria-label="Graph controls">
+              <button class="graph-tool" type="button" id="zoom-out" aria-label="Zoom out">−</button>
+              <button class="graph-tool" type="button" id="zoom-reset" aria-label="Reset zoom">1×</button>
+              <button class="graph-tool" type="button" id="zoom-in" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+
+          <div class="graph-viewport">
+            <div class="graph-canvas" id="graph-canvas">
+              <svg class="graph-lines" viewBox="0 0 1000 510" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <marker id="arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="rgba(166,233,239,0.55)"/></marker>
+                  <marker id="arrow-active" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="rgba(216,249,139,0.8)"/></marker>
+                </defs>
+                <line x1="210" y1="118" x2="310" y2="118" marker-end="url(#arrow)" />
+                <line x1="458" y1="118" x2="563" y2="105" class="active-line" marker-end="url(#arrow-active)" />
+                <line x1="638" y1="150" x2="638" y2="225" class="active-line" marker-end="url(#arrow-active)" />
+                <line x1="563" y1="290" x2="455" y2="328" marker-end="url(#arrow)" />
+                <line x1="310" y1="361" x2="210" y2="361" marker-end="url(#arrow)" />
+                <line x1="713" y1="263" x2="803" y2="357" marker-end="url(#arrow)" />
+                <circle cx="310" cy="118" r="3"/><circle cx="563" cy="105" r="3"/><circle cx="638" cy="225" r="3"/><circle cx="455" cy="328" r="3"/>
+              </svg>
+
+              <button class="node" data-node="persona" style="left: 5%; top: 16%;" type="button">
+                <div class="node-type"><span>Persona</span><i class="node-confidence"></i></div>
+                <div class="node-title">Solo founder</div>
+                <div class="node-meta">persona.md:04</div>
+              </button>
+              <button class="node" data-node="goal" style="left: 25%; top: 16%;" type="button">
+                <div class="node-type"><span>Goal</span><i class="node-confidence"></i></div>
+                <div class="node-title">Know where money goes</div>
+                <div class="node-meta">product.yaml:08</div>
+              </button>
+              <button class="node selected" data-node="flow" style="left: 42%; top: 12%;" type="button">
+                <div class="node-type"><span>User flow</span><i class="node-confidence"></i></div>
+                <div class="node-title">Add an expense</div>
+                <div class="node-meta">flow / add-expense</div>
+              </button>
+              <button class="node" data-node="screen" style="left: 56.3%; top: 9%;" type="button">
+                <div class="node-type"><span>Screen</span><i class="node-confidence"></i></div>
+                <div class="node-title">Expenses</div>
+                <div class="node-meta">/expenses</div>
+              </button>
+              <button class="node" data-node="api" style="left: 56.3%; top: 44%;" type="button">
+                <div class="node-type"><span>API</span><i class="node-confidence"></i></div>
+                <div class="node-title">Create expense</div>
+                <div class="node-meta">POST /api/expenses</div>
+              </button>
+              <button class="node" data-node="entity" style="left: 41.8%; top: 57%;" type="button">
+                <div class="node-type"><span>Data entity</span><i class="node-confidence inferred"></i></div>
+                <div class="node-title">Expense</div>
+                <div class="node-meta">prisma / Expense</div>
+              </button>
+              <button class="node" data-node="service" style="left: 21%; top: 64%;" type="button">
+                <div class="node-type"><span>Code symbol</span><i class="node-confidence"></i></div>
+                <div class="node-title">ExpenseService</div>
+                <div class="node-meta">lib/expense-service.ts</div>
+              </button>
+              <button class="node" data-node="test" style="left: 76.5%; top: 69%;" type="button">
+                <div class="node-type"><span>Test</span><i class="node-confidence unknown"></i></div>
+                <div class="node-title">Expense flow</div>
+                <div class="node-meta">not found · review</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="graph-caption"><span>Click a concept to inspect its story and source evidence.</span><span>Graph depth 3 · last indexed 4 min ago</span></div>
+        </section>
+      </div>
+    </main>
+
+    <aside class="inspector" aria-label="Selected concept details">
+      <div class="inspector-header">
+        <div>
+          <div class="inspector-kicker">Selected concept</div>
+          <h2 id="inspector-title">Add an expense</h2>
+        </div>
+        <span class="confidence-badge" id="confidence-badge"><i class="legend-dot verified"></i><span id="confidence-text">verified</span></span>
+      </div>
+
+      <div class="inspector-section">
+        <div class="inspector-label">What it means</div>
+        <p class="inspector-copy" id="inspector-copy">A user can record a purchase and see it reflected in the current month's spending summary.</p>
+      </div>
+
+      <div class="inspector-section">
+        <div class="inspector-label">Evidence</div>
+        <div class="evidence-list" id="evidence-list">
+          <div class="evidence-row" data-toast="Opening app/expenses/page.tsx:62 in source viewer."><span class="file-icon">TSX</span><span class="evidence-info"><span class="evidence-path">app/expenses/page.tsx</span><span class="evidence-line">lines 62–118 · renders form</span></span><span class="external-arrow">↗</span></div>
+          <div class="evidence-row" data-toast="Opening app/api/expenses/route.ts:19 in source viewer."><span class="file-icon">API</span><span class="evidence-info"><span class="evidence-path">app/api/expenses/route.ts</span><span class="evidence-line">lines 19–47 · creates record</span></span><span class="external-arrow">↗</span></div>
+          <div class="evidence-row" data-toast="Opening product.yaml:08 in source viewer."><span class="file-icon">YML</span><span class="evidence-info"><span class="evidence-path">product.yaml</span><span class="evidence-line">line 08 · stated user goal</span></span><span class="external-arrow">↗</span></div>
+        </div>
+      </div>
+
+      <div class="inspector-section">
+        <div class="inspector-label">Connected to</div>
+        <div class="impact-list" id="impact-list">
+          <div class="impact-row"><span>Expenses screen</span><span>renders</span></div>
+          <div class="impact-row"><span>Create expense API</span><span>calls</span></div>
+          <div class="impact-row"><span>Expense entity</span><span>writes</span></div>
+          <div class="impact-row"><span>Flow test</span><span style="color:var(--orange);">missing</span></div>
+        </div>
+      </div>
+
+      <div class="inspector-footer">
+        <div class="mini-prompt">
+          <span style="color:var(--lime);font-family:var(--mono);">›</span>
+          <input id="mini-question" type="text" placeholder="Ask about this concept…" aria-label="Ask about this concept" />
+          <button type="button" id="mini-submit" aria-label="Submit question">↵</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" role="status"><span class="toast-mark">◆</span><span id="toast-text">Local workspace is ready.</span></div>
+
+  <div class="modal-backdrop" id="command-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="command-input"><span>⌘</span><input id="command-search" type="search" placeholder="Jump to a view or ask a question…" autocomplete="off" /></div>
+      <div class="command-list">
+        <button class="command-item" type="button" data-command="Ask: How does checkout work?"><span class="command-key">?</span><span>Ask a question<small>Grounded in indexed evidence</small></span></button>
+        <button class="command-item" type="button" data-command="Open unknowns"><span class="command-key">!</span><span>Review unknowns<small>6 concepts need human context</small></span></button>
+        <button class="command-item" type="button" data-command="Scan latest"><span class="command-key">↻</span><span>Scan latest commit<small>Update the local product graph</small></span></button>
+        <button class="command-item" type="button" data-command="Export wiki"><span class="command-key">↓</span><span>Export wiki<small>Markdown + Mermaid bundle</small></span></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const nodeData = {
+      persona: {
+        title: 'Solo founder', type: 'Persona', confidence: 'verified',
+        copy: 'A person building and maintaining the product alone, with limited time to reconstruct system behavior.',
+        evidence: [['MD', 'docs/persona.md', 'lines 04–12 · audience']],
+        connected: [['Add an expense', 'wants'], ['Know where money goes', 'goal'], ['PocketBudget', 'uses']]
+      },
+      goal: {
+        title: 'Know where money goes', type: 'Goal', confidence: 'verified',
+        copy: 'The primary product goal is to turn raw spending entries into a clear monthly picture.',
+        evidence: [['YML', 'product.yaml', 'line 08 · primary goal'], ['MD', 'README.md', 'lines 13–18 · promise']],
+        connected: [['Solo founder', 'owned by'], ['Add an expense', 'fulfilled by'], ['Monthly summary', 'supports']]
+      },
+      flow: {
+        title: 'Add an expense', type: 'User flow', confidence: 'verified',
+        copy: 'A user can record a purchase and see it reflected in the current month\'s spending summary.',
+        evidence: [['TSX', 'app/expenses/page.tsx', 'lines 62–118 · renders form'], ['API', 'app/api/expenses/route.ts', 'lines 19–47 · creates record'], ['YML', 'product.yaml', 'line 08 · stated user goal']],
+        connected: [['Expenses screen', 'renders'], ['Create expense API', 'calls'], ['Expense entity', 'writes'], ['Flow test', 'missing']]
+      },
+      screen: {
+        title: 'Expenses', type: 'Screen', confidence: 'verified',
+        copy: 'The main surface where users inspect recent expenses and start the add-expense flow.',
+        evidence: [['TSX', 'app/expenses/page.tsx', 'lines 01–58 · route entry'], ['PNG', 'runtime/expenses.png', 'captured 4 min ago']],
+        connected: [['Add an expense', 'starts'], ['Create expense API', 'requests'], ['Dashboard', 'links to']]
+      },
+      api: {
+        title: 'Create expense', type: 'API', confidence: 'verified',
+        copy: 'Accepts a validated expense payload, associates it with the current user, and persists the record.',
+        evidence: [['TS', 'app/api/expenses/route.ts', 'lines 19–47 · POST handler'], ['TS', 'lib/validators.ts', 'lines 09–27 · schema']],
+        connected: [['Expenses screen', 'called by'], ['ExpenseService', 'delegates to'], ['Expense entity', 'writes']]
+      },
+      entity: {
+        title: 'Expense', type: 'Data entity', confidence: 'inferred',
+        copy: 'A persisted spending record inferred from the Prisma model and the API payload. The category semantics still need human confirmation.',
+        evidence: [['PRIS', 'prisma/schema.prisma', 'lines 31–48 · model'], ['TS', 'lib/expense-service.ts', 'lines 21–39 · create call']],
+        connected: [['Create expense API', 'written by'], ['Monthly summary', 'aggregated by'], ['Category', 'possibly linked']]
+      },
+      service: {
+        title: 'ExpenseService', type: 'Code symbol', confidence: 'verified',
+        copy: 'The application service that keeps persistence details out of the route handler and centralizes expense creation.',
+        evidence: [['TS', 'lib/expense-service.ts', 'lines 05–44 · service'], ['TS', 'app/api/expenses/route.ts', 'line 31 · imported']],
+        connected: [['Create expense API', 'called by'], ['Expense entity', 'persists'], ['Database client', 'uses']]
+      },
+      test: {
+        title: 'Expense flow', type: 'Test', confidence: 'unknown',
+        copy: 'The graph expects an end-to-end test for the expense flow, but no matching test was found in the latest scan.',
+        evidence: [['SCAN', 'scan-report.json', 'finding 14 · missing test'], ['DIR', 'tests/', 'searched · no match']],
+        connected: [['Add an expense', 'should verify'], ['Create expense API', 'should cover'], ['Unknowns', 'creates review item']]
+      }
+    };
+
+    const els = {
+      nodes: [...document.querySelectorAll('.node')],
+      title: document.getElementById('inspector-title'),
+      copy: document.getElementById('inspector-copy'),
+      badge: document.getElementById('confidence-badge'),
+      confidenceText: document.getElementById('confidence-text'),
+      evidence: document.getElementById('evidence-list'),
+      connected: document.getElementById('impact-list'),
+      toast: document.getElementById('toast'),
+      toastText: document.getElementById('toast-text'),
+      graphCanvas: document.getElementById('graph-canvas'),
+      search: document.getElementById('graph-search'),
+      currentView: document.getElementById('current-view'),
+      pageTitle: document.getElementById('page-title')
+    };
+
+    let toastTimer;
+    let zoom = 1;
+
+    function showToast(message) {
+      els.toastText.textContent = message;
+      els.toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2700);
+    }
+
+    function renderInspector(id) {
+      const data = nodeData[id];
+      if (!data) return;
+      els.nodes.forEach(node => node.classList.toggle('selected', node.dataset.node === id));
+      els.title.textContent = data.title;
+      els.copy.textContent = data.copy;
+      els.confidenceText.textContent = data.confidence;
+      els.badge.classList.toggle('inferred', data.confidence === 'inferred');
+      const dot = els.badge.querySelector('.legend-dot');
+      dot.className = `legend-dot ${data.confidence}`;
+      els.evidence.innerHTML = data.evidence.map(([kind, path, line]) => `
+        <div class="evidence-row" data-toast="Opening ${path} in source viewer.">
+          <span class="file-icon">${kind}</span>
+          <span class="evidence-info"><span class="evidence-path">${path}</span><span class="evidence-line">${line}</span></span>
+          <span class="external-arrow">↗</span>
+        </div>`).join('');
+      els.connected.innerHTML = data.connected.map(([name, relation]) => `
+        <div class="impact-row"><span>${name}</span><span>${relation}</span></div>`).join('');
+      bindToastTargets();
+    }
+
+    function bindToastTargets() {
+      document.querySelectorAll('[data-toast]').forEach(target => {
+        target.onclick = () => showToast(target.dataset.toast);
+      });
+    }
+
+    function setView(view) {
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
+      els.currentView.textContent = view.toUpperCase();
+      if (view === 'Product map') {
+        els.pageTitle.textContent = 'See what your app actually does.';
+        showToast('Product map is already in focus.');
+      } else {
+        els.pageTitle.textContent = `${view} is ready to explore.`;
+        showToast(`${view} view selected in this preview.`);
+      }
+    }
+
+    els.nodes.forEach(node => node.addEventListener('click', () => renderInspector(node.dataset.node)));
+    document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => setView(item.dataset.view)));
+    document.querySelectorAll('.workspace-tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      showToast(`${tab.textContent} filter selected.`);
+    }));
+
+    els.search.addEventListener('input', event => {
+      const query = event.target.value.trim().toLowerCase();
+      els.nodes.forEach(node => {
+        const data = nodeData[node.dataset.node];
+        const haystack = `${data.title} ${data.type} ${node.textContent}`.toLowerCase();
+        node.classList.toggle('dimmed', Boolean(query) && !haystack.includes(query));
+      });
+    });
+
+    function setZoom(next) {
+      zoom = Math.max(0.82, Math.min(1.2, next));
+      els.graphCanvas.style.transform = `scale(${zoom})`;
+      document.getElementById('zoom-reset').textContent = `${Math.round(zoom * 100)}%`;
+    }
+    document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoom + 0.08));
+    document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom - 0.08));
+    document.getElementById('zoom-reset').addEventListener('click', () => setZoom(1));
+
+    document.getElementById('scan-button').addEventListener('click', () => showToast('Demo scan queued — the local graph would update here.'));
+    document.getElementById('ask-button').addEventListener('click', () => {
+      document.getElementById('mini-question').focus();
+      showToast('Ask a question about this product or selected concept.');
+    });
+
+    function submitQuestion(input) {
+      const question = input.value.trim();
+      if (!question) return input.focus();
+      showToast(`Question indexed: “${question}”`);
+      input.value = '';
+    }
+    document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
+    document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
+
+    const modal = document.getElementById('command-modal');
+    const commandSearch = document.getElementById('command-search');
+    function openCommand() { modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); setTimeout(() => commandSearch.focus(), 30); }
+    function closeCommand() { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); }
+    document.getElementById('command-open').addEventListener('click', openCommand);
+    modal.addEventListener('click', event => { if (event.target === modal) closeCommand(); });
+    document.addEventListener('keydown', event => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openCommand(); }
+      if (event.key === 'Escape') closeCommand();
+    });
+    document.querySelectorAll('.command-item').forEach(item => item.addEventListener('click', () => { showToast(item.dataset.command); closeCommand(); }));
+    commandSearch.addEventListener('input', event => {
+      const query = event.target.value.toLowerCase();
+      document.querySelectorAll('.command-item').forEach(item => item.hidden = !item.textContent.toLowerCase().includes(query));
+    });
+
+    bindToastTargets();
+    renderInspector('flow');
+  </script>
+</body>
+</html>

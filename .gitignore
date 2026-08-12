@@ -1,0 +1,40 @@
+# macOS and editor files
+.DS_Store
+.AppleDouble
+.LSOverride
+.vscode/
+.idea/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# VibeWiki generated local knowledge bases
+.vibewiki/
+*.db
+*.sqlite
+*.sqlite3
+
+# JavaScript/Python build and cache output
+node_modules/
+dist/
+build/
+.next/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Coverage and test output
+.coverage
+htmlcov/
+coverage.xml
+
+# OS/editor swap files
+*.swp
+*.swo
+*~
