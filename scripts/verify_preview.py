@@ -7,7 +7,6 @@ import re
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_FILES = (
     "README.md",
@@ -60,7 +59,8 @@ def main() -> int:
         for path in ROOT.rglob("*")
         if path.is_file()
         and ".git" not in path.parts
-        and path.suffix.lower() in {".md", ".html", ".py", ".yml", ".yaml", ".json", ".txt"}
+        and path.suffix.lower()
+        in {".md", ".html", ".py", ".yml", ".yaml", ".json", ".txt"}
     )
     secret_assignment = re.compile(
         r"(?i)\b(?:api[_-]?key|secret|token|password)\b\s*[:=]\s*[\"'][^\"']{8,}[\"']"

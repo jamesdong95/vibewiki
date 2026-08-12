@@ -1,4 +1,4 @@
-name: Verify presentation repository
+name: Verify VibeWiki
 
 on:
   push:
@@ -10,7 +10,30 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  package-quality:
+    name: Package quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+      - name: Install locked development dependencies
+        run: uv sync --locked --dev
+      - name: Run Ruff
+        run: uv run ruff check .
+      - name: Run tests
+        run: uv run pytest -q
+
+  preview:
+    name: Presentation preview
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
