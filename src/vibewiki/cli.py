@@ -7,11 +7,14 @@ import sys
 from collections.abc import Sequence
 
 from . import ANALYZER_VERSION, SCHEMA_VERSION, __version__
+from .build import build_repository
+from .discovery.manifest import canonical_json
 from .errors import VibeWikiError, format_error
+from .scan import scan_repository
+from .serve import serve_repository
 
 _VERSION_TEXT = (
-    f"vibewiki {__version__} "
-    f"(analyzer {ANALYZER_VERSION}, schema {SCHEMA_VERSION})"
+    f"vibewiki {__version__} (analyzer {ANALYZER_VERSION}, schema {SCHEMA_VERSION})"
 )
 
 
@@ -26,6 +29,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=_VERSION_TEXT,
     )
+    commands = parser.add_subparsers(dest="command")
+    scan_parser = commands.add_parser(
+        "scan",
+        help="scan a supported repository locally and offline",
+    )
+    scan_parser.add_argument("repository", help="repository directory to scan")
+    build_parser = commands.add_parser(
+        "build",
+        help="build deterministic facts and wiki artifacts from a scan",
+    )
+    build_parser.add_argument("repository", help="repository directory to build")
+    serve_parser = commands.add_parser(
+        "serve",
+        help="serve the built local viewer on loopback",
+    )
+    serve_parser.add_argument("repository", help="repository directory to serve")
+    serve_parser.add_argument("--host", default="127.0.0.1", help="bind address")
+    serve_parser.add_argument("--port", default=4173, type=int, help="bind port")
     return parser
 
 
@@ -36,7 +57,14 @@ def run(argv: Sequence[str] | None = None) -> int:
     boundary lets those commands raise ``VibeWikiError`` without leaking
     tracebacks or sensitive filesystem context through the public CLI.
     """
-    build_parser().parse_args(argv)
+    arguments = build_parser().parse_args(argv)
+    if arguments.command == "scan":
+        summary = scan_repository(arguments.repository)
+        print(canonical_json(summary), end="")
+    elif arguments.command == "build":
+        print(canonical_json(build_repository(arguments.repository)), end="")
+    elif arguments.command == "serve":
+        serve_repository(arguments.repository, arguments.host, arguments.port)
     return 0
 
 

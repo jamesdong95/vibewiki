@@ -245,6 +245,7 @@
     .text-button.primary { color: #18200f; border-color: var(--lime); background: var(--lime); }
     .text-button.primary:hover { background: #e4ffa2; transform: translateY(-1px); }
     .text-button svg, .icon-button svg { width: 14px; height: 14px; }
+    .source-picker { display: none; }
 
     .main-scroll { overflow: auto; padding: 30px 30px 44px; }
     .main-scroll::-webkit-scrollbar, .inspector::-webkit-scrollbar { width: 8px; }
@@ -396,7 +397,7 @@
       .brand { display: inline-flex; }
       .project-switcher { display: none; }
       .nav-group, .runtime-card { display: none; }
-      .sidebar::after { content: "PRODUCT MAP  ·  34 concepts  ·  local"; position: absolute; top: 28px; right: 15px; color: var(--muted); font-family: var(--mono); font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
+      .sidebar::after { content: "PRODUCT MAP  ·  local"; position: absolute; top: 28px; right: 15px; color: var(--muted); font-family: var(--mono); font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
       .topbar { height: auto; min-height: 64px; padding: 12px 15px; flex-wrap: wrap; }
       .crumbs { min-width: 0; }
       .top-actions { min-width: 0; margin-left: auto; }
@@ -428,14 +429,14 @@
         </div>
         <div>
           <div class="brand-name">VibeWiki</div>
-          <div class="brand-subtitle">product intelligence</div>
+          <div class="brand-subtitle" id="brand-subtitle">product intelligence</div>
         </div>
       </div>
 
       <button class="project-switcher" type="button" data-toast="Project switcher is a prototype control.">
         <span>
-          <strong>PocketBudget</strong>
-          <small>main · local workspace</small>
+          <strong id="project-name">PocketBudget</strong>
+          <small id="project-meta">main · local workspace</small>
         </span>
         <span class="chevron">⌄</span>
       </button>
@@ -443,29 +444,29 @@
       <nav class="nav-group" aria-label="Workspace">
         <div class="nav-label">Workspace</div>
         <button class="nav-item active" type="button" data-view="Product map">
-          <span class="nav-icon">◇</span><span>Product map</span><span class="nav-count">34</span>
+          <span class="nav-icon">◇</span><span>Product map</span><span class="nav-count" id="sidebar-product-count">34</span>
         </button>
         <button class="nav-item" type="button" data-view="User flows">
-          <span class="nav-icon">↝</span><span>User flows</span><span class="nav-count">08</span>
+          <span class="nav-icon">↝</span><span>User flows</span><span class="nav-count" id="sidebar-flow-count">08</span>
         </button>
         <button class="nav-item" type="button" data-view="Architecture">
-          <span class="nav-icon">⌘</span><span>Architecture</span><span class="nav-count">19</span>
+          <span class="nav-icon">⌘</span><span>Architecture</span><span class="nav-count" id="sidebar-architecture-count">19</span>
         </button>
         <button class="nav-item" type="button" data-view="Data model">
-          <span class="nav-icon">▱</span><span>Data model</span><span class="nav-count">12</span>
+          <span class="nav-icon">▱</span><span>Data model</span><span class="nav-count" id="sidebar-data-count">12</span>
         </button>
       </nav>
 
       <nav class="nav-group" aria-label="Knowledge">
         <div class="nav-label">Knowledge</div>
         <button class="nav-item" type="button" data-view="Evidence">
-          <span class="nav-icon">⊙</span><span>Evidence</span><span class="nav-count">78</span>
+          <span class="nav-icon">⊙</span><span>Evidence</span><span class="nav-count" id="sidebar-evidence-count">78</span>
         </button>
         <button class="nav-item" type="button" data-view="Unknowns">
-          <span class="nav-icon">?</span><span>Unknowns</span><span class="nav-count">06</span>
+          <span class="nav-icon">?</span><span>Unknowns</span><span class="nav-count" id="sidebar-unknown-count">06</span>
         </button>
         <button class="nav-item" type="button" data-view="Scan history">
-          <span class="nav-icon">◷</span><span>Scan history</span><span class="nav-count">14</span>
+          <span class="nav-icon">◷</span><span>Scan history</span><span class="nav-count" id="sidebar-scan-count">14</span>
         </button>
       </nav>
 
@@ -475,29 +476,31 @@
           <span class="status-dot" title="Connected"></span>
         </div>
         <p>Source stays on this machine. No cloud API is required for the current workspace.</p>
-        <div class="runtime-meta"><span class="lock">▣</span><span>Ollama · qwen2.5:7b</span></div>
+        <div class="runtime-meta"><span class="lock">▣</span><span id="runtime-status">Ollama · qwen2.5:7b</span></div>
       </div>
     </aside>
 
     <main class="workspace">
       <header class="topbar">
-        <div class="crumbs"><strong>POCKETBUDGET</strong><span class="crumb-separator">/</span><span id="current-view">PRODUCT MAP</span></div>
+        <div class="crumbs"><strong id="crumb-project">POCKETBUDGET</strong><span class="crumb-separator">/</span><span id="current-view">PRODUCT MAP</span></div>
         <div class="top-search">
           <span class="search-icon">⌕</span>
           <input id="graph-search" type="search" placeholder="Search concepts, routes, files…" autocomplete="off" aria-label="Search concepts, routes, files" />
           <span class="shortcut">⌘ K</span>
         </div>
         <div class="top-actions">
+          <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
           <button class="icon-button" type="button" data-toast="No unsynced changes. Local index is current." aria-label="Notifications" title="Notifications">◌</button>
           <button class="text-button" type="button" data-toast="Share is disabled in local-only preview.">Share</button>
         </div>
       </header>
+      <input class="source-picker" id="source-picker" type="file" webkitdirectory directory multiple aria-label="Choose source folder" />
 
       <div class="main-scroll">
         <div class="section-heading">
           <div>
-            <div class="eyebrow">Living product wiki / snapshot 14</div>
+            <div class="eyebrow" id="eyebrow">Living product wiki / snapshot 14</div>
             <h1 id="page-title">See what your app actually does.</h1>
             <p class="heading-copy">A local, evidence-backed map of <strong>PocketBudget</strong> — from user intent to the exact source files that implement it.</p>
           </div>
@@ -511,17 +514,17 @@
         </div>
 
         <div class="stats-row" aria-label="Workspace summary">
-          <div class="stat"><div class="stat-label">Concepts discovered</div><div class="stat-bottom"><span class="stat-value">34</span><span class="stat-trend">+4 this scan</span></div></div>
-          <div class="stat"><div class="stat-label">Evidence links</div><div class="stat-bottom"><span class="stat-value">78</span><span class="stat-trend">92% verified</span></div></div>
-          <div class="stat"><div class="stat-label">User flows</div><div class="stat-bottom"><span class="stat-value">08</span><span class="stat-trend">mapped</span></div></div>
-          <div class="stat"><div class="stat-label">Needs human review</div><div class="stat-bottom"><span class="stat-value">06</span><span class="stat-trend warn">2 new</span></div></div>
+          <div class="stat"><div class="stat-label">Concepts discovered</div><div class="stat-bottom"><span class="stat-value" id="stat-facts">34</span><span class="stat-trend" id="stat-facts-trend">+4 this scan</span></div></div>
+          <div class="stat"><div class="stat-label">Evidence links</div><div class="stat-bottom"><span class="stat-value" id="stat-evidence">78</span><span class="stat-trend" id="stat-evidence-trend">92% verified</span></div></div>
+          <div class="stat"><div class="stat-label">Graph relations</div><div class="stat-bottom"><span class="stat-value" id="stat-relations">08</span><span class="stat-trend" id="stat-relations-trend">mapped</span></div></div>
+          <div class="stat"><div class="stat-label">Needs human review</div><div class="stat-bottom"><span class="stat-value" id="stat-unknowns">06</span><span class="stat-trend warn" id="stat-unknowns-trend">2 new</span></div></div>
         </div>
 
         <div class="workspace-tabs" role="tablist" aria-label="Product map views">
-          <button class="workspace-tab active" type="button" role="tab">Overview</button>
-          <button class="workspace-tab" type="button" role="tab">By user goal</button>
-          <button class="workspace-tab" type="button" role="tab">By implementation</button>
-          <button class="workspace-tab" type="button" role="tab">Unverified</button>
+          <button class="workspace-tab active" type="button" role="tab" data-tab="Overview">Overview</button>
+          <button class="workspace-tab" type="button" role="tab" data-tab="By user goal">By user goal</button>
+          <button class="workspace-tab" type="button" role="tab" data-tab="By implementation">By implementation</button>
+          <button class="workspace-tab" type="button" role="tab" data-tab="Unverified">Unverified</button>
         </div>
 
         <section class="graph-card" aria-label="Interactive product graph">
@@ -597,7 +600,7 @@
             </div>
           </div>
 
-          <div class="graph-caption"><span>Click a concept to inspect its story and source evidence.</span><span>Graph depth 3 · last indexed 4 min ago</span></div>
+          <div class="graph-caption"><span>Click a concept to inspect its story and source evidence.</span><span id="graph-caption-meta">Graph depth 3 · last indexed 4 min ago</span></div>
         </section>
       </div>
     </main>
@@ -651,10 +654,10 @@
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Command palette">
       <div class="command-input"><span>⌘</span><input id="command-search" type="search" placeholder="Jump to a view or ask a question…" autocomplete="off" /></div>
       <div class="command-list">
-        <button class="command-item" type="button" data-command="Ask: How does checkout work?"><span class="command-key">?</span><span>Ask a question<small>Grounded in indexed evidence</small></span></button>
-        <button class="command-item" type="button" data-command="Open unknowns"><span class="command-key">!</span><span>Review unknowns<small>6 concepts need human context</small></span></button>
-        <button class="command-item" type="button" data-command="Scan latest"><span class="command-key">↻</span><span>Scan latest commit<small>Update the local product graph</small></span></button>
-        <button class="command-item" type="button" data-command="Export wiki"><span class="command-key">↓</span><span>Export wiki<small>Markdown + Mermaid bundle</small></span></button>
+        <button class="command-item" type="button" data-command-key="ask" data-command="Ask: How does checkout work?"><span class="command-key">?</span><span>Ask a question<small id="command-ask-meta">Grounded in indexed evidence</small></span></button>
+        <button class="command-item" type="button" data-command-key="unknowns" data-command="Open unknowns"><span class="command-key">!</span><span>Review unknowns<small id="command-unknowns-meta">6 concepts need human context</small></span></button>
+        <button class="command-item" type="button" data-command-key="scan" data-command="Scan latest"><span class="command-key">↻</span><span>Scan latest commit<small id="command-scan-meta">Update the local product graph</small></span></button>
+        <button class="command-item" type="button" data-command-key="export" data-command="Export wiki"><span class="command-key">↓</span><span>Export wiki<small id="command-export-meta">Markdown + Mermaid bundle</small></span></button>
       </div>
     </div>
   </div>
@@ -765,6 +768,10 @@
     }
 
     function setView(view) {
+      if (window.realWorkspace) {
+        window.realWorkspace.setView(view);
+        return;
+      }
       document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
       els.currentView.textContent = view.toUpperCase();
       if (view === 'Product map') {
@@ -779,6 +786,10 @@
     els.nodes.forEach(node => node.addEventListener('click', () => renderInspector(node.dataset.node)));
     document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => setView(item.dataset.view)));
     document.querySelectorAll('.workspace-tab').forEach(tab => tab.addEventListener('click', () => {
+      if (window.realWorkspace) {
+        window.realWorkspace.setTab(tab.dataset.tab || tab.textContent);
+        return;
+      }
       document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       showToast(`${tab.textContent} filter selected.`);
@@ -802,7 +813,44 @@
     document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom - 0.08));
     document.getElementById('zoom-reset').addEventListener('click', () => setZoom(1));
 
-    document.getElementById('scan-button').addEventListener('click', () => showToast('Demo scan queued — the local graph would update here.'));
+    const sourcePicker = document.getElementById('source-picker');
+    const browseButton = document.getElementById('browse-button');
+    function chooseSourceFolder() {
+      sourcePicker.click();
+    }
+    function isSupportedSourceFile(file) {
+      const path = (file.webkitRelativePath || file.name || '').replaceAll('\\', '/').toLowerCase();
+      if (/(^|\/)(node_modules|\.git|\.next|dist|build|out|coverage|\.cache|\.vibewiki)(\/|$)/.test(path)) return false;
+      if (/(^|\/)(\.env|credentials?|secrets?|tokens?)([^/]*)(\/|$)/.test(path)) return false;
+      return path.endsWith('prisma/schema.prisma') || /\.(ts|tsx)$/.test(path);
+    }
+    async function importSourceFiles(files) {
+      if (!files.length) return;
+      const candidates = files.filter(isSupportedSourceFile);
+      if (!candidates.length) {
+        showToast('No supported TypeScript or Prisma files found.');
+        return;
+      }
+      const form = new FormData();
+      candidates.forEach(file => form.append('files', file, file.webkitRelativePath || file.name));
+      browseButton.disabled = true;
+      showToast(`Scanning ${candidates.length} supported local files…`);
+      try {
+        const response = await fetch('/api/import', { method: 'POST', body: form });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Source import failed.');
+        showToast(`Scan complete: ${result.counts.facts} facts found.`);
+        window.setTimeout(() => window.location.reload(), 650);
+      } catch (error) {
+        showToast(error.message || 'Could not scan this source folder.');
+        browseButton.disabled = false;
+      } finally {
+        sourcePicker.value = '';
+      }
+    }
+    browseButton.addEventListener('click', chooseSourceFolder);
+    sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
+    document.getElementById('scan-button').addEventListener('click', chooseSourceFolder);
     document.getElementById('ask-button').addEventListener('click', () => {
       document.getElementById('mini-question').focus();
       showToast('Ask a question about this product or selected concept.');
@@ -827,7 +875,14 @@
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openCommand(); }
       if (event.key === 'Escape') closeCommand();
     });
-    document.querySelectorAll('.command-item').forEach(item => item.addEventListener('click', () => { showToast(item.dataset.command); closeCommand(); }));
+    document.querySelectorAll('.command-item').forEach(item => item.addEventListener('click', () => {
+      if (window.realWorkspace) {
+        window.realWorkspace.runCommand(item.dataset.commandKey);
+      } else {
+        showToast(item.dataset.command);
+      }
+      closeCommand();
+    }));
     commandSearch.addEventListener('input', event => {
       const query = event.target.value.toLowerCase();
       document.querySelectorAll('.command-item').forEach(item => item.hidden = !item.textContent.toLowerCase().includes(query));
@@ -835,6 +890,210 @@
 
     bindToastTargets();
     renderInspector('flow');
+  </script>
+  <script>
+    // When served by `vibewiki serve`, replace the presentation fixture with
+    // the repository's built, evidence-backed artifact. The file remains
+    // usable as a static design preview when no local API is available.
+    async function bootRealWorkspace() {
+      try {
+        const response = await fetch('/api/summary', { cache: 'no-store' });
+        if (!response.ok) return;
+        const summary = await response.json();
+        const [nodeResponse, edgeResponse] = await Promise.all([
+          fetch('/api/nodes', { cache: 'no-store' }),
+          fetch('/api/edges', { cache: 'no-store' })
+        ]);
+        if (!nodeResponse.ok || !edgeResponse.ok) return;
+        const nodePayload = await nodeResponse.json();
+        const edgePayload = await edgeResponse.json();
+        const nodes = nodePayload.nodes || [];
+        const edges = edgePayload.edges || [];
+        const unknowns = nodePayload.unknowns || [];
+        const nodeById = new Map(nodes.map(node => [node.id, node]));
+        const realData = new Map(nodes.map(node => [node.id, {
+          title: node.title,
+          type: node.kind.replaceAll('_', ' '),
+          confidence: node.status,
+          copy: `${node.kind.replaceAll('_', ' ')} observed at ${node.meta || node.id}.`,
+          evidence: (node.evidence || []).map(item => [item.kind.toUpperCase(), item.path, `lines ${item.line_start}–${item.line_end} · ${item.status}`]),
+          connected: edges.filter(edge => edge.source === node.id || edge.target === node.id).map(edge => {
+            const other = nodeById.get(edge.source === node.id ? edge.target : edge.source);
+            return [other ? other.title : edge.target, edge.relation];
+          })
+        }]));
+        const kindCount = kind => nodes.filter(node => node.kind === kind).length;
+        const routeCount = kindCount('route');
+        const architectureCount = nodes.filter(node => ['route', 'api_call', 'function'].includes(node.kind)).length;
+        const evidenceCount = Number(summary.evidence || 0);
+        const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = String(value); };
+        const pad = value => String(value).padStart(2, '0');
+
+        setText('brand-subtitle', 'local evidence graph');
+        setText('project-name', summary.project);
+        setText('project-meta', 'built scan · local workspace');
+        setText('crumb-project', summary.project.toUpperCase());
+        setText('eyebrow', `Evidence graph / analyzer ${summary.analyzer_version}`);
+        document.querySelector('.heading-copy').textContent = `A local, evidence-backed map of ${summary.project} — generated from the latest deterministic scan.`;
+        setText('stat-facts', summary.counts.facts);
+        setText('stat-evidence', evidenceCount);
+        setText('stat-relations', summary.counts.relations);
+        setText('stat-unknowns', pad(summary.counts.unknowns));
+        setText('stat-facts-trend', `${summary.counts.scanned_files} source files`);
+        setText('stat-evidence-trend', 'source-linked');
+        setText('stat-relations-trend', 'verified edges');
+        setText('stat-unknowns-trend', 'review queue');
+        setText('sidebar-product-count', summary.counts.facts);
+        setText('sidebar-flow-count', pad(routeCount));
+        setText('sidebar-architecture-count', pad(architectureCount));
+        setText('sidebar-data-count', pad(kindCount('data_entity')));
+        setText('sidebar-evidence-count', evidenceCount);
+        setText('sidebar-unknown-count', pad(summary.counts.unknowns));
+        setText('sidebar-scan-count', '01');
+        setText('runtime-status', 'Offline · no LLM required');
+        setText('graph-caption-meta', `${nodes.length} nodes · ${edges.length} edges · current build`);
+        setText('command-ask-meta', `${evidenceCount} source-linked evidence items`);
+        setText('command-unknowns-meta', `${summary.counts.unknowns} findings need human context`);
+        setText('command-scan-meta', `${summary.counts.scanned_files} files in current build`);
+        setText('command-export-meta', 'Markdown + Mermaid files in .vibewiki/wiki');
+
+        const canvas = document.getElementById('graph-canvas');
+        const nodeList = () => [...canvas.querySelectorAll('.node[data-real-node]')];
+        const state = { view: 'Product map', tab: 'Overview', query: '', selected: nodes[0]?.id };
+        const viewFilters = {
+          'Product map': node => true,
+          'User flows': node => ['route', 'api_call', 'test'].includes(node.kind),
+          'Architecture': node => ['route', 'api_call', 'function'].includes(node.kind),
+          'Data model': node => node.kind === 'data_entity',
+          Evidence: node => (node.evidence || []).length > 0,
+          'Unknowns': () => false,
+          'Scan history': () => true
+        };
+        const tabFilters = {
+          Overview: node => true,
+          'By user goal': node => ['route', 'api_call', 'test'].includes(node.kind),
+          'By implementation': node => ['function', 'data_entity', 'route', 'api_call'].includes(node.kind),
+          Unverified: node => node.status !== 'verified'
+        };
+
+        function renderRealInspector(id) {
+          const data = realData.get(id);
+          const node = nodeById.get(id);
+          if (!data || !node) return;
+          state.selected = id;
+          nodeList().forEach(item => item.classList.toggle('selected', item.dataset.realNode === id));
+          els.title.textContent = data.title;
+          els.copy.textContent = data.copy;
+          els.confidenceText.textContent = data.confidence;
+          els.badge.classList.toggle('inferred', data.confidence === 'inferred');
+          els.badge.querySelector('.legend-dot').className = `legend-dot ${data.confidence}`;
+          els.evidence.innerHTML = data.evidence.length ? data.evidence.map(([kind, path, line]) => `<div class="evidence-row" data-toast="Opening ${path} in source viewer."><span class="file-icon">${kind}</span><span class="evidence-info"><span class="evidence-path">${path}</span><span class="evidence-line">${line}</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No direct evidence was emitted.</div>';
+          els.connected.innerHTML = data.connected.length ? data.connected.map(([name, relation]) => `<div class="impact-row"><span>${name}</span><span>${relation}</span></div>`).join('') : '<div class="empty-state">No connected evidence yet.</div>';
+          bindToastTargets();
+        }
+
+        function renderUnknownInspector() {
+          const unknown = unknowns[0];
+          nodeList().forEach(item => item.classList.remove('selected'));
+          els.title.textContent = unknown ? unknown.subject : 'No unknowns';
+          els.copy.textContent = unknown ? unknown.reason.replaceAll('_', ' ') : 'The current deterministic scan emitted no unresolved findings.';
+          els.confidenceText.textContent = 'unknown';
+          els.badge.classList.remove('inferred');
+          els.badge.querySelector('.legend-dot').className = 'legend-dot unknown';
+          els.evidence.innerHTML = unknown?.evidence?.length ? unknown.evidence.map(item => `<div class="evidence-row" data-toast="Evidence from ${item.path}."><span class="file-icon">${item.kind.toUpperCase()}</span><span class="evidence-info"><span class="evidence-path">${item.path}</span><span class="evidence-line">line ${item.line_start} · finding</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No unresolved findings in this build.</div>';
+          els.connected.innerHTML = unknown ? '<div class="empty-state">Review the source evidence before marking this finding resolved.</div>' : '<div class="empty-state">Unknown queue is empty.</div>';
+          bindToastTargets();
+        }
+
+        function renderGraph(displayNodes) {
+          canvas.innerHTML = '';
+          const columns = Math.max(1, Math.ceil(Math.sqrt(displayNodes.length)));
+          const usableWidth = Math.min(86, 24 * Math.max(1, columns - 1));
+          const positions = new Map();
+          displayNodes.forEach((node, index) => {
+            const column = index % columns;
+            const row = Math.floor(index / columns);
+            const left = columns === 1 ? 42 : 5 + column * usableWidth / (columns - 1);
+            const top = 8 + row * 24;
+            positions.set(node.id, { x: left / 100 * 1000 + 74, y: top / 100 * 510 + 35 });
+          });
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('class', 'graph-lines');
+          svg.setAttribute('viewBox', '0 0 1000 510');
+          svg.setAttribute('preserveAspectRatio', 'none');
+          svg.setAttribute('aria-hidden', 'true');
+          edges.forEach(edge => {
+            const source = positions.get(edge.source);
+            const target = positions.get(edge.target);
+            if (!source || !target) return;
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', source.x); line.setAttribute('y1', source.y);
+            line.setAttribute('x2', target.x); line.setAttribute('y2', target.y);
+            svg.appendChild(line);
+          });
+          canvas.appendChild(svg);
+          displayNodes.forEach((node, index) => {
+            const button = document.createElement('button');
+            button.className = 'node';
+            button.type = 'button';
+            button.dataset.realNode = node.id;
+            const column = index % columns;
+            const row = Math.floor(index / columns);
+            const left = columns === 1 ? 42 : 5 + column * usableWidth / (columns - 1);
+            button.style.left = `${left}%`;
+            button.style.top = `${8 + row * 24}%`;
+            const type = document.createElement('div'); type.className = 'node-type';
+            const typeLabel = document.createElement('span'); typeLabel.textContent = node.kind.replaceAll('_', ' ');
+            const confidence = document.createElement('i'); confidence.className = `node-confidence ${node.status}`;
+            type.append(typeLabel, confidence);
+            const title = document.createElement('div'); title.className = 'node-title'; title.textContent = node.title;
+            const meta = document.createElement('div'); meta.className = 'node-meta'; meta.textContent = node.meta || node.id;
+            button.append(type, title, meta);
+            button.onclick = () => renderRealInspector(node.id);
+            canvas.appendChild(button);
+          });
+        }
+
+        function renderState() {
+          const viewFilter = viewFilters[state.view] || viewFilters['Product map'];
+          const tabFilter = tabFilters[state.tab] || tabFilters.Overview;
+          let displayNodes = nodes.filter(node => viewFilter(node) && tabFilter(node));
+          if (state.query) displayNodes = displayNodes.filter(node => `${node.title} ${node.kind} ${node.meta}`.toLowerCase().includes(state.query));
+          renderGraph(displayNodes);
+          setText('current-view', state.view.toUpperCase());
+          setText('page-title', state.view === 'Product map' ? 'See what your app actually does.' : `${state.view} is ready to explore.`);
+          document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === state.view));
+          document.querySelectorAll('.workspace-tab').forEach(tab => tab.classList.toggle('active', (tab.dataset.tab || tab.textContent) === state.tab));
+          const caption = state.view === 'Unknowns' || state.tab === 'Unverified' ? `${unknowns.length} unresolved findings · current build` : `${displayNodes.length} nodes · ${edges.filter(edge => displayNodes.some(node => node.id === edge.source) && displayNodes.some(node => node.id === edge.target)).length} edges · current view`;
+          setText('graph-caption-meta', caption);
+          if (state.view === 'Unknowns' || (state.tab === 'Unverified' && !displayNodes.length)) renderUnknownInspector();
+          else if (displayNodes.length) renderRealInspector(displayNodes.some(node => node.id === state.selected) ? state.selected : displayNodes[0].id);
+          else renderUnknownInspector();
+        }
+
+        window.realWorkspace = {
+          setView(view) { state.view = view; state.tab = 'Overview'; renderState(); showToast(`${view} view loaded from the current artifact.`); },
+          setTab(tab) { if (state.view === 'Unknowns') state.view = 'Product map'; state.tab = tab; renderState(); showToast(`${tab} filter applied to the current artifact.`); },
+          runCommand(command) {
+            if (command === 'ask') { document.getElementById('mini-question').focus(); showToast('Ask a question grounded in local evidence.'); }
+            if (command === 'unknowns') this.setView('Unknowns');
+            if (command === 'scan') chooseSourceFolder();
+            if (command === 'export') showToast('Wiki files are available under .vibewiki/wiki.');
+          }
+        };
+        canvas.onclick = event => {
+          const target = event.target.closest('[data-real-node]');
+          if (target) renderRealInspector(target.dataset.realNode);
+        };
+        els.search.oninput = event => { state.query = event.target.value.trim().toLowerCase(); renderState(); };
+        document.getElementById('scan-button').onclick = chooseSourceFolder;
+        renderState();
+        showToast(`Loaded ${summary.counts.facts} facts from the local build.`);
+      } catch (error) {
+        // Static preview mode intentionally stays available without an API.
+      }
+    }
+    bootRealWorkspace();
   </script>
 </body>
 </html>

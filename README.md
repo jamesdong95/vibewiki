@@ -19,14 +19,20 @@ The important design rule is **facts first, interpretation second**. Claims shou
 
 ## Current status
 
-This repository is a **presentation-ready prototype**, not the completed analyzer. It currently contains:
+This repository is a **local-first end-to-end preview**, not production-ready software. It currently contains:
 
 - A standalone dark developer-tool UI in [`viewer/index.html`](viewer/index.html).
 - A generated hero illustration in [`docs/assets/vibewiki-hero.png`](docs/assets/vibewiki-hero.png).
 - The product development plan in [`docs/product-development-plan.md`](docs/product-development-plan.md).
 - An offline verification script in [`scripts/verify_preview.py`](scripts/verify_preview.py).
+- An offline `scan → build → serve` pipeline that writes a deterministic
+  TypeScript/TSX manifest, evidence-backed facts, a SQLite graph, Markdown/
+  Mermaid wiki, and a local viewer backed by the built artifact.
 
-The static analyzer, SQLite knowledge base, repository scanner, Ollama adapter, and Playwright runtime explorer are planned work; they are not falsely represented as implemented here.
+The analyzer is intentionally narrow and deterministic: it supports the
+documented Next.js App Router + TypeScript/TSX + Prisma + TypeScript test
+surface. LLM reasoning, runtime exploration, and broader framework support are
+not included.
 
 ## Preview the UI
 
@@ -48,13 +54,20 @@ The prototype demonstrates:
 
 ## Product direction
 
-The intended MVP is a local CLI and web viewer:
+The current end-to-end local flow is:
 
 ```bash
-vibewiki scan /path/to/next-app
-vibewiki build /path/to/next-app
-vibewiki serve /path/to/next-app
+uv run vibewiki scan /path/to/next-app
+uv run vibewiki build /path/to/next-app
+uv run vibewiki serve /path/to/next-app --port 4173
 ```
+
+Open `http://127.0.0.1:4173/` to inspect the generated graph, evidence and
+unknowns. The server binds to loopback and does not contact external services.
+You can also use **Browse source** in the viewer to choose a local source
+folder; selected supported files are sent only to this loopback process,
+scanned locally, and the temporary imported workspace is removed when the
+server exits.
 
 The planned pipeline is:
 
@@ -118,7 +131,18 @@ Run the deterministic offline checks:
 python3 scripts/verify_preview.py
 ```
 
-The check validates required files, the PNG signature, the prototype's essential UI hooks, README asset references, and obvious credential-assignment patterns. It does not claim that the future scanner or analyzer exists.
+The check validates required files, the PNG signature, the viewer's essential
+UI hooks, README asset references, and obvious credential-assignment patterns.
+
+The implemented pipeline is deliberately narrower than a general-purpose
+analyzer. It accepts only a direct `<repository>/app` App Router directory
+containing at least one `.ts` or `.tsx` file, records TypeScript/TSX metadata
+and SHA-256 hashes, then builds deterministic facts for routes, API calls,
+functions, Prisma models, imports, writes, calls and direct test links. It
+rejects nested/monorepo and Pages Router layouts, skips symlinks and special
+files, and ignores build/cache and sensitive paths before reading them. The
+viewer reads `.vibewiki/graph.json` through the loopback API; it does not use
+the presentation fixture when running under `vibewiki serve`.
 
 ## Roadmap
 

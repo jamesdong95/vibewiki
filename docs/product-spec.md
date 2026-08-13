@@ -239,6 +239,42 @@ packaging, but the observable contract does not.
   port, and relative artifact root; no absolute paths or source secrets are
   returned.
 
+### M2 manifest boundary
+
+The first implemented scan slice is intentionally narrower than the full MVP
+contract. It accepts only a direct `<repository>/app` App Router directory with
+at least one regular `.ts` or `.tsx` file. A nested/monorepo App Router layout,
+Pages Router marker, or JS-only app is unsupported. Discovery does not follow
+symlinks, reads no special files, and skips build/cache or sensitive paths by
+name before statting or hashing them.
+
+M2 persists only `.vibewiki/manifest.json`. Each record contains a relative
+POSIX path, language label, byte size, and SHA-256 digest. The manifest is
+canonical JSON sorted by path; its cache identity is the path/language/size/
+digest plus analyzer version. M2 emits no facts, relations, or unknowns, so
+those summary counts remain zero until the static-analysis phase adds a
+separate evidence-producing artifact.
+
+### Current local end-to-end slice
+
+The repository now includes the first deterministic end-to-end slice after M2:
+`build` reads the manifest and emits `facts.json`, `claims.json`, `sources.json`,
+`graph.json`, `graph.db`, and Markdown/Mermaid wiki files below `.vibewiki/`.
+The analyzer covers the supported fixture surface only: App Router pages and
+route handlers, literal API calls, exported functions, Prisma models, direct
+imports/calls/writes, and TypeScript test references. `serve` validates the
+built graph and exposes it through a loopback-only API consumed by the viewer.
+The viewer must display current artifact counts and evidence when served by
+VibeWiki; it may retain a static presentation fallback when opened directly.
+This slice does not claim runtime behavior, exhaustive impact, LLM reasoning,
+or production readiness.
+
+The viewer also provides a `Browse source` action. It uses the browser's local
+directory picker and sends selected files only to the loopback VibeWiki server;
+the server filters sensitive/unsupported paths, builds a temporary workspace,
+and replaces the current local graph. It does not upload source to a cloud
+service or persist the temporary imported workspace after server shutdown.
+
 ## 9. Privacy and reproducibility requirements
 
 The fixture and all M0 examples are synthetic and offline. Implementations must

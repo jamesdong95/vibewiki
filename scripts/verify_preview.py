@@ -23,6 +23,11 @@ REQUIRED_HTML_MARKERS = (
     'id="graph-search"',
     'id="command-open"',
     'id="graph-canvas"',
+    'id="browse-button"',
+    'id="sidebar-product-count"',
+    'id="graph-caption-meta"',
+    'data-command-key="unknowns"',
+    'window.realWorkspace',
     "renderInspector",
 )
 
