@@ -9,7 +9,7 @@ from vibewiki.errors import ErrorCode, VibeWikiError
 from vibewiki.scan import scan_repository
 
 
-def test_scan_writes_only_manifest_and_is_byte_stable(tmp_path: Path) -> None:
+def test_scan_writes_stable_manifest_and_inventory(tmp_path: Path) -> None:
     (tmp_path / "app").mkdir()
     (tmp_path / "app/page.tsx").write_text("export default function Page() {}\n")
 
@@ -25,6 +25,7 @@ def test_scan_writes_only_manifest_and_is_byte_stable(tmp_path: Path) -> None:
         for path in (tmp_path / ".vibewiki").iterdir()
     )
     assert output_files == [
+        ".vibewiki/inventory.json",
         ".vibewiki/manifest.json"
     ]
     assert json.loads(first_bytes)["files"][0]["path"] == "app/page.tsx"

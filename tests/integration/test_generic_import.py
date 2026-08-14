@@ -42,9 +42,13 @@ def test_generic_javascript_repository_builds_without_app(tmp_path: Path) -> Non
     facts = json.loads((tmp_path / ".vibewiki/facts.json").read_text())
 
     assert result["counts"]["scanned_files"] == 5
-    assert built["counts"]["facts"] == 4
+    assert built["counts"]["facts"] == 5
     assert any(
         item["semantic_key"] == "function:src/main.js:start" for item in facts["facts"]
+    )
+    assert any(
+        item["semantic_key"] == "function:src/legacy.cjs:legacy"
+        for item in facts["facts"]
     )
     assert any(
         item["semantic_key"] == "test:tests/app.spec.js" for item in facts["facts"]

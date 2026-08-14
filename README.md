@@ -25,14 +25,16 @@ This repository is a **local-first end-to-end preview**, not production-ready so
 - A generated hero illustration in [`docs/assets/vibewiki-hero.png`](docs/assets/vibewiki-hero.png).
 - The product development plan in [`docs/product-development-plan.md`](docs/product-development-plan.md).
 - An offline verification script in [`scripts/verify_preview.py`](scripts/verify_preview.py).
-- An offline `scan → build → serve` pipeline that writes a deterministic
-  TypeScript/TSX manifest, evidence-backed facts, a SQLite graph, Markdown/
-  Mermaid wiki, and a local viewer backed by the built artifact.
+- An offline `scan → build → serve` pipeline that writes deterministic source
+  facts, a content-addressed inventory of every non-ignored file, a SQLite
+  graph, Markdown/Mermaid wiki, and a local viewer backed by the built artifact.
 
-The analyzer is intentionally narrow and deterministic: it supports the
-documented Next.js App Router + TypeScript/TSX + Prisma + TypeScript test
-surface. LLM reasoning, runtime exploration, and broader framework support are
-not included.
+The semantic analyzer is intentionally deterministic: it currently covers
+Next.js App Router, generic JavaScript/JSX/TypeScript/TSX repositories,
+CommonJS/ESM module references, Prisma models, and test links. Other file types
+remain visible in the inventory and graph as file evidence, but do not yet get
+language-specific symbol facts. LLM reasoning, runtime exploration, and
+network access are not required.
 
 ## Preview the UI
 
@@ -72,6 +74,11 @@ this loopback process, scanned locally, and the temporary imported workspace
 is removed when the server exits. The CLI's default scan remains strict for
 the original direct Next.js App Router contract; Browse uses the generic local
 import profile.
+
+Every build also exposes `/api/files`, `/api/modules`, and `/api/source` for
+bounded local evidence inspection. Source evidence is served by relative path
+and line range only; traversal, symlinks, ignored paths, and sensitive names
+are rejected.
 
 The planned pipeline is:
 
@@ -138,15 +145,15 @@ python3 scripts/verify_preview.py
 The check validates required files, the PNG signature, the viewer's essential
 UI hooks, README asset references, and obvious credential-assignment patterns.
 
-The implemented pipeline is deliberately narrower than a general-purpose
-analyzer. It accepts only a direct `<repository>/app` App Router directory
-containing at least one `.ts` or `.tsx` file, records TypeScript/TSX metadata
-and SHA-256 hashes, then builds deterministic facts for routes, API calls,
-functions, Prisma models, imports, writes, calls and direct test links. It
-rejects nested/monorepo and Pages Router layouts, skips symlinks and special
-files, and ignores build/cache and sensitive paths before reading them. The
-viewer reads `.vibewiki/graph.json` through the loopback API; it does not use
-the presentation fixture when running under `vibewiki serve`.
+The semantic pipeline is still intentionally narrower than a general-purpose
+analyzer. It recognizes direct Next App Router routes specially and accepts
+generic JS/JSX/TS/TSX source in local Browse imports. It records deterministic
+facts for routes, API calls, functions (including common JS arrow/function
+forms), Prisma models, imports, writes, calls, test links, and reverse module
+dependencies. The separate inventory records non-ignored text and binary files
+with path, type, size, and SHA-256 metadata without indexing secret content.
+The viewer reads `.vibewiki/graph.json` through the loopback API; it does not
+use the presentation fixture when running under `vibewiki serve`.
 
 ## Roadmap
 

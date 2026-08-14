@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .config import MANIFEST_DIRECTORY
@@ -59,12 +59,132 @@ def _node(fact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+    nodes = [_node(fact) for fact in artifact["facts"]]
+    existing = {node["id"] for node in nodes}
+    for module in artifact.get("modules", []):
+        if module["id"] in existing:
+            continue
+        attributes = module["attributes"]
+        nodes.append(
+            {
+                "id": module["id"],
+                "kind": module["kind"],
+                "status": module["status"],
+                "title": (
+                    attributes.get("path")
+                    or attributes.get("module")
+                    or module["id"]
+                ),
+                "meta": attributes.get("file") or attributes.get("module", ""),
+                "attributes": attributes,
+                "evidence": module["evidence"],
+            }
+        )
+        existing.add(module["id"])
+    module_ids = {
+        module["attributes"].get("path") for module in artifact.get("modules", [])
+    }
+    for item in artifact.get("inventory", {}).get("files", []):
+        if item["path"] in module_ids:
+            continue
+        node_id = f"file:{item['path']}"
+        nodes.append(
+            {
+                "id": node_id,
+                "kind": "file",
+                "status": "verified",
+                "title": item["path"],
+                "meta": f"{item['language']} · {item['size']} bytes",
+                "attributes": item,
+                "evidence": [
+                    {
+                        "kind": "file_inventory",
+                        "line_end": 1,
+                        "line_start": 1,
+                        "path": item["path"],
+                        "status": "verified",
+                    }
+                ],
+            }
+        )
+    return sorted(nodes, key=lambda node: (node["kind"], node["id"]))
+
+
+def _artifact_edges(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+    return artifact["relations"] + artifact.get("module_edges", [])
+
+
+def _safe_source_path(value: str) -> str:
+    raw = unquote(value).replace("\\", "/")
+    path = PurePosixPath(raw)
+    if not raw or path.is_absolute() or ".." in path.parts:
+        raise VibeWikiError(ErrorCode.PATH_NOT_FOUND, "source path was not found")
+    return path.as_posix()
+
+
+def _source_payload(
+    root: Path, artifact: dict[str, Any], params: dict[str, list[str]]
+) -> dict[str, Any]:
+    requested = _safe_source_path(params.get("path", [""])[0])
+    item = next(
+        (
+            item
+            for item in artifact.get("inventory", {}).get("files", [])
+            if item["path"] == requested
+        ),
+        None,
+    )
+    if item is None:
+        raise VibeWikiError(ErrorCode.PATH_NOT_FOUND, "source path was not found")
+    absolute = root / Path(requested)
+    try:
+        if absolute.is_symlink() or not absolute.is_file():
+            raise VibeWikiError(ErrorCode.PATH_NOT_FOUND, "source path was not found")
+        if item["kind"] == "binary":
+            return {"binary": True, "lines": [], "path": requested, "source": item}
+        text = absolute.read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT, "source file is not valid UTF-8"
+        ) from error
+    except OSError as error:
+        raise VibeWikiError(
+            ErrorCode.PERMISSION_DENIED, "source file could not be read"
+        ) from error
+    raw_start = params.get("start", ["1"])[0]
+    raw_end = params.get("end", [raw_start])[0]
+    try:
+        start = max(1, int(raw_start))
+        end = max(start, int(raw_end))
+    except ValueError as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT, "source line range is invalid"
+        ) from error
+    end = min(end, start + 399)
+    lines = text.splitlines()
+    return {
+        "binary": False,
+        "lines": [
+            {"number": number, "text": lines[number - 1]}
+            for number in range(start, min(end, len(lines)) + 1)
+        ],
+        "path": requested,
+        "source": item,
+    }
+
+
 def api_payload(
-    root: Path, artifact: dict[str, Any], path: str, query: str = ""
+    root: Path,
+    artifact: dict[str, Any],
+    path: str,
+    query: str = "",
+    params: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     facts = artifact["facts"]
-    nodes = [_node(fact) for fact in facts]
-    edges = artifact["relations"]
+    nodes = _artifact_nodes(artifact)
+    edges = _artifact_edges(artifact)
+    params = params or {}
     if path == "/api/summary":
         return {
             "project": artifact["fixture"],
@@ -72,7 +192,7 @@ def api_payload(
             "schema_version": SCHEMA_VERSION,
             "counts": {
                 "facts": len(facts),
-                "relations": len(edges),
+                "relations": len(artifact["relations"]),
                 "unknowns": len(artifact["unknowns"]),
                 "scanned_files": len(
                     json.loads(
@@ -81,13 +201,23 @@ def api_payload(
                 ),
             },
             "evidence": sum(len(fact["evidence"]) for fact in facts)
-            + sum(len(edge["evidence"]) for edge in edges),
+            + sum(len(edge["evidence"]) for edge in artifact["relations"]),
             "status": "ready",
+            "graph_counts": {"nodes": len(nodes), "edges": len(edges)},
         }
     if path == "/api/nodes":
         return {"nodes": nodes, "unknowns": artifact["unknowns"]}
     if path == "/api/edges":
         return {"edges": edges}
+    if path == "/api/files":
+        return {"files": artifact.get("inventory", {}).get("files", [])}
+    if path == "/api/modules":
+        return {
+            "edges": artifact.get("module_edges", []),
+            "modules": artifact.get("modules", []),
+        }
+    if path == "/api/source":
+        return _source_payload(root, artifact, params)
     if path == "/api/search":
         needle = query.casefold()
         return {
@@ -136,9 +266,17 @@ def create_server(
                         self.server.workspace_artifact,
                         parsed.path,
                         parse_qs(parsed.query).get("q", [""])[0],
+                        parse_qs(parsed.query),
                     )
                 except KeyError:
                     self.send_error(404, "not found")
+                    return
+                except VibeWikiError as error:
+                    status = 404 if error.code is ErrorCode.PATH_NOT_FOUND else 422
+                    self._write_json(
+                        status,
+                        {"error": error.code.value, "message": error.message},
+                    )
                     return
                 body = canonical_json(payload).encode("utf-8")
                 self.send_response(200)

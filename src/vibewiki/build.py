@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import SCHEMA_VERSION
-from .analyzer import analyze_repository, write_json
+from .analyzer import analyze_repository, build_module_graph, write_json
 from .config import MANIFEST_DIRECTORY
 from .discovery.hashing import hash_file
 from .discovery.manifest import canonical_json
@@ -34,11 +34,39 @@ def _load_manifest(root: Path) -> dict[str, Any]:
     return manifest
 
 
+def _load_inventory(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    path = root / MANIFEST_DIRECTORY / "inventory.json"
+    if path.is_file():
+        try:
+            inventory = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise VibeWikiError(
+                ErrorCode.INVALID_OUTPUT, "scan inventory is invalid"
+            ) from error
+        if not isinstance(inventory.get("files"), list):
+            raise VibeWikiError(ErrorCode.INVALID_OUTPUT, "scan inventory is invalid")
+        return inventory
+    # Builds created by the first phase remain valid and get a source-only
+    # inventory until the next scan.
+    items = tuple(
+        {
+            "kind": "source",
+            "language": item["language"],
+            "mime": "text/plain",
+            "path": item["path"],
+            "sha256": item["sha256"],
+            "size": item["size"],
+        }
+        for item in manifest["files"]
+    )
+    return {"files": list(items), "schema_version": 1}
+
+
 def _write_wiki(output: Path, artifact: dict[str, Any]) -> list[str]:
     wiki = output / "wiki"
     wiki.mkdir(exist_ok=True)
     facts = artifact["facts"]
-    relations = artifact["relations"]
+    relations = artifact["relations"] + artifact.get("module_edges", [])
     unknowns = artifact["unknowns"]
     rows = [
         "# VibeWiki",
@@ -128,6 +156,11 @@ def _write_graph_db(path: Path, artifact: dict[str, Any]) -> None:
             "CREATE TABLE unknowns (subject TEXT PRIMARY KEY, reason TEXT NOT NULL, "
             "status TEXT NOT NULL, evidence_json TEXT NOT NULL)"
         )
+        db.execute(
+            "CREATE TABLE files (path TEXT PRIMARY KEY, kind TEXT NOT NULL, "
+            "language TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, "
+            "sha256 TEXT NOT NULL)"
+        )
         for fact in artifact["facts"]:
             db.execute(
                 "INSERT INTO nodes VALUES (?, ?, ?, ?)",
@@ -138,9 +171,30 @@ def _write_graph_db(path: Path, artifact: dict[str, Any]) -> None:
                     canonical_json(fact["attributes"]),
                 ),
             )
+        for module in artifact.get("modules", []):
+            db.execute(
+                "INSERT OR IGNORE INTO nodes VALUES (?, ?, ?, ?)",
+                (
+                    module["id"],
+                    module["kind"],
+                    module["status"],
+                    canonical_json(module["attributes"]),
+                ),
+            )
         for edge in artifact["relations"]:
             db.execute(
                 "INSERT INTO edges VALUES (?, ?, ?, ?, ?)",
+                (
+                    edge["source"],
+                    edge["relation"],
+                    edge["target"],
+                    edge["status"],
+                    canonical_json(edge["evidence"]),
+                ),
+            )
+        for edge in artifact.get("module_edges", []):
+            db.execute(
+                "INSERT OR IGNORE INTO edges VALUES (?, ?, ?, ?, ?)",
                 (
                     edge["source"],
                     edge["relation"],
@@ -159,18 +213,36 @@ def _write_graph_db(path: Path, artifact: dict[str, Any]) -> None:
                     canonical_json(item["evidence"]),
                 ),
             )
+        for item in artifact.get("inventory", {}).get("files", []):
+            db.execute(
+                "INSERT INTO files VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    item["path"],
+                    item["kind"],
+                    item["language"],
+                    item["mime"],
+                    item["size"],
+                    item["sha256"],
+                ),
+            )
 
 
 def build_repository(repository: str | Path) -> dict[str, Any]:
     root = Path(repository).absolute()
     manifest = _load_manifest(root)
-    artifact = analyze_repository(root, manifest)
+    inventory = _load_inventory(root, manifest)
+    facts_artifact = analyze_repository(root, manifest)
+    graph_artifact = {
+        **facts_artifact,
+        **build_module_graph(root, manifest),
+        "inventory": inventory,
+    }
     output = root / MANIFEST_DIRECTORY
-    write_json(output / "facts.json", artifact)
+    write_json(output / "facts.json", facts_artifact)
     claims = {
         "schema_version": SCHEMA_VERSION,
         "claims": [],
-        "unknowns": artifact["unknowns"],
+        "unknowns": facts_artifact["unknowns"],
     }
     write_json(output / "claims.json", claims)
     sources = []
@@ -194,10 +266,10 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
             "sources": sorted(sources, key=lambda item: item["path"]),
         },
     )
-    graph = {"schema_version": SCHEMA_VERSION, **artifact}
+    graph = {"schema_version": SCHEMA_VERSION, **graph_artifact}
     write_json(output / "graph.json", graph)
-    _write_graph_db(output / "graph.db", artifact)
-    wiki_paths = _write_wiki(output, artifact)
+    _write_graph_db(output / "graph.db", graph_artifact)
+    wiki_paths = _write_wiki(output, graph_artifact)
     paths = [
         f"{MANIFEST_DIRECTORY}/{name}"
         for name in (
@@ -212,10 +284,10 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
     return {
         "command": "build",
         "counts": {
-            "facts": len(artifact["facts"]),
-            "relations": len(artifact["relations"]),
+            "facts": len(facts_artifact["facts"]),
+            "relations": len(facts_artifact["relations"]),
             "scanned_files": len(manifest["files"]),
-            "unknowns": len(artifact["unknowns"]),
+            "unknowns": len(facts_artifact["unknowns"]),
         },
         "outputs": paths,
         "schema_version": SCHEMA_VERSION,

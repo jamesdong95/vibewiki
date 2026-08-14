@@ -353,6 +353,8 @@
     .evidence-path { overflow: hidden; color: var(--ink-soft); font-family: var(--mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
     .evidence-line { margin-top: 3px; color: var(--muted-2); font-family: var(--mono); font-size: 8px; }
     .external-arrow { color: var(--muted-2); font-family: var(--mono); }
+    .source-viewer { overflow: auto; max-height: 250px; margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft); background: rgba(3,7,8,0.72); font-family: var(--mono); font-size: 9px; line-height: 1.55; white-space: pre; }
+    .source-viewer-label { margin-bottom: 8px; overflow: hidden; color: var(--muted-2); font-family: var(--mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
     .impact-list { display: grid; gap: 8px; }
     .impact-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 11px; }
     .impact-row span:last-child { color: var(--muted); font-family: var(--mono); font-size: 9px; }
@@ -639,6 +641,12 @@
         </div>
       </div>
 
+      <div class="inspector-section" id="source-viewer-section" hidden>
+        <div class="inspector-label">Source preview</div>
+        <div class="source-viewer-label" id="source-viewer-label"></div>
+        <pre class="source-viewer" id="source-viewer" aria-label="Source preview"></pre>
+      </div>
+
       <div class="inspector-section">
         <div class="inspector-label">Connected to</div>
         <div class="impact-list" id="impact-list">
@@ -735,6 +743,9 @@
       connected: document.getElementById('impact-list'),
       toast: document.getElementById('toast'),
       toastText: document.getElementById('toast-text'),
+      sourceSection: document.getElementById('source-viewer-section'),
+      sourceLabel: document.getElementById('source-viewer-label'),
+      sourceViewer: document.getElementById('source-viewer'),
       graphCanvas: document.getElementById('graph-canvas'),
       search: document.getElementById('graph-search'),
       currentView: document.getElementById('current-view'),
@@ -749,6 +760,12 @@
       els.toast.classList.add('show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2700);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      })[character]);
     }
 
     function renderInspector(id) {
@@ -775,6 +792,34 @@
     function bindToastTargets() {
       document.querySelectorAll('[data-toast]').forEach(target => {
         target.onclick = () => showToast(target.dataset.toast);
+      });
+    }
+
+    async function openSourceEvidence(path, start = 1, end = start) {
+      if (!els.sourceSection) return;
+      try {
+        const query = new URLSearchParams({ path, start: String(start), end: String(end) });
+        const response = await fetch(`/api/source?${query.toString()}`, { cache: 'no-store' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể đọc source evidence.');
+        els.sourceSection.hidden = false;
+        els.sourceLabel.textContent = result.binary ? `${path} · binary file` : `${path} · lines ${start}–${end}`;
+        els.sourceViewer.textContent = result.binary
+          ? '[binary file — content preview is disabled]'
+          : result.lines.map(line => `${String(line.number).padStart(4, ' ')} │ ${line.text}`).join('\n');
+        els.sourceViewer.scrollTop = 0;
+      } catch (error) {
+        showToast(error.message || 'Không thể đọc source evidence.');
+      }
+    }
+
+    function bindSourceTargets() {
+      document.querySelectorAll('[data-source-path]').forEach(target => {
+        target.onclick = () => openSourceEvidence(
+          target.dataset.sourcePath,
+          Number(target.dataset.sourceStart || 1),
+          Number(target.dataset.sourceEnd || target.dataset.sourceStart || 1)
+        );
       });
     }
 
@@ -966,7 +1011,7 @@
           type: node.kind.replaceAll('_', ' '),
           confidence: node.status,
           copy: `${node.kind.replaceAll('_', ' ')} observed at ${node.meta || node.id}.`,
-          evidence: (node.evidence || []).map(item => [item.kind.toUpperCase(), item.path, `lines ${item.line_start}–${item.line_end} · ${item.status}`]),
+          evidence: node.evidence || [],
           connected: edges.filter(edge => edge.source === node.id || edge.target === node.id).map(edge => {
             const other = nodeById.get(edge.source === node.id ? edge.target : edge.source);
             return [other ? other.title : edge.target, edge.relation];
@@ -1013,7 +1058,7 @@
         const viewFilters = {
           'Product map': node => true,
           'User flows': node => ['route', 'api_call', 'test'].includes(node.kind),
-          'Architecture': node => ['route', 'api_call', 'function'].includes(node.kind),
+          'Architecture': node => ['route', 'api_call', 'function', 'module', 'external_module', 'file'].includes(node.kind),
           'Data model': node => node.kind === 'data_entity',
           Evidence: node => (node.evidence || []).length > 0,
           'Unknowns': () => false,
@@ -1037,9 +1082,10 @@
           els.confidenceText.textContent = data.confidence;
           els.badge.classList.toggle('inferred', data.confidence === 'inferred');
           els.badge.querySelector('.legend-dot').className = `legend-dot ${data.confidence}`;
-          els.evidence.innerHTML = data.evidence.length ? data.evidence.map(([kind, path, line]) => `<div class="evidence-row" data-toast="Opening ${path} in source viewer."><span class="file-icon">${kind}</span><span class="evidence-info"><span class="evidence-path">${path}</span><span class="evidence-line">${line}</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No direct evidence was emitted.</div>';
+          els.evidence.innerHTML = data.evidence.length ? data.evidence.map(item => `<div class="evidence-row" data-source-path="${escapeHtml(item.path)}" data-source-start="${item.line_start}" data-source-end="${item.line_end}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">lines ${item.line_start}–${item.line_end} · ${escapeHtml(item.status)}</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No direct evidence was emitted.</div>';
           els.connected.innerHTML = data.connected.length ? data.connected.map(([name, relation]) => `<div class="impact-row"><span>${name}</span><span>${relation}</span></div>`).join('') : '<div class="empty-state">No connected evidence yet.</div>';
           bindToastTargets();
+          bindSourceTargets();
         }
 
         function renderUnknownInspector() {

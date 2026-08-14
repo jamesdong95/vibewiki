@@ -13,10 +13,20 @@ from .config import PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
 from .discovery.manifest import canonical_json
 
 _FUNCTION = re.compile(r"export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)\s*\(")
+_GENERIC_FUNCTION = re.compile(
+    r"(?:^|\n)\s*(?:export\s+(?:default\s+)?)?"
+    r"(?:async\s+)?function\s+(\w+)\s*\("
+)
+_ARROW_FUNCTION = re.compile(
+    r"(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*"
+    r"(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>"
+)
 _METHOD = re.compile(
     r"export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\s*\("
 )
 _IMPORT = re.compile(r"import\s+(.*?)\s+from\s+[\"']([^\"']+)[\"']")
+_REEXPORT = re.compile(r"(?:export|export\s+type)\s+.*?\s+from\s+[\"']([^\"']+)[\"']")
+_REQUIRE = re.compile(r"\b(?:require|import)\s*\(\s*[\"']([^\"']+)[\"']\s*\)")
 _FETCH = re.compile(r"fetch\(\s*(['\"])(/[^'\"]+)\1")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
@@ -210,11 +220,13 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                 )
             )
         elif path.endswith(_SCRIPT_SUFFIXES) and not path.startswith("tests/"):
-            for match in _FUNCTION.finditer(source.text):
+            matches = list(_GENERIC_FUNCTION.finditer(source.text))
+            matches.extend(_ARROW_FUNCTION.finditer(source.text))
+            for match in matches:
                 name = match.group(1)
                 key = f"function:{path}:{name}"
                 function_keys[(path, name)] = key
-                start = _line(source.text, match.start())
+                start = _line(source.text, match.start(1))
                 facts.append(
                     _fact(
                         "function",
@@ -418,8 +430,93 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_module_graph(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Build a source-to-source dependency graph without changing golden facts.
+
+    The first analyzer milestones intentionally kept ``facts.json`` stable. This
+    companion graph gives the viewer a reverse dependency surface for modern
+    ESM, CommonJS, and dynamic-import references while preserving that contract.
+    """
+
+    sources = _load_sources(root, manifest)
+    source_paths = set(sources)
+    modules = []
+    module_edges = []
+    seen_edges: set[tuple[str, str, str]] = set()
+
+    def add_edge(
+        source: str, target: str, specifier: str, path: str, offset: int
+    ) -> None:
+        relation = "imports"
+        edge_key = (source, relation, target)
+        if edge_key in seen_edges:
+            return
+        seen_edges.add(edge_key)
+        module_edges.append(
+            {
+                "evidence": [
+                    _evidence(path, "module_import", _line(sources[path].text, offset))
+                ],
+                "relation": relation,
+                "source": source,
+                "status": "verified",
+                "target": target,
+                "specifier": specifier,
+            }
+        )
+
+    for path in sorted(sources):
+        source = sources[path]
+        source_id = f"module:{path}"
+        modules.append(
+            {
+                "attributes": {"file": path, "path": path},
+                "evidence": [_evidence(path, "module_file", 1)],
+                "id": source_id,
+                "kind": "module",
+                "status": "verified",
+            }
+        )
+        references: list[tuple[str, int]] = [
+            (match.group(2), match.start()) for match in _IMPORT.finditer(source.text)
+        ]
+        references.extend(
+            (match.group(1), match.start()) for match in _REEXPORT.finditer(source.text)
+        )
+        references.extend(
+            (match.group(1), match.start()) for match in _REQUIRE.finditer(source.text)
+        )
+        for specifier, offset in references:
+            resolved = _resolve_import(path, specifier, source_paths)
+            target = f"module:{resolved}" if resolved else f"external:{specifier}"
+            add_edge(source_id, target, specifier, path, offset)
+
+    external_ids = sorted(
+        {
+            edge["target"]
+            for edge in module_edges
+            if edge["target"].startswith("external:")
+        }
+    )
+    for external_id in external_ids:
+        specifier = external_id.removeprefix("external:")
+        modules.append(
+            {
+                "attributes": {"module": specifier},
+                "evidence": [],
+                "id": external_id,
+                "kind": "external_module",
+                "status": "inferred",
+            }
+        )
+
+    modules.sort(key=lambda item: item["id"])
+    module_edges.sort(key=lambda item: (item["source"], item["target"]))
+    return {"module_edges": module_edges, "modules": modules}
+
+
 def write_json(path: Path, value: Any) -> None:
     path.write_text(canonical_json(value), encoding="utf-8")
 
 
-__all__ = ["analyze_repository", "write_json"]
+__all__ = ["analyze_repository", "build_module_graph", "write_json"]

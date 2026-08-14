@@ -10,6 +10,7 @@ from typing import Any
 from .config import PRISMA_SCHEMA_RELATIVE_PATH, SCHEMA_VERSION
 from .discovery.files import DiscoveredFile, discover_files
 from .discovery.hashing import hash_file
+from .discovery.inventory import discover_inventory, write_inventory
 from .discovery.manifest import ManifestFile, build_manifest, write_manifest
 from .errors import ErrorCode, VibeWikiError
 from .offline import require_offline
@@ -150,6 +151,7 @@ def scan_repository(
     require_offline(offline)
     root = _repository_root(repository)
     discovered = discover_files(root)
+    inventory = discover_inventory(root)
     has_schema = _has_prisma_schema(root)
     if not discovered and not has_schema:
         raise VibeWikiError(
@@ -184,6 +186,7 @@ def scan_repository(
 
     manifest = build_manifest(_manifest_files(discovered))
     output = write_manifest(root, manifest)
+    write_inventory(root, inventory)
     return {
         "command": "scan",
         "counts": {

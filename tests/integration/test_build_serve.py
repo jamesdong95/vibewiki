@@ -69,6 +69,10 @@ def test_serve_exposes_real_artifact_apis(tmp_path: Path) -> None:
             nodes = json.load(response)
         with urlopen(f"{base}/api/inspect/route:page:/signup") as response:
             inspected = json.load(response)
+        with urlopen(
+            f"{base}/api/source?path=app%2Fpage.tsx&start=1&end=1"
+        ) as response:
+            source = json.load(response)
     finally:
         server.shutdown()
         server.server_close()
@@ -84,6 +88,8 @@ def test_serve_exposes_real_artifact_apis(tmp_path: Path) -> None:
     assert any(node["id"] == "route:page:/signup" for node in nodes["nodes"])
     assert inspected["node"]["attributes"]["path"] == "/signup"
     assert any(edge["relation"] == "calls" for edge in inspected["connected"])
+    assert source["path"] == "app/page.tsx"
+    assert source["lines"][0]["number"] == 1
 
 
 def test_serve_imports_a_browser_selected_source_folder(tmp_path: Path) -> None:
