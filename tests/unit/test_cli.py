@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vibewiki.cli import main
+from vibewiki.cli import build_parser, main
 from vibewiki.errors import CLI_EXIT_CODES, ErrorCode, VibeWikiError
 
 
@@ -44,6 +44,25 @@ def test_version_is_stable_and_reports_metadata(
         "(analyzer 0.1.0-preview, schema 1)\n"
     )
     assert stderr == ""
+
+
+def test_serve_accepts_optional_llm_runtime_flags() -> None:
+    arguments = build_parser().parse_args(
+        [
+            "serve",
+            "repo",
+            "--llm-provider",
+            "ollama",
+            "--llm-model",
+            "qwen2.5:7b",
+            "--llm-base-url",
+            "http://127.0.0.1:11434",
+        ]
+    )
+
+    assert arguments.llm_provider == "ollama"
+    assert arguments.llm_model == "qwen2.5:7b"
+    assert arguments.llm_base_url == "http://127.0.0.1:11434"
 
 
 @pytest.mark.parametrize("error_code", list(ErrorCode))

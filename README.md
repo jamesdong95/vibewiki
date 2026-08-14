@@ -113,6 +113,7 @@ with Ollama on the local machine:
 export VIBEWIKI_LLM_PROVIDER=ollama
 export VIBEWIKI_LLM_MODEL=qwen2.5:7b
 export VIBEWIKI_LLM_BASE_URL=http://127.0.0.1:11434
+# Or pass --llm-provider/--llm-model/--llm-base-url to `vibewiki serve`.
 ```
 
 Or use a BYOK OpenAI-compatible endpoint from the server environment:

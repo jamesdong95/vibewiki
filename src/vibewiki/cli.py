@@ -47,6 +47,17 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("repository", help="repository directory to serve")
     serve_parser.add_argument("--host", default="127.0.0.1", help="bind address")
     serve_parser.add_argument("--port", default=4173, type=int, help="bind port")
+    serve_parser.add_argument(
+        "--llm-provider",
+        choices=("none", "ollama", "openai-compatible"),
+        help="optional grounded discussion provider; API key stays in environment",
+    )
+    serve_parser.add_argument(
+        "--llm-model", help="model name passed to the selected LLM provider"
+    )
+    serve_parser.add_argument(
+        "--llm-base-url", help="optional provider base URL override"
+    )
     return parser
 
 
@@ -64,7 +75,14 @@ def run(argv: Sequence[str] | None = None) -> int:
     elif arguments.command == "build":
         print(canonical_json(build_repository(arguments.repository)), end="")
     elif arguments.command == "serve":
-        serve_repository(arguments.repository, arguments.host, arguments.port)
+        serve_repository(
+            arguments.repository,
+            arguments.host,
+            arguments.port,
+            llm_provider=arguments.llm_provider,
+            llm_model=arguments.llm_model,
+            llm_base_url=arguments.llm_base_url,
+        )
     return 0
 
 

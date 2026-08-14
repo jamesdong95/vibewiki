@@ -35,6 +35,12 @@ def test_llm_settings_default_to_evidence_only(monkeypatch: pytest.MonkeyPatch) 
     assert settings.model == "qwen2.5:7b"
 
 
+def test_question_tokens_ignore_natural_language_fillers() -> None:
+    from vibewiki.llm import _tokens
+
+    assert _tokens("Which files are connected to signup?") == {"signup"}
+
+
 def test_openai_compatible_settings_require_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

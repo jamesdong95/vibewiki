@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Grounded `/api/ask` with evidence-only fallback and optional Ollama/OpenAI-compatible providers.
 - Local bounded retrieval and source citations for the viewer's Ask control.
+- Added `vibewiki serve --llm-provider/--llm-model/--llm-base-url` runtime configuration without accepting API keys on the command line.
 
 - Initial public repository presentation for VibeWiki.
 - Standalone product-intelligence UI prototype.

@@ -23,7 +23,39 @@ MAX_HISTORY_TURNS = 6
 MAX_RETRIEVED_NODES = 8
 MAX_CONTEXT_CHARS = 24_000
 MAX_EXCERPT_LINES = 36
-_TOKEN = re.compile(r"[A-Za-z0-9_./:-]{3,}")
+_TOKEN = re.compile(r"[A-Za-z0-9_]{3,}")
+_STOPWORDS = frozenset(
+    {
+        "about",
+        "and",
+        "are",
+        "can",
+        "connected",
+        "connect",
+        "does",
+        "how",
+        "the",
+        "what",
+        "which",
+        "where",
+        "when",
+        "with",
+        "file",
+        "files",
+        "source",
+        "code",
+        "cua",
+        "là",
+        "các",
+        "cho",
+        "của",
+        "được",
+        "nào",
+        "những",
+        "trong",
+        "và",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +118,11 @@ def llm_status() -> dict[str, Any]:
 
 
 def _tokens(value: str) -> set[str]:
-    return {token.casefold() for token in _TOKEN.findall(value)}
+    return {
+        token.casefold()
+        for token in _TOKEN.findall(value)
+        if token.casefold() not in _STOPWORDS
+    }
 
 
 def _node_text(node: dict[str, Any]) -> str:
@@ -123,7 +159,13 @@ def _rank_nodes(
         text = _node_text(node)
         tokens = _tokens(text)
         score = len(query_tokens & tokens)
-        if node.get("kind") in {"route", "function", "symbol", "module", "file"}:
+        if score and node.get("kind") in {
+            "route",
+            "function",
+            "symbol",
+            "module",
+            "file",
+        }:
             score += 1
         if score:
             scored.append((score, str(node.get("id", "")), node))

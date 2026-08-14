@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -425,30 +426,52 @@ def create_server(
 
 
 def serve_repository(
-    repository: str | Path, host: str = "127.0.0.1", port: int = 4173
+    repository: str | Path,
+    host: str = "127.0.0.1",
+    port: int = 4173,
+    *,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    llm_base_url: str | None = None,
 ) -> None:
-    server = create_server(repository, host, port)
-    actual_port = server.server_address[1]
-    print(
-        canonical_json(
-            {
-                "bind": host,
-                "command": "serve",
-                "port": actual_port,
-                "artifact_root": MANIFEST_DIRECTORY,
-                "schema_version": SCHEMA_VERSION,
-                "status": "ready",
-            }
-        ),
-        end="",
-        flush=True,
-    )
+    overrides = {
+        "VIBEWIKI_LLM_PROVIDER": llm_provider,
+        "VIBEWIKI_LLM_MODEL": llm_model,
+        "VIBEWIKI_LLM_BASE_URL": llm_base_url,
+    }
+    previous = {key: os.environ.get(key) for key in overrides}
+    for key, value in overrides.items():
+        if value is not None:
+            os.environ[key] = value
+    server: ThreadingHTTPServer | None = None
     try:
+        server = create_server(repository, host, port)
+        actual_port = server.server_address[1]
+        print(
+            canonical_json(
+                {
+                    "bind": host,
+                    "command": "serve",
+                    "port": actual_port,
+                    "artifact_root": MANIFEST_DIRECTORY,
+                    "schema_version": SCHEMA_VERSION,
+                    "status": "ready",
+                }
+            ),
+            end="",
+            flush=True,
+        )
         server.serve_forever()
     finally:
-        if server.imported_workspace is not None:
+        if server is not None and server.imported_workspace is not None:
             cleanup_workspace(server.imported_workspace)
-        server.server_close()
+        if server is not None:
+            server.server_close()
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 __all__ = ["api_payload", "create_server", "serve_repository"]
