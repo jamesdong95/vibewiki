@@ -246,6 +246,8 @@
     .text-button.primary:hover { background: #e4ffa2; transform: translateY(-1px); }
     .text-button svg, .icon-button svg { width: 14px; height: 14px; }
     .source-picker { display: none; }
+    .browse-wrap { display: inline-flex; align-items: center; gap: 8px; }
+    .browse-hint { color: var(--muted-2); font-family: var(--mono); font-size: 8px; white-space: nowrap; }
 
     .main-scroll { overflow: auto; padding: 30px 30px 44px; }
     .main-scroll::-webkit-scrollbar, .inspector::-webkit-scrollbar { width: 8px; }
@@ -361,6 +363,11 @@
     .mini-prompt button { border: 0; color: var(--lime); background: transparent; cursor: pointer; font-family: var(--mono); font-size: 11px; }
 
     .toast { position: fixed; z-index: 20; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 12px 14px; border: 1px solid rgba(216,249,139,0.25); border-radius: 9px; color: var(--ink); background: #1a2521; box-shadow: var(--shadow); opacity: 0; transform: translateY(9px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+    .browse-status { display: none; margin: 0 30px 16px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(16,22,24,0.72); font-family: var(--mono); font-size: 9px; line-height: 1.4; }
+    .browse-status.show { display: block; }
+    .browse-status.success { color: var(--lime); border-color: rgba(216,249,139,0.28); }
+    .browse-status.error { color: #ffb4a8; border-color: rgba(255,129,111,0.35); }
+    .browse-status.busy { color: var(--cyan); border-color: rgba(166,233,239,0.28); }
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast-mark { color: var(--lime); font-family: var(--mono); }
 
@@ -489,13 +496,17 @@
           <span class="shortcut">⌘ K</span>
         </div>
         <div class="top-actions">
-          <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
+          <div class="browse-wrap">
+            <span class="browse-hint">JS/JSX/TS/TSX</span>
+            <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
+          </div>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
           <button class="icon-button" type="button" data-toast="No unsynced changes. Local index is current." aria-label="Notifications" title="Notifications">◌</button>
           <button class="text-button" type="button" data-toast="Share is disabled in local-only preview.">Share</button>
         </div>
       </header>
       <input class="source-picker" id="source-picker" type="file" webkitdirectory directory multiple aria-label="Choose source folder" />
+      <div class="browse-status" id="browse-status" role="status" aria-live="polite"></div>
 
       <div class="main-scroll">
         <div class="section-heading">
@@ -815,35 +826,74 @@
 
     const sourcePicker = document.getElementById('source-picker');
     const browseButton = document.getElementById('browse-button');
+    const scanButton = document.getElementById('scan-button');
+    const browseStatus = document.getElementById('browse-status');
+    const MAX_IMPORT_FILES = 10000;
+    const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
+    function setBrowseStatus(message, kind = 'info') {
+      browseStatus.textContent = message;
+      browseStatus.className = `browse-status show ${kind}`;
+    }
     function chooseSourceFolder() {
+      setBrowseStatus('Đang chờ chọn một thư mục source local…', 'busy');
       sourcePicker.click();
     }
     function isSupportedSourceFile(file) {
       const path = (file.webkitRelativePath || file.name || '').replaceAll('\\', '/').toLowerCase();
       if (/(^|\/)(node_modules|\.git|\.next|dist|build|out|coverage|\.cache|\.vibewiki)(\/|$)/.test(path)) return false;
       if (/(^|\/)(\.env|credentials?|secrets?|tokens?)([^/]*)(\/|$)/.test(path)) return false;
-      return path.endsWith('prisma/schema.prisma') || /\.(ts|tsx)$/.test(path);
+      return path.endsWith('prisma/schema.prisma') || /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path);
+    }
+    function importErrorMessage(result) {
+      const messages = {
+        unsupported_stack: 'Stack chưa được nhận diện hoặc không có file JS/JSX/TS/TSX được hỗ trợ.',
+        invalid_output: result.message || 'Source không hợp lệ hoặc vượt giới hạn import local.',
+        permission_denied: 'Không có quyền đọc source đã chọn.'
+      };
+      return messages[result.error] || result.message || 'Không thể scan source local.';
     }
     async function importSourceFiles(files) {
       if (!files.length) return;
       const candidates = files.filter(isSupportedSourceFile);
+      const skipped = files.length - candidates.length;
       if (!candidates.length) {
-        showToast('No supported TypeScript or Prisma files found.');
+        setBrowseStatus(`Không tìm thấy file được hỗ trợ. Đã chọn ${files.length} file, bỏ qua ${skipped}. Hỗ trợ JS/JSX/TS/TSX và Prisma.`, 'error');
+        showToast('Không tìm thấy file JS/JSX/TS/TSX được hỗ trợ.');
+        sourcePicker.value = '';
+        return;
+      }
+      const totalBytes = candidates.reduce((sum, file) => sum + file.size, 0);
+      if (candidates.length > MAX_IMPORT_FILES) {
+        setBrowseStatus(`Repo vượt giới hạn: ${candidates.length.toLocaleString()} file được hỗ trợ, tối đa ${MAX_IMPORT_FILES.toLocaleString()}. Đã bỏ qua ${skipped} file khác.`, 'error');
+        showToast('Source vượt giới hạn số file local.');
+        sourcePicker.value = '';
+        return;
+      }
+      if (totalBytes > MAX_IMPORT_BYTES) {
+        setBrowseStatus(`Repo vượt giới hạn: ${(totalBytes / 1024 / 1024).toFixed(1)} MB source, tối đa 200 MB. Đã bỏ qua ${skipped} file khác.`, 'error');
+        showToast('Source vượt giới hạn dung lượng local.');
+        sourcePicker.value = '';
         return;
       }
       const form = new FormData();
       candidates.forEach(file => form.append('files', file, file.webkitRelativePath || file.name));
       browseButton.disabled = true;
-      showToast(`Scanning ${candidates.length} supported local files…`);
+      scanButton.disabled = true;
+      setBrowseStatus(`Đang scan ${candidates.length.toLocaleString()} file được hỗ trợ… Đã bỏ qua ${skipped.toLocaleString()} file.`, 'busy');
+      showToast(`Đang scan ${candidates.length} file local…`);
       try {
         const response = await fetch('/api/import', { method: 'POST', body: form });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || 'Source import failed.');
-        showToast(`Scan complete: ${result.counts.facts} facts found.`);
-        window.setTimeout(() => window.location.reload(), 650);
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(importErrorMessage(result));
+        setBrowseStatus(`Scan thành công: ${result.counts.facts} facts, ${result.counts.scanned_files} file source. Đang tải graph mới…`, 'success');
+        showToast(`Scan xong: ${result.counts.facts} facts found.`);
+        window.setTimeout(() => window.location.reload(), 1400);
       } catch (error) {
-        showToast(error.message || 'Could not scan this source folder.');
+        const message = error.message || 'Không thể kết nối tới local VibeWiki server.';
+        setBrowseStatus(`Lỗi scan: ${message} Bạn có thể Browse lại.`, 'error');
+        showToast(message);
         browseButton.disabled = false;
+        scanButton.disabled = false;
       } finally {
         sourcePicker.value = '';
       }

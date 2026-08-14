@@ -39,15 +39,16 @@ def test_cli_scan_uses_stable_unsupported_stack_exit_code(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "app").mkdir()
-    (tmp_path / "app/page.js").write_text("export default function Page() {}\n")
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "pages/index.js").write_text("export default function Page() {}\n")
 
     assert main(["scan", str(tmp_path)]) == 3
     captured = capsys.readouterr()
 
     assert captured.out == ""
     assert captured.err == (
-        "error[unsupported_stack]: repository stack is not supported by this command\n"
+        "error[unsupported_stack]: Pages Router repositories are not supported; "
+        "use an App Router or generic source tree\n"
     )
     assert not (tmp_path / ".vibewiki").exists()
 

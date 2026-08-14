@@ -13,7 +13,7 @@ def _paths(root: Path) -> list[str]:
     return [item.path for item in discover_files(root)]
 
 
-def test_discovery_is_sorted_relative_posix_and_ignores_non_ts_surface(
+def test_discovery_is_sorted_relative_posix_and_supports_js_surface(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "app/api").mkdir(parents=True)
@@ -27,7 +27,19 @@ def test_discovery_is_sorted_relative_posix_and_ignores_non_ts_surface(
     (tmp_path / ".next/cache.ts").parent.mkdir(parents=True)
     (tmp_path / ".next/cache.ts").write_text("ignored\n")
 
-    assert _paths(tmp_path) == ["app/api/route.ts", "app/page.tsx", "src/other.ts"]
+    (tmp_path / "app/widget.jsx").write_text("export default function Widget() {}\n")
+    (tmp_path / "app/module.mjs").write_text("export function moduleValue() {}\n")
+    (tmp_path / "app/common.cjs").write_text("function commonValue() {}\n")
+
+    assert _paths(tmp_path) == [
+        "app/api/route.ts",
+        "app/client.js",
+        "app/common.cjs",
+        "app/module.mjs",
+        "app/page.tsx",
+        "app/widget.jsx",
+        "src/other.ts",
+    ]
     assert all(not Path(path).is_absolute() for path in _paths(tmp_path))
     assert all(
         "\\" not in path and ".." not in Path(path).parts

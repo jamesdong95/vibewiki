@@ -7,7 +7,7 @@ import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .config import SCHEMA_VERSION
+from .config import PRISMA_SCHEMA_RELATIVE_PATH, SCHEMA_VERSION
 from .discovery.files import DiscoveredFile, discover_files
 from .discovery.hashing import hash_file
 from .discovery.manifest import ManifestFile, build_manifest, write_manifest
@@ -81,13 +81,37 @@ def _app_files(files: tuple[DiscoveredFile, ...]) -> tuple[DiscoveredFile, ...]:
 
 
 def _has_nested_router_surface(files: tuple[DiscoveredFile, ...]) -> bool:
-    """Reject nested App/Pages Router layouts instead of guessing the app root."""
+    """Reject nested App Router layouts instead of guessing the app root."""
 
     for item in files:
         parts = PurePosixPath(item.path).parts
-        if any(part in {"app", "pages"} for part in parts[1:-1]):
+        if any(
+            index > 0
+            and part == "app"
+            and parts[index + 1].rsplit(".", 1)[0] in {"page", "route"}
+            for index, part in enumerate(parts[:-1])
+        ):
             return True
     return False
+
+
+def _has_prisma_schema(root: Path) -> bool:
+    schema = root / Path(PRISMA_SCHEMA_RELATIVE_PATH)
+    try:
+        schema_stat = schema.lstat()
+    except FileNotFoundError:
+        return False
+    except PermissionError as error:
+        raise VibeWikiError(
+            ErrorCode.PERMISSION_DENIED,
+            "permission denied while reading the repository",
+        ) from error
+    except OSError as error:
+        raise VibeWikiError(
+            ErrorCode.PERMISSION_DENIED,
+            "repository entry could not be read",
+        ) from error
+    return stat.S_ISREG(schema_stat.st_mode) and not stat.S_ISLNK(schema_stat.st_mode)
 
 
 def _manifest_files(files: tuple[DiscoveredFile, ...]) -> list[ManifestFile]:
@@ -110,23 +134,52 @@ def _manifest_files(files: tuple[DiscoveredFile, ...]) -> list[ManifestFile]:
 
 
 def scan_repository(
-    repository: str | os.PathLike[str], *, offline: bool = True
+    repository: str | os.PathLike[str],
+    *,
+    offline: bool = True,
+    allow_generic: bool = False,
 ) -> dict[str, Any]:
-    """Scan a supported repository and write only ``.vibewiki/manifest.json``."""
+    """Scan a local source tree and write only its manifest.
+
+    A direct Next App Router is still recognized specially, while a generic
+    JavaScript/TypeScript or Prisma repository is accepted without requiring
+    a top-level ``app`` directory. ``allow_generic=False`` is retained as a
+    strict mode for callers that need the original Next-only validation.
+    """
 
     require_offline(offline)
     root = _repository_root(repository)
-    if not _has_direct_app(root) or _has_pages_router_marker(root):
-        raise VibeWikiError(
-            ErrorCode.UNSUPPORTED_STACK,
-            "repository stack is not supported by this command",
-        )
-
     discovered = discover_files(root)
-    if not _app_files(discovered) or _has_nested_router_surface(discovered):
+    has_schema = _has_prisma_schema(root)
+    if not discovered and not has_schema:
         raise VibeWikiError(
             ErrorCode.UNSUPPORTED_STACK,
-            "repository stack is not supported by this command",
+            "repository contains no supported JavaScript, TypeScript, or Prisma source",
+        )
+    if not allow_generic and _has_pages_router_marker(root):
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "Pages Router repositories are not supported; use an App Router "
+            "or generic source tree",
+        )
+    if not allow_generic and (
+        not _has_direct_app(root)
+        or not _app_files(discovered)
+        or _has_nested_router_surface(discovered)
+    ):
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "repository is not a direct Next App Router source tree",
+        )
+    if (
+        allow_generic
+        and _has_direct_app(root)
+        and _has_nested_router_surface(discovered)
+    ):
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "repository contains a nested App Router package; import that "
+            "package explicitly",
         )
 
     manifest = build_manifest(_manifest_files(discovered))

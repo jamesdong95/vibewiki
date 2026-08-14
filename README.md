@@ -65,9 +65,13 @@ uv run vibewiki serve /path/to/next-app --port 4173
 Open `http://127.0.0.1:4173/` to inspect the generated graph, evidence and
 unknowns. The server binds to loopback and does not contact external services.
 You can also use **Browse source** in the viewer to choose a local source
-folder; selected supported files are sent only to this loopback process,
-scanned locally, and the temporary imported workspace is removed when the
-server exits.
+folder. Browse accepts JavaScript/JSX and TypeScript/TSX source (plus Prisma),
+detects a supported package inside common monorepos, and shows skipped-file or
+size-limit errors before import. Selected supported files are sent only to
+this loopback process, scanned locally, and the temporary imported workspace
+is removed when the server exits. The CLI's default scan remains strict for
+the original direct Next.js App Router contract; Browse uses the generic local
+import profile.
 
 The planned pipeline is:
 

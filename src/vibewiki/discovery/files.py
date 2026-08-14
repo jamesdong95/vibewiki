@@ -1,4 +1,4 @@
-"""Symlink-safe discovery of the TypeScript surface."""
+"""Symlink-safe discovery of the JavaScript/TypeScript source surface."""
 
 from __future__ import annotations
 
@@ -24,6 +24,11 @@ class DiscoveredFile:
 
 
 def _safe_relative_path(parts: tuple[str, ...]) -> str:
+    if any("\\" in part for part in parts):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "repository entry could not be represented as a POSIX path",
+        )
     relative = PurePosixPath(*parts)
     if relative.is_absolute() or ".." in relative.parts:
         raise VibeWikiError(
@@ -85,7 +90,7 @@ def _walk(directory: Path, parts: tuple[str, ...]) -> Iterator[DiscoveredFile]:
 
 
 def discover_files(repository: Path) -> tuple[DiscoveredFile, ...]:
-    """Discover regular ``.ts``/``.tsx`` files without following symlinks."""
+    """Discover supported JavaScript/TypeScript files without symlinks."""
 
     root = Path(repository)
     try:

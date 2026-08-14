@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from . import SCHEMA_VERSION
+from .config import PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
 from .discovery.manifest import canonical_json
 
 _FUNCTION = re.compile(r"export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)\s*\(")
@@ -20,6 +21,9 @@ _FETCH = re.compile(r"fetch\(\s*(['\"])(/[^'\"]+)\1")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
 _WRITE = re.compile(r"db\.(\w+)\.create\s*\(")
+_SCRIPT_SUFFIXES = tuple(SUPPORTED_SUFFIXES)
+_PAGE_SUFFIXES = tuple(f"/page{suffix}" for suffix in _SCRIPT_SUFFIXES)
+_ROUTE_SUFFIXES = tuple(f"/route{suffix}" for suffix in _SCRIPT_SUFFIXES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,8 +119,16 @@ def _resolve_import(source_path: str, imported: str, sources: set[str]) -> str |
         base,
         f"{base}.ts",
         f"{base}.tsx",
+        f"{base}.js",
+        f"{base}.jsx",
+        f"{base}.mjs",
+        f"{base}.cjs",
         f"{base}/index.ts",
         f"{base}/index.tsx",
+        f"{base}/index.js",
+        f"{base}/index.jsx",
+        f"{base}/index.mjs",
+        f"{base}/index.cjs",
     ):
         if candidate in sources:
             return candidate
@@ -130,7 +142,7 @@ def _load_sources(root: Path, manifest: dict[str, Any]) -> dict[str, Source]:
         absolute = root / Path(path)
         text = absolute.read_text(encoding="utf-8")
         loaded[path] = Source(path, text, tuple(text.splitlines()))
-    schema = root / "prisma/schema.prisma"
+    schema = root / Path(PRISMA_SCHEMA_RELATIVE_PATH)
     if schema.is_file():
         text = schema.read_text(encoding="utf-8")
         loaded["prisma/schema.prisma"] = Source(
@@ -146,6 +158,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     relations: list[dict[str, Any]] = []
     page_keys: dict[str, str] = {}
     handler_keys: dict[str, str] = {}
+    handler_keys_by_route: dict[str, str] = {}
     function_keys: dict[tuple[str, str], str] = {}
     model_keys: dict[str, str] = {}
     model_evidence: dict[str, dict[str, Any]] = {}
@@ -153,11 +166,9 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
 
     for path in sorted(sources):
         source = sources[path]
-        if path.startswith("app/") and (
-            path.endswith("/page.ts") or path.endswith("/page.tsx")
-        ):
+        if path.startswith("app/") and path.endswith(_PAGE_SUFFIXES):
             route = _route_for(
-                path, "/page.tsx" if path.endswith(".tsx") else "/page.ts"
+                path, next(suffix for suffix in _PAGE_SUFFIXES if path.endswith(suffix))
             )
             key = f"route:page:{route}"
             page_keys[path] = key
@@ -171,10 +182,12 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                     [_evidence(path, "page_declaration", line)],
                 )
             )
-        elif path.startswith("app/") and path.endswith("/route.ts"):
-            route = _route_for(path, "/route.ts")
+        elif path.startswith("app/") and path.endswith(_ROUTE_SUFFIXES):
+            suffix = next(suffix for suffix in _ROUTE_SUFFIXES if path.endswith(suffix))
+            route = _route_for(path, suffix)
             key = f"route:handler:{route}"
             handler_keys[path] = key
+            handler_keys_by_route[route] = key
             method_matches = list(_METHOD.finditer(source.text))
             facts.append(
                 _fact(
@@ -196,7 +209,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                     ],
                 )
             )
-        elif path.startswith("src/") and path.endswith((".ts", ".tsx")):
+        elif path.endswith(_SCRIPT_SUFFIXES) and not path.startswith("tests/"):
             for match in _FUNCTION.finditer(source.text):
                 name = match.group(1)
                 key = f"function:{path}:{name}"
@@ -214,7 +227,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                         ],
                     )
                 )
-        elif path.startswith("tests/") and path.endswith((".ts", ".tsx")):
+        elif path.startswith("tests/") and path.endswith(_SCRIPT_SUFFIXES):
             describe = _DESCRIBE.search(source.text)
             name = describe.group(2) if describe else path
             key = f"test:{path}"
@@ -237,7 +250,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                 )
             )
 
-    schema = sources.get("prisma/schema.prisma")
+    schema = sources.get(PRISMA_SCHEMA_RELATIVE_PATH)
     if schema:
         for match in _MODEL.finditer(schema.text):
             name = match.group(1)
@@ -283,19 +296,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                         [_evidence(path, "api_call", line)],
                     )
                 )
-                target = handler_keys.get(
-                    next(
-                        (
-                            candidate
-                            for candidate in handler_keys
-                            if candidate.endswith(
-                                endpoint.removeprefix("/api/") + "/route.ts"
-                            )
-                            or candidate == f"app{endpoint}/route.ts"
-                        ),
-                        "",
-                    )
-                )
+                target = handler_keys_by_route.get(endpoint)
                 if target:
                     relations.append(
                         _relation(
@@ -344,7 +345,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                                     [_evidence(path, "call", call_line)],
                                 )
                             )
-        if path.startswith("src/"):
+        if path.endswith(_SCRIPT_SUFFIXES) and not path.startswith("tests/"):
             for match in _WRITE.finditer(source.text):
                 model = match.group(1).casefold()
                 target = model_keys.get(model)
