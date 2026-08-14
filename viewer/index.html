@@ -1019,7 +1019,7 @@
         }]));
         const kindCount = kind => nodes.filter(node => node.kind === kind).length;
         const routeCount = kindCount('route');
-        const architectureCount = nodes.filter(node => ['route', 'api_call', 'function'].includes(node.kind)).length;
+        const architectureCount = nodes.filter(node => ['route', 'api_call', 'function', 'package', 'module', 'symbol', 'file'].includes(node.kind)).length;
         const evidenceCount = Number(summary.evidence || 0);
         const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = String(value); };
         const pad = value => String(value).padStart(2, '0');
@@ -1058,7 +1058,7 @@
         const viewFilters = {
           'Product map': node => true,
           'User flows': node => ['route', 'api_call', 'test'].includes(node.kind),
-          'Architecture': node => ['route', 'api_call', 'function', 'module', 'external_module', 'file'].includes(node.kind),
+          'Architecture': node => ['route', 'api_call', 'function', 'package', 'module', 'external_module', 'symbol', 'file'].includes(node.kind),
           'Data model': node => node.kind === 'data_entity',
           Evidence: node => (node.evidence || []).length > 0,
           'Unknowns': () => false,
@@ -1067,7 +1067,7 @@
         const tabFilters = {
           Overview: node => true,
           'By user goal': node => ['route', 'api_call', 'test'].includes(node.kind),
-          'By implementation': node => ['function', 'data_entity', 'route', 'api_call'].includes(node.kind),
+          'By implementation': node => ['function', 'symbol', 'package', 'module', 'file', 'data_entity', 'route', 'api_call'].includes(node.kind),
           Unverified: node => node.status !== 'verified'
         };
 

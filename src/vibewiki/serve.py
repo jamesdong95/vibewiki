@@ -82,6 +82,28 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
         existing.add(module["id"])
+    for node_group in (artifact.get("packages", []), artifact.get("symbols", [])):
+        for item in node_group:
+            if item["id"] in existing:
+                continue
+            attributes = item["attributes"]
+            nodes.append(
+                {
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "status": item["status"],
+                    "title": (
+                        attributes.get("name")
+                        or attributes.get("path")
+                        or attributes.get("module")
+                        or item["id"]
+                    ),
+                    "meta": attributes.get("file") or attributes.get("path", ""),
+                    "attributes": attributes,
+                    "evidence": item["evidence"],
+                }
+            )
+            existing.add(item["id"])
     module_ids = {
         module["attributes"].get("path") for module in artifact.get("modules", [])
     }
@@ -112,7 +134,12 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _artifact_edges(artifact: dict[str, Any]) -> list[dict[str, Any]]:
-    return artifact["relations"] + artifact.get("module_edges", [])
+    return (
+        artifact["relations"]
+        + artifact.get("module_edges", [])
+        + artifact.get("package_edges", [])
+        + artifact.get("symbol_edges", [])
+    )
 
 
 def _safe_source_path(value: str) -> str:
@@ -215,6 +242,16 @@ def api_payload(
         return {
             "edges": artifact.get("module_edges", []),
             "modules": artifact.get("modules", []),
+        }
+    if path == "/api/packages":
+        return {
+            "edges": artifact.get("package_edges", []),
+            "packages": artifact.get("packages", []),
+        }
+    if path == "/api/symbols":
+        return {
+            "edges": artifact.get("symbol_edges", []),
+            "symbols": artifact.get("symbols", []),
         }
     if path == "/api/source":
         return _source_payload(root, artifact, params)

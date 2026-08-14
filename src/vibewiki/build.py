@@ -67,6 +67,7 @@ def _write_wiki(output: Path, artifact: dict[str, Any]) -> list[str]:
     wiki.mkdir(exist_ok=True)
     facts = artifact["facts"]
     relations = artifact["relations"] + artifact.get("module_edges", [])
+    relations += artifact.get("package_edges", []) + artifact.get("symbol_edges", [])
     unknowns = artifact["unknowns"]
     rows = [
         "# VibeWiki",
@@ -181,6 +182,17 @@ def _write_graph_db(path: Path, artifact: dict[str, Any]) -> None:
                     canonical_json(module["attributes"]),
                 ),
             )
+        for node_group in (artifact.get("packages", []), artifact.get("symbols", [])):
+            for node in node_group:
+                db.execute(
+                    "INSERT OR IGNORE INTO nodes VALUES (?, ?, ?, ?)",
+                    (
+                        node["id"],
+                        node["kind"],
+                        node["status"],
+                        canonical_json(node["attributes"]),
+                    ),
+                )
         for edge in artifact["relations"]:
             db.execute(
                 "INSERT INTO edges VALUES (?, ?, ?, ?, ?)",
@@ -203,6 +215,21 @@ def _write_graph_db(path: Path, artifact: dict[str, Any]) -> None:
                     canonical_json(edge["evidence"]),
                 ),
             )
+        for edge_group in (
+            artifact.get("package_edges", []),
+            artifact.get("symbol_edges", []),
+        ):
+            for edge in edge_group:
+                db.execute(
+                    "INSERT OR IGNORE INTO edges VALUES (?, ?, ?, ?, ?)",
+                    (
+                        edge["source"],
+                        edge["relation"],
+                        edge["target"],
+                        edge["status"],
+                        canonical_json(edge["evidence"]),
+                    ),
+                )
         for item in artifact["unknowns"]:
             db.execute(
                 "INSERT INTO unknowns VALUES (?, ?, ?, ?)",
@@ -234,7 +261,7 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
     facts_artifact = analyze_repository(root, manifest)
     graph_artifact = {
         **facts_artifact,
-        **build_module_graph(root, manifest),
+        **build_module_graph(root, manifest, inventory),
         "inventory": inventory,
     }
     output = root / MANIFEST_DIRECTORY

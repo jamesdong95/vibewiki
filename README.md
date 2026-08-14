@@ -75,10 +75,11 @@ is removed when the server exits. The CLI's default scan remains strict for
 the original direct Next.js App Router contract; Browse uses the generic local
 import profile.
 
-Every build also exposes `/api/files`, `/api/modules`, and `/api/source` for
-bounded local evidence inspection. Source evidence is served by relative path
-and line range only; traversal, symlinks, ignored paths, and sensitive names
-are rejected.
+Every build also exposes `/api/files`, `/api/packages`, `/api/modules`,
+`/api/symbols`, and `/api/source` for bounded local evidence inspection.
+Package, symbol, and call edges are deterministic; source evidence is served
+by relative path and line range only. Traversal, symlinks, ignored paths, and
+sensitive names are rejected.
 
 The planned pipeline is:
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import posixpath
 import re
 from dataclasses import dataclass
@@ -27,6 +28,13 @@ _METHOD = re.compile(
 _IMPORT = re.compile(r"import\s+(.*?)\s+from\s+[\"']([^\"']+)[\"']")
 _REEXPORT = re.compile(r"(?:export|export\s+type)\s+.*?\s+from\s+[\"']([^\"']+)[\"']")
 _REQUIRE = re.compile(r"\b(?:require|import)\s*\(\s*[\"']([^\"']+)[\"']\s*\)")
+_REQUIRE_BINDING = re.compile(
+    r"(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*[\"']([^\"']+)[\"']\s*\)"
+)
+_CLASS = re.compile(
+    r"(?:^|\n)\s*(?:export\s+(?:default\s+)?)?class\s+(\w+)\b"
+)
+_CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
 _FETCH = re.compile(r"fetch\(\s*(['\"])(/[^'\"]+)\1")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
@@ -430,7 +438,271 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_module_graph(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+def _symbol_definitions(source: Source) -> list[dict[str, Any]]:
+    definitions: list[dict[str, Any]] = []
+    matches: list[tuple[str, re.Match[str]]] = []
+    matches.extend(
+        ("function", match) for match in _GENERIC_FUNCTION.finditer(source.text)
+    )
+    matches.extend(
+        ("function", match) for match in _ARROW_FUNCTION.finditer(source.text)
+    )
+    matches.extend(("class", match) for match in _CLASS.finditer(source.text))
+    seen: set[tuple[str, int]] = set()
+    for kind, match in matches:
+        key = (match.group(1), match.start(1))
+        if key in seen:
+            continue
+        seen.add(key)
+        line = _line(source.text, match.start(1))
+        line_text = source.lines[line - 1].lstrip() if source.lines else ""
+        exported = line_text.startswith("export ")
+        definitions.append(
+            {
+                "export_name": (
+                    "default" if exported and "default" in line_text else match.group(1)
+                ),
+                "exported": exported,
+                "kind": kind,
+                "line_end": _span(source.lines, line),
+                "line_start": line,
+                "name": match.group(1),
+                "offset": match.start(1),
+            }
+        )
+    definitions.sort(key=lambda item: (item["line_start"], item["name"], item["kind"]))
+    return definitions
+
+
+def _import_bindings(source: Source) -> list[dict[str, Any]]:
+    bindings: list[dict[str, Any]] = []
+    for match in _IMPORT.finditer(source.text):
+        clause = match.group(1).strip()
+        specifier = match.group(2)
+        if clause.startswith("{"):
+            for item in clause.strip("{}").split(","):
+                parts = re.split(r"\s+as\s+", item.strip())
+                if parts and parts[0]:
+                    bindings.append(
+                        {
+                            "imported": parts[0].strip(),
+                            "local": (parts[-1] or parts[0]).strip(),
+                            "offset": match.start(),
+                            "specifier": specifier,
+                        }
+                    )
+            continue
+        if clause.startswith("*"):
+            namespace = re.search(r"\bas\s+(\w+)", clause)
+            if namespace:
+                bindings.append(
+                    {
+                        "imported": "*",
+                        "local": namespace.group(1),
+                        "offset": match.start(),
+                        "specifier": specifier,
+                    }
+                )
+            continue
+        default_name = clause.split(",", 1)[0].strip()
+        if default_name:
+            bindings.append(
+                {
+                    "imported": "default",
+                    "local": default_name,
+                    "offset": match.start(),
+                    "specifier": specifier,
+                }
+            )
+    for match in _REQUIRE_BINDING.finditer(source.text):
+        bindings.append(
+            {
+                "imported": "default",
+                "local": match.group(1),
+                "offset": match.start(),
+                "specifier": match.group(2),
+            }
+        )
+    return bindings
+
+
+def _package_graph(
+    root: Path, inventory: dict[str, Any] | None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    package_files = [
+        item["path"]
+        for item in (inventory or {}).get("files", [])
+        if item["path"].endswith("package.json")
+    ]
+    packages: list[dict[str, Any]] = []
+    package_roots: set[str] = set()
+    for package_file in sorted(package_files):
+        path = root / Path(package_file)
+        try:
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        package_root = posixpath.dirname(package_file)
+        package_key = package_root or "."
+        package_roots.add(package_key)
+        packages.append(
+            {
+                "attributes": {
+                    "name": metadata.get("name") or package_key,
+                    "path": package_key,
+                    "private": bool(metadata.get("private", False)),
+                    "version": metadata.get("version"),
+                },
+                "evidence": [_evidence(package_file, "package_manifest", 1)],
+                "id": f"package:{package_key}",
+                "kind": "package",
+                "status": "verified",
+            }
+        )
+    if not package_roots:
+        package_roots.add(".")
+        packages.append(
+            {
+                "attributes": {"name": root.name, "path": ".", "private": False},
+                "evidence": [],
+                "id": "package:.",
+                "kind": "package",
+                "status": "inferred",
+            }
+        )
+    packages.sort(key=lambda item: item["id"])
+    edges: list[dict[str, Any]] = []
+    for package in packages:
+        prefix = package["attributes"]["path"]
+        for item in (inventory or {}).get("files", []):
+            path = item["path"]
+            if prefix == "." or path.startswith(prefix + "/"):
+                target = (
+                    f"module:{path}"
+                    if item["kind"] in {"source", "schema"}
+                    else f"file:{path}"
+                )
+                edges.append(
+                    _relation(
+                        package["id"],
+                        "contains",
+                        target,
+                        package["evidence"] or [_evidence(path, "package_file", 1)],
+                    )
+                )
+    return packages, edges
+
+
+def _symbol_graph(
+    sources: dict[str, Source], module_paths: set[str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    definitions: dict[str, list[dict[str, Any]]] = {}
+    symbols: list[dict[str, Any]] = []
+    for path in sorted(sources):
+        definitions[path] = _symbol_definitions(sources[path])
+        for definition in definitions[path]:
+            symbol_id = f"symbol:{path}:{definition['name']}"
+            symbols.append(
+                {
+                    "attributes": {
+                        "export_name": definition["export_name"],
+                        "exported": definition["exported"],
+                        "file": path,
+                        "name": definition["name"],
+                        "symbol_kind": definition["kind"],
+                    },
+                    "evidence": [
+                        _evidence(
+                            path,
+                            "symbol_definition",
+                            definition["line_start"],
+                            definition["line_end"],
+                        )
+                    ],
+                    "id": symbol_id,
+                    "kind": "symbol",
+                    "status": "verified",
+                }
+            )
+    edges: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def add(
+        source: str, relation: str, target: str, evidence: list[dict[str, Any]]
+    ) -> None:
+        key = (source, relation, target)
+        if key not in seen:
+            seen.add(key)
+            edges.append(_relation(source, relation, target, evidence))
+
+    for path, source in sorted(sources.items()):
+        for definition in definitions[path]:
+            symbol_id = f"symbol:{path}:{definition['name']}"
+            add(
+                f"module:{path}",
+                "defines",
+                symbol_id,
+                [_evidence(path, "symbol_definition", definition["line_start"])],
+            )
+        imports: dict[str, tuple[str, str, int]] = {}
+        for binding in _import_bindings(source):
+            resolved = _resolve_import(path, binding["specifier"], module_paths)
+            if resolved:
+                imports[binding["local"]] = (
+                    resolved,
+                    binding["imported"],
+                    binding["offset"],
+                )
+        for definition in definitions[path]:
+            start = definition["offset"]
+            end = sum(len(line) + 1 for line in source.lines[: definition["line_end"]])
+            body = source.text[start:end]
+            for call in _CALL.finditer(body):
+                if call.start() == 0:
+                    continue
+                name = call.group(1)
+                if name in {"if", "for", "while", "switch", "catch", "function"}:
+                    continue
+                target_path = path
+                target_name = name
+                import_info = imports.get(name)
+                if import_info:
+                    target_path, target_name, _ = import_info
+                    if target_name == "default":
+                        exported = [
+                            item
+                            for item in definitions[target_path]
+                            if item["export_name"] == "default"
+                        ]
+                        target_name = exported[0]["name"] if exported else target_name
+                target = next(
+                    (
+                        item
+                        for item in definitions.get(target_path, [])
+                        if item["name"] == target_name
+                        or item["export_name"] == target_name
+                    ),
+                    None,
+                )
+                if target is None:
+                    continue
+                line = _line(source.text, start + call.start())
+                add(
+                    f"symbol:{path}:{definition['name']}",
+                    "calls",
+                    f"symbol:{target_path}:{target['name']}",
+                    [_evidence(path, "symbol_call", line)],
+                )
+    symbols.sort(key=lambda item: item["id"])
+    edges.sort(key=lambda item: (item["source"], item["relation"], item["target"]))
+    return symbols, edges
+
+
+def build_module_graph(
+    root: Path,
+    manifest: dict[str, Any],
+    inventory: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a source-to-source dependency graph without changing golden facts.
 
     The first analyzer milestones intentionally kept ``facts.json`` stable. This
@@ -510,9 +782,18 @@ def build_module_graph(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    packages, package_edges = _package_graph(root, inventory)
+    symbols, symbol_edges = _symbol_graph(sources, source_paths)
     modules.sort(key=lambda item: item["id"])
     module_edges.sort(key=lambda item: (item["source"], item["target"]))
-    return {"module_edges": module_edges, "modules": modules}
+    return {
+        "module_edges": module_edges,
+        "modules": modules,
+        "package_edges": package_edges,
+        "packages": packages,
+        "symbol_edges": symbol_edges,
+        "symbols": symbols,
+    }
 
 
 def write_json(path: Path, value: Any) -> None:

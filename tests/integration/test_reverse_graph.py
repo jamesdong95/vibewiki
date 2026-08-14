@@ -40,6 +40,47 @@ def test_build_emits_repository_inventory_and_reverse_module_edges(
         (edge["source"], edge["target"])
         for edge in graph["module_edges"]
     } == {("module:src/main.js", "module:src/helper.js")}
+    assert {
+        (edge["source"], edge["target"])
+        for edge in graph["symbol_edges"]
+        if edge["relation"] == "calls"
+    } == {("symbol:src/main.js:main", "symbol:src/helper.js:helper")}
+
+
+def test_build_groups_nested_package_manifests(tmp_path: Path) -> None:
+    (tmp_path / "packages/web/src").mkdir(parents=True)
+    (tmp_path / "packages/api/src").mkdir(parents=True)
+    (tmp_path / "packages/web/package.json").write_text(
+        '{"name":"@demo/web","private":true}\n'
+    )
+    (tmp_path / "packages/api/package.json").write_text(
+        '{"name":"@demo/api","private":true}\n'
+    )
+    (tmp_path / "packages/web/src/app.jsx").write_text(
+        "export const App = () => null;\n"
+    )
+    (tmp_path / "packages/api/src/main.js").write_text(
+        "export function main() { return true; }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    assert [item["id"] for item in graph["packages"]] == [
+        "package:packages/api",
+        "package:packages/web",
+    ]
+    contains = {
+        (edge["source"], edge["target"])
+        for edge in graph["package_edges"]
+        if edge["relation"] == "contains"
+    }
+    assert ("package:packages/web", "module:packages/web/src/app.jsx") in contains
+    assert any(
+        item["id"] == "symbol:packages/web/src/app.jsx:App"
+        for item in graph["symbols"]
+    )
 
 
 def test_source_api_returns_bounded_lines_and_rejects_traversal(tmp_path: Path) -> None:
