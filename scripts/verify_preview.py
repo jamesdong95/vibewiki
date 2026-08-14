@@ -15,6 +15,7 @@ REQUIRED_FILES = (
     "VERSION",
     "viewer/index.html",
     "docs/assets/vibewiki-hero.png",
+    "docs/assets/vibewiki-product-preview.jpg",
     "docs/product-development-plan.md",
 )
 REQUIRED_HTML_MARKERS = (

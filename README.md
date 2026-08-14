@@ -6,6 +6,12 @@
   <img src="docs/assets/vibewiki-hero.png" alt="A software product represented as a local evidence graph connecting user flows, code, data, and tests" width="100%">
 </p>
 
+<p align="center">
+  <img src="docs/assets/vibewiki-product-preview.jpg" alt="VibeWiki local product map preview with evidence graph and scan controls" width="72%">
+</p>
+
+> Live preview from the local `scan → build → serve` workflow.
+
 > VibeWiki is an early-stage open-source concept and UI prototype for developers who need to understand what an AI-assisted codebase actually does.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
