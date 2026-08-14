@@ -372,6 +372,22 @@
     .ask-result.busy { color: var(--cyan); border-color: rgba(166,233,239,0.28); }
     .ask-result.error { color: #ffb4a8; border-color: rgba(255,129,111,0.35); }
     .ask-result strong { color: var(--ink); font-weight: 650; }
+    .ask-markdown { margin-top: 8px; color: var(--ink-soft); }
+    .ask-markdown h1, .ask-markdown h2, .ask-markdown h3, .ask-markdown h4 { margin: 13px 0 6px; color: var(--ink); font-size: 12px; line-height: 1.3; }
+    .ask-markdown h1 { font-size: 15px; }
+    .ask-markdown h2 { font-size: 14px; }
+    .ask-markdown p { margin: 7px 0; }
+    .ask-markdown ul, .ask-markdown ol { margin: 7px 0; padding-left: 19px; }
+    .ask-markdown li { margin: 3px 0; }
+    .ask-markdown code { padding: 1px 4px; border-radius: 3px; color: var(--cyan); background: rgba(166,233,239,0.09); font-family: var(--mono); font-size: 0.92em; }
+    .ask-markdown pre { overflow: auto; margin: 9px 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); background: rgba(3,7,8,0.72); font-family: var(--mono); font-size: 9px; line-height: 1.55; white-space: pre; }
+    .ask-markdown pre code { padding: 0; color: inherit; background: transparent; }
+    .ask-markdown blockquote { margin: 8px 0; padding-left: 10px; border-left: 2px solid var(--cyan); color: var(--muted); }
+    .ask-markdown hr { margin: 12px 0; border: 0; border-top: 1px solid var(--line); }
+    .ask-markdown table { width: 100%; margin: 9px 0; border-collapse: collapse; font-size: 9px; }
+    .ask-markdown th, .ask-markdown td { padding: 5px 6px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .ask-markdown th { color: var(--ink); background: rgba(255,255,255,0.04); font-weight: 650; }
+    .ask-markdown a { color: var(--cyan); }
     .ask-citations { margin-top: 8px; color: var(--lime); font-family: var(--mono); font-size: 9px; }
 
     .toast { position: fixed; z-index: 20; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 12px 14px; border: 1px solid rgba(216,249,139,0.25); border-radius: 9px; color: var(--ink); background: #1a2521; box-shadow: var(--shadow); opacity: 0; transform: translateY(9px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
@@ -1022,6 +1038,95 @@
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
     }
+    function renderInlineMarkdown(value) {
+      let html = escapeHtml(value);
+      html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+      html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+      html = html.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      return html;
+    }
+    function splitMarkdownTableRow(line) {
+      const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+      return trimmed.split('|').map(cell => cell.trim());
+    }
+    function isMarkdownTableDivider(line) {
+      return /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(line);
+    }
+    function renderMarkdown(value) {
+      const lines = String(value || '').replace(/\r\n?/g, '\n').split('\n');
+      const output = [];
+      let index = 0;
+      while (index < lines.length) {
+        const line = lines[index];
+        if (!line.trim()) { index += 1; continue; }
+        if (/^\s*```/.test(line)) {
+          const code = [];
+          index += 1;
+          while (index < lines.length && !/^\s*```/.test(lines[index])) code.push(escapeHtml(lines[index++]));
+          if (index < lines.length) index += 1;
+          output.push(`<pre><code>${code.join('\n')}</code></pre>`);
+          continue;
+        }
+        const heading = line.match(/^\s*(#{1,4})\s+(.+)$/);
+        if (heading) {
+          const level = heading[1].length;
+          output.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+          index += 1;
+          continue;
+        }
+        if (index + 1 < lines.length && line.includes('|') && isMarkdownTableDivider(lines[index + 1])) {
+          const headers = splitMarkdownTableRow(line);
+          index += 2;
+          const rows = [];
+          while (index < lines.length && lines[index].trim() && lines[index].includes('|')) rows.push(splitMarkdownTableRow(lines[index++]));
+          output.push(`<table><thead><tr>${headers.map(cell => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${headers.map((_, cellIndex) => `<td>${renderInlineMarkdown(row[cellIndex] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+          continue;
+        }
+        const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+        if (unordered) {
+          const items = [];
+          while (index < lines.length) {
+            const item = lines[index].match(/^\s*[-*+]\s+(.+)$/);
+            if (!item) break;
+            items.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
+            index += 1;
+          }
+          output.push(`<ul>${items.join('')}</ul>`);
+          continue;
+        }
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        if (ordered) {
+          const items = [];
+          while (index < lines.length) {
+            const item = lines[index].match(/^\s*\d+[.)]\s+(.+)$/);
+            if (!item) break;
+            items.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
+            index += 1;
+          }
+          output.push(`<ol>${items.join('')}</ol>`);
+          continue;
+        }
+        if (/^\s*>\s?/.test(line)) {
+          const quote = [];
+          while (index < lines.length && /^\s*>\s?/.test(lines[index])) quote.push(renderInlineMarkdown(lines[index++].replace(/^\s*>\s?/, '')));
+          output.push(`<blockquote>${quote.join('<br>')}</blockquote>`);
+          continue;
+        }
+        if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+          output.push('<hr>');
+          index += 1;
+          continue;
+        }
+        const paragraph = [line.trim()];
+        index += 1;
+        while (index < lines.length && lines[index].trim() && !/^\s*(#{1,4})\s+/.test(lines[index]) && !/^\s*```/.test(lines[index]) && !/^\s*[-*+]\s+/.test(lines[index]) && !/^\s*\d+[.)]\s+/.test(lines[index]) && !/^\s*>\s?/.test(lines[index]) && !/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(lines[index])) paragraph.push(lines[index].trim());
+        output.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
+      }
+      return output.join('');
+    }
     function renderAskResult(result, kind = '') {
       askResult.className = `ask-result show ${kind}`.trim();
       if (kind === 'busy') {
@@ -1035,7 +1140,7 @@
       const citations = (result.citations || []).map(item => `${item.path}:${item.line_start}`).join(' · ');
       const modeLabel = escapeHtml(result.mode_label || 'Grounded discussion');
       const providerLabel = `${modeLabel} · ${result.provider === 'none' ? 'Evidence-only' : `${escapeHtml(result.provider)} · ${escapeHtml(result.model || '')}`}`;
-      askResult.innerHTML = `<strong>${providerLabel}</strong><br>${escapeHtml(result.answer || '')}${result.unknowns?.length ? `<br><span style="color:var(--orange);">Unknown: ${escapeHtml(result.unknowns.join(' '))}</span>` : ''}${citations ? `<div class="ask-citations">Evidence: ${escapeHtml(citations)}</div>` : ''}`;
+      askResult.innerHTML = `<strong>${providerLabel}</strong><div class="ask-markdown">${renderMarkdown(result.answer || '')}</div>${result.unknowns?.length ? `<div style="margin-top:8px;color:var(--orange);">Unknown: ${escapeHtml(result.unknowns.join(' '))}</div>` : ''}${citations ? `<div class="ask-citations">Evidence: ${escapeHtml(citations)}</div>` : ''}`;
     }
     async function submitQuestion(input) {
       const question = input.value.trim();
