@@ -155,7 +155,7 @@ def test_import_limit_ignores_sensitive_and_unsupported_payloads(monkeypatch) ->
         "Content-Type: text/plain\r\n\r\n"
         "a-secret-value-that-is-ignored\r\n"
         f"--{boundary}\r\n"
-        'Content-Disposition: form-data; name="files"; filename="repo/README.md"\r\n'
+        'Content-Disposition: form-data; name="files"; filename="repo/image.png"\r\n'
         "Content-Type: text/plain\r\n\r\n"
         "a-large-unsupported-file-that-is-ignored\r\n"
         f"--{boundary}--\r\n"

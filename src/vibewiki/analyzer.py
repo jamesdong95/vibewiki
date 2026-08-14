@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import SCHEMA_VERSION
-from .config import PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
+from .config import GENERIC_SUFFIXES, PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
 from .discovery.manifest import canonical_json
 
 _FUNCTION = re.compile(r"export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)\s*\(")
@@ -34,12 +34,21 @@ _REQUIRE_BINDING = re.compile(
 _CLASS = re.compile(
     r"(?:^|\n)\s*(?:export\s+(?:default\s+)?)?class\s+(\w+)\b"
 )
+_LANGUAGE_FUNCTION = re.compile(
+    r"(?:^|\n)\s*(?:(?:public|private|protected|static|async|override)\s+)*"
+    r"(?:def|func|fn|function)\s+(\w+)\s*\("
+)
+_LANGUAGE_CLASS = re.compile(
+    r"(?:^|\n)\s*(?:(?:public|private|protected|abstract|final|static)\s+)*"
+    r"(?:class|struct|interface|trait|enum)\s+(\w+)\b"
+)
 _CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
 _FETCH = re.compile(r"fetch\(\s*(['\"])(/[^'\"]+)\1")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
 _WRITE = re.compile(r"db\.(\w+)\.create\s*\(")
 _SCRIPT_SUFFIXES = tuple(SUPPORTED_SUFFIXES)
+_ANALYZABLE_SUFFIXES = tuple({*SUPPORTED_SUFFIXES, *GENERIC_SUFFIXES})
 _PAGE_SUFFIXES = tuple(f"/page{suffix}" for suffix in _SCRIPT_SUFFIXES)
 _ROUTE_SUFFIXES = tuple(f"/route{suffix}" for suffix in _SCRIPT_SUFFIXES)
 
@@ -169,6 +178,16 @@ def _load_sources(root: Path, manifest: dict[str, Any]) -> dict[str, Source]:
     return loaded
 
 
+def _function_matches(path: str, text: str) -> list[re.Match[str]]:
+    matches: list[re.Match[str]] = []
+    if path.endswith(_SCRIPT_SUFFIXES):
+        matches.extend(_GENERIC_FUNCTION.finditer(text))
+        matches.extend(_ARROW_FUNCTION.finditer(text))
+    else:
+        matches.extend(_LANGUAGE_FUNCTION.finditer(text))
+    return matches
+
+
 def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     sources = _load_sources(root, manifest)
     source_paths = set(sources)
@@ -227,10 +246,8 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                     ],
                 )
             )
-        elif path.endswith(_SCRIPT_SUFFIXES) and not path.startswith("tests/"):
-            matches = list(_GENERIC_FUNCTION.finditer(source.text))
-            matches.extend(_ARROW_FUNCTION.finditer(source.text))
-            for match in matches:
+        elif path.endswith(_ANALYZABLE_SUFFIXES) and not path.startswith("tests/"):
+            for match in _function_matches(path, source.text):
                 name = match.group(1)
                 key = f"function:{path}:{name}"
                 function_keys[(path, name)] = key
@@ -247,7 +264,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                         ],
                     )
                 )
-        elif path.startswith("tests/") and path.endswith(_SCRIPT_SUFFIXES):
+        elif path.startswith("tests/") and path.endswith(_ANALYZABLE_SUFFIXES):
             describe = _DESCRIBE.search(source.text)
             name = describe.group(2) if describe else path
             key = f"test:{path}"
@@ -448,6 +465,12 @@ def _symbol_definitions(source: Source) -> list[dict[str, Any]]:
         ("function", match) for match in _ARROW_FUNCTION.finditer(source.text)
     )
     matches.extend(("class", match) for match in _CLASS.finditer(source.text))
+    matches.extend(
+        ("function", match) for match in _LANGUAGE_FUNCTION.finditer(source.text)
+    )
+    matches.extend(
+        ("class", match) for match in _LANGUAGE_CLASS.finditer(source.text)
+    )
     seen: set[tuple[str, int]] = set()
     for kind, match in matches:
         key = (match.group(1), match.start(1))

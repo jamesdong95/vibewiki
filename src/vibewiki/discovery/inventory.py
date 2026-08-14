@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 
-from ..config import PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
+from ..config import GENERIC_SUFFIXES, PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
 from ..errors import ErrorCode, VibeWikiError
 from .hashing import hash_file
 from .ignore import should_skip_path
@@ -75,7 +75,7 @@ def _is_binary(path: Path) -> bool:
 
 def _record(path: Path, relative: str, entry_stat: os.stat_result) -> InventoryFile:
     suffix = path.suffix.casefold()
-    language = SUPPORTED_SUFFIXES.get(suffix)
+    language = SUPPORTED_SUFFIXES.get(suffix) or GENERIC_SUFFIXES.get(suffix)
     if relative == PRISMA_SCHEMA_RELATIVE_PATH:
         language = "prisma"
     binary = _is_binary(path)

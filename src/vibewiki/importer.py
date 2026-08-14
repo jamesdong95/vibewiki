@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .build import build_repository
-from .config import PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
+from .config import GENERIC_SUFFIXES, PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
 from .discovery.ignore import should_skip_path
 from .errors import ErrorCode, VibeWikiError
 from .scan import scan_repository
@@ -25,7 +25,9 @@ from .scan import scan_repository
 MAX_IMPORT_FILES = 10_000
 MAX_IMPORT_BYTES = 200 * 1024 * 1024
 MAX_MULTIPART_PARTS = 50_000
-_SUPPORTED_IMPORT_SUFFIXES = frozenset(SUPPORTED_SUFFIXES)
+_SUPPORTED_IMPORT_SUFFIXES = frozenset(
+    (*SUPPORTED_SUFFIXES, *GENERIC_SUFFIXES)
+)
 _KNOWN_SOURCE_ROOTS = frozenset({"app", "prisma", "src", "tests"})
 _MONOREPO_ROOTS = frozenset(
     {"apps", "libs", "modules", "packages", "services", "workspaces"}
@@ -160,7 +162,7 @@ def _multipart_files(content_type: str, body: bytes) -> list[tuple[str, str, byt
     if not selected:
         raise VibeWikiError(
             ErrorCode.UNSUPPORTED_STACK,
-            "selected source has no supported JavaScript, TypeScript, or Prisma files",
+            "selected source has no supported source, config, or documentation files",
         )
     paths = [PurePosixPath(relative) for _, relative, _ in selected]
     chosen_prefix = _choose_source_prefix(paths)

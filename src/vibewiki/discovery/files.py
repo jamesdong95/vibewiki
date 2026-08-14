@@ -6,9 +6,9 @@ import os
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Iterator
+from typing import Iterator, Mapping
 
-from ..config import SUPPORTED_SUFFIXES
+from ..config import GENERIC_SUFFIXES, SUPPORTED_SUFFIXES
 from ..errors import ErrorCode, VibeWikiError
 from .ignore import should_skip_path
 
@@ -50,7 +50,11 @@ def _filesystem_error(error: OSError) -> VibeWikiError:
     )
 
 
-def _walk(directory: Path, parts: tuple[str, ...]) -> Iterator[DiscoveredFile]:
+def _walk(
+    directory: Path,
+    parts: tuple[str, ...],
+    suffixes: Mapping[str, str],
+) -> Iterator[DiscoveredFile]:
     try:
         with os.scandir(directory) as entries:
             ordered_entries = sorted(entries, key=lambda entry: entry.name)
@@ -63,12 +67,12 @@ def _walk(directory: Path, parts: tuple[str, ...]) -> Iterator[DiscoveredFile]:
                     if entry.is_symlink():
                         continue
                     if entry.is_dir(follow_symlinks=False):
-                        yield from _walk(Path(entry.path), relative_parts)
+                        yield from _walk(Path(entry.path), relative_parts, suffixes)
                         continue
                     if not entry.is_file(follow_symlinks=False):
                         continue
                     suffix = Path(entry.name).suffix.casefold()
-                    language = SUPPORTED_SUFFIXES.get(suffix)
+                    language = suffixes.get(suffix)
                     if language is None:
                         continue
                     entry_stat = entry.stat(follow_symlinks=False)
@@ -89,8 +93,14 @@ def _walk(directory: Path, parts: tuple[str, ...]) -> Iterator[DiscoveredFile]:
         raise _filesystem_error(error) from error
 
 
-def discover_files(repository: Path) -> tuple[DiscoveredFile, ...]:
-    """Discover supported JavaScript/TypeScript files without symlinks."""
+def discover_files(
+    repository: Path, *, include_generic: bool = False
+) -> tuple[DiscoveredFile, ...]:
+    """Discover source/text files without symlinks.
+
+    Strict callers retain the original JS/TS surface. Generic callers opt into
+    the broader local text/source registry.
+    """
 
     root = Path(repository)
     try:
@@ -103,7 +113,10 @@ def discover_files(repository: Path) -> tuple[DiscoveredFile, ...]:
             "repository path was not found",
         )
 
-    return tuple(_walk(root, ()))
+    suffixes = dict(SUPPORTED_SUFFIXES)
+    if include_generic:
+        suffixes.update(GENERIC_SUFFIXES)
+    return tuple(_walk(root, (), suffixes))
 
 
 __all__ = ["DiscoveredFile", "discover_files"]

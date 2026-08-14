@@ -25,7 +25,7 @@ REQUIRED_HTML_MARKERS = (
     'id="graph-canvas"',
     'id="browse-button"',
     'id="browse-status"',
-    'JS/JSX/TS/TSX',
+    'JS/TS · Python · Go · Rust · config/docs',
     'MAX_IMPORT_BYTES',
     'id="sidebar-product-count"',
     'id="graph-caption-meta"',

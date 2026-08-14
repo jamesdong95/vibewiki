@@ -150,13 +150,21 @@ def scan_repository(
 
     require_offline(offline)
     root = _repository_root(repository)
-    discovered = discover_files(root)
+    discovered = discover_files(root, include_generic=allow_generic)
     inventory = discover_inventory(root)
     has_schema = _has_prisma_schema(root)
     if not discovered and not has_schema:
+        message = (
+            "repository contains no supported source, config, or documentation files"
+            if allow_generic
+            else (
+                "repository contains no supported JavaScript, TypeScript, or "
+                "Prisma source"
+            )
+        )
         raise VibeWikiError(
             ErrorCode.UNSUPPORTED_STACK,
-            "repository contains no supported JavaScript, TypeScript, or Prisma source",
+            message,
         )
     if not allow_generic and _has_pages_router_marker(root):
         raise VibeWikiError(

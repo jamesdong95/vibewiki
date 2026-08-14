@@ -55,6 +55,39 @@ def test_generic_javascript_repository_builds_without_app(tmp_path: Path) -> Non
     )
 
 
+def test_generic_multi_language_repository_keeps_files_and_symbols(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/main.py").write_text("def main():\n    return True\n")
+    (tmp_path / "src/main.go").write_text("package main\nfunc Run() {}\n")
+    (tmp_path / "src/lib.rs").write_text("fn compute() -> i32 { 1 }\n")
+    (tmp_path / "src/Widget.java").write_text("public class Widget {}\n")
+    (tmp_path / "README.md").write_text("documentation is inventory evidence\n")
+    (tmp_path / "config.yaml").write_text("mode: local\n")
+
+    result = scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    facts = json.loads((tmp_path / ".vibewiki/facts.json").read_text())
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    assert result["counts"]["scanned_files"] == 6
+    assert {
+        item["semantic_key"] for item in facts["facts"] if item["kind"] == "function"
+    } == {
+        "function:src/main.go:Run",
+        "function:src/main.py:main",
+        "function:src/lib.rs:compute",
+    }
+    assert any(
+        item["id"] == "symbol:src/Widget.java:Widget"
+        and item["attributes"]["symbol_kind"] == "class"
+        for item in graph["symbols"]
+    )
+    inventory_paths = {item["path"] for item in graph["inventory"]["files"]}
+    assert {"README.md", "config.yaml"}.issubset(inventory_paths)
+
+
 def test_importer_selects_nested_web_package_deterministically() -> None:
     content_type, body = _multipart(
         {
@@ -70,13 +103,13 @@ def test_importer_selects_nested_web_package_deterministically() -> None:
 
 
 def test_importer_rejects_unsupported_source_with_actionable_error() -> None:
-    content_type, body = _multipart({"repo/README.md": "documentation\n"})
+    content_type, body = _multipart({"repo/image.png": "not source\n"})
 
     with pytest.raises(VibeWikiError) as raised:
         _multipart_files(content_type, body)
 
     assert raised.value.code is ErrorCode.UNSUPPORTED_STACK
-    assert "JavaScript" in raised.value.message
+    assert "supported source" in raised.value.message
 
 
 def test_importer_reports_file_limit(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -29,12 +29,14 @@ This repository is a **local-first end-to-end preview**, not production-ready so
   facts, a content-addressed inventory of every non-ignored file, a SQLite
   graph, Markdown/Mermaid wiki, and a local viewer backed by the built artifact.
 
-The semantic analyzer is intentionally deterministic: it currently covers
-Next.js App Router, generic JavaScript/JSX/TypeScript/TSX repositories,
-CommonJS/ESM module references, Prisma models, and test links. Other file types
-remain visible in the inventory and graph as file evidence, but do not yet get
-language-specific symbol facts. LLM reasoning, runtime exploration, and
-network access are not required.
+The semantic analyzer is intentionally deterministic: it covers Next.js App
+Router, generic JavaScript/JSX/TypeScript/TSX repositories, common source
+languages such as Python, Go, Rust, Java/Kotlin, Ruby/PHP, C/C++/C#, Swift,
+Dart, shell and SQL, plus Prisma models, markup, configuration, documentation,
+CommonJS/ESM module references, and test links. The extra language adapters are
+conservative regex-based facts rather than full compiler ASTs; files whose
+semantics are not recognized still remain visible as inventory evidence. LLM
+reasoning, runtime exploration, and network access are not required.
 
 ## Preview the UI
 
@@ -67,13 +69,15 @@ uv run vibewiki serve /path/to/next-app --port 4173
 Open `http://127.0.0.1:4173/` to inspect the generated graph, evidence and
 unknowns. The server binds to loopback and does not contact external services.
 You can also use **Browse source** in the viewer to choose a local source
-folder. Browse accepts JavaScript/JSX and TypeScript/TSX source (plus Prisma),
-detects a supported package inside common monorepos, and shows skipped-file or
-size-limit errors before import. Selected supported files are sent only to
-this loopback process, scanned locally, and the temporary imported workspace
-is removed when the server exits. The CLI's default scan remains strict for
-the original direct Next.js App Router contract; Browse uses the generic local
-import profile.
+folder. Browse accepts common source, config, and documentation files
+(including JavaScript/JSX, TypeScript/TSX, Python, Go, Rust, Java/Kotlin,
+C-family, Swift/Dart, shell, SQL, markup, JSON/YAML/TOML and Markdown), plus
+Prisma. It detects a supported package inside common monorepos and shows
+skipped-file or size-limit errors before import. Selected supported files are
+sent only to this loopback process, scanned locally, and the temporary imported
+workspace is removed when the server exits. The CLI's default scan remains
+strict for the original direct Next.js App Router contract; Browse uses the
+generic local import profile.
 
 Every build also exposes `/api/files`, `/api/packages`, `/api/modules`,
 `/api/symbols`, and `/api/source` for bounded local evidence inspection.
@@ -148,9 +152,9 @@ UI hooks, README asset references, and obvious credential-assignment patterns.
 
 The semantic pipeline is still intentionally narrower than a general-purpose
 analyzer. It recognizes direct Next App Router routes specially and accepts
-generic JS/JSX/TS/TSX source in local Browse imports. It records deterministic
-facts for routes, API calls, functions (including common JS arrow/function
-forms), Prisma models, imports, writes, calls, test links, and reverse module
+generic source/config/docs in local Browse imports. It records deterministic
+facts for routes, API calls, functions/classes in supported language adapters,
+Prisma models, imports, writes, calls, test links, and reverse module
 dependencies. The separate inventory records non-ignored text and binary files
 with path, type, size, and SHA-256 metadata without indexing secret content.
 The viewer reads `.vibewiki/graph.json` through the loopback API; it does not

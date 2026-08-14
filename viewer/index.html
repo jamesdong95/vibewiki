@@ -499,7 +499,7 @@
         </div>
         <div class="top-actions">
           <div class="browse-wrap">
-            <span class="browse-hint">JS/JSX/TS/TSX</span>
+            <span class="browse-hint">JS/TS · Python · Go · Rust · config/docs</span>
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
           </div>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
@@ -875,6 +875,7 @@
     const browseStatus = document.getElementById('browse-status');
     const MAX_IMPORT_FILES = 10000;
     const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
+    const GENERIC_SOURCE_PATTERN = /\.(ts|tsx|js|jsx|mjs|cjs|py|pyi|go|java|kt|kts|rs|rb|php|cs|c|h|cc|cpp|cxx|hpp|swift|dart|lua|ex|exs|scala|hs|sh|bash|zsh|fish|sql|css|scss|less|html|vue|svelte|md|mdx|json|jsonc|yaml|yml|toml|xml|ini|conf)$/;
     function setBrowseStatus(message, kind = 'info') {
       browseStatus.textContent = message;
       browseStatus.className = `browse-status show ${kind}`;
@@ -887,11 +888,11 @@
       const path = (file.webkitRelativePath || file.name || '').replaceAll('\\', '/').toLowerCase();
       if (/(^|\/)(node_modules|\.git|\.next|dist|build|out|coverage|\.cache|\.vibewiki)(\/|$)/.test(path)) return false;
       if (/(^|\/)(\.env|credentials?|secrets?|tokens?)([^/]*)(\/|$)/.test(path)) return false;
-      return path.endsWith('prisma/schema.prisma') || /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path);
+      return path.endsWith('prisma/schema.prisma') || GENERIC_SOURCE_PATTERN.test(path);
     }
     function importErrorMessage(result) {
       const messages = {
-        unsupported_stack: 'Stack chưa được nhận diện hoặc không có file JS/JSX/TS/TSX được hỗ trợ.',
+        unsupported_stack: 'Stack chưa được nhận diện hoặc không có source/config/docs được hỗ trợ.',
         invalid_output: result.message || 'Source không hợp lệ hoặc vượt giới hạn import local.',
         permission_denied: 'Không có quyền đọc source đã chọn.'
       };
@@ -902,8 +903,8 @@
       const candidates = files.filter(isSupportedSourceFile);
       const skipped = files.length - candidates.length;
       if (!candidates.length) {
-        setBrowseStatus(`Không tìm thấy file được hỗ trợ. Đã chọn ${files.length} file, bỏ qua ${skipped}. Hỗ trợ JS/JSX/TS/TSX và Prisma.`, 'error');
-        showToast('Không tìm thấy file JS/JSX/TS/TSX được hỗ trợ.');
+        setBrowseStatus(`Không tìm thấy file được hỗ trợ. Đã chọn ${files.length} file, bỏ qua ${skipped}. Hỗ trợ source, config/docs phổ biến và Prisma.`, 'error');
+        showToast('Không tìm thấy source/config/docs được hỗ trợ.');
         sourcePicker.value = '';
         return;
       }
