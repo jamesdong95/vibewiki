@@ -25,6 +25,8 @@ REQUIRED_HTML_MARKERS = (
     'id="graph-canvas"',
     'id="browse-button"',
     'id="browse-status"',
+    'id="llm-settings-button"',
+    'id="llm-form"',
     'JS/TS · Python · Go · Rust · config/docs',
     'MAX_IMPORT_BYTES',
     'id="sidebar-product-count"',

@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from vibewiki.errors import ErrorCode, VibeWikiError
-from vibewiki.llm import LLMSettings, ask_repository
+from vibewiki.llm import LLMSettings, ask_repository, configure_llm
 from vibewiki.providers.http import OllamaProvider, OpenAICompatibleProvider
 
 
@@ -51,7 +51,20 @@ def test_openai_compatible_settings_require_key(
         LLMSettings.from_environment()
 
     assert raised.value.code is ErrorCode.LLM_UNAVAILABLE
-    assert "API_KEY" in raised.value.message
+    assert "API key" in raised.value.message
+
+
+def test_configure_llm_keeps_existing_key_without_returning_it() -> None:
+    current = LLMSettings(
+        "openai-compatible", "old-model", "https://example.test/v1", "secret"
+    )
+
+    settings = configure_llm(
+        {"provider": "openai-compatible", "model": "new-model"}, current
+    )
+
+    assert settings.model == "new-model"
+    assert settings.api_key == "secret"
 
 
 def test_evidence_only_answer_is_local_and_cited(tmp_path: Path, monkeypatch) -> None:

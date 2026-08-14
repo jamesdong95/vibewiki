@@ -79,6 +79,30 @@ def test_serve_exposes_real_artifact_apis(
             source = json.load(response)
         with urlopen(f"{base}/api/llm/status") as response:
             llm = json.load(response)
+        config_request = Request(
+            f"{base}/api/llm/config",
+            data=json.dumps(
+                {
+                    "provider": "ollama",
+                    "model": "qwen2.5:7b",
+                    "base_url": "http://127.0.0.1:11434",
+                }
+            ).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(config_request) as response:
+            configured = json.load(response)
+        with urlopen(f"{base}/api/llm/status") as response:
+            configured_status = json.load(response)
+        reset_request = Request(
+            f"{base}/api/llm/config",
+            data=json.dumps({"provider": "none"}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(reset_request):
+            pass
         ask_request = Request(
             f"{base}/api/ask",
             data=json.dumps({"question": "What is connected to signup?"}).encode(),
@@ -105,6 +129,9 @@ def test_serve_exposes_real_artifact_apis(
     assert source["path"] == "app/page.tsx"
     assert source["lines"][0]["number"] == 1
     assert llm["provider"] == "none"
+    assert configured["saved"] is True
+    assert configured_status["provider"] == "ollama"
+    assert configured_status["has_api_key"] is False
     assert answer["provider"] == "none"
     assert answer["citations"]
     assert answer["schema_version"] == 1

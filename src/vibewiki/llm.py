@@ -66,15 +66,36 @@ class LLMSettings:
     api_key: str | None
 
     @classmethod
-    def from_environment(cls) -> LLMSettings:
-        provider = os.environ.get("VIBEWIKI_LLM_PROVIDER", "none").strip().casefold()
-        model = os.environ.get("VIBEWIKI_LLM_MODEL", "qwen2.5:7b").strip()
+    def from_values(
+        cls,
+        provider: str,
+        model: str,
+        base_url: str,
+        api_key: str | None,
+    ) -> LLMSettings:
+        provider = provider.strip().casefold()
+        model = model.strip()
+        base_url = base_url.strip().rstrip("/")
         if provider not in {"none", "ollama", "openai-compatible", "openai"}:
             raise VibeWikiError(
                 ErrorCode.LLM_UNAVAILABLE,
-                "unsupported VIBEWIKI_LLM_PROVIDER; use none, ollama, or "
-                "openai-compatible",
+                "unsupported LLM provider; use none, ollama, or openai-compatible",
             )
+        if not model:
+            raise VibeWikiError(ErrorCode.LLM_UNAVAILABLE, "LLM model is empty")
+        if not base_url:
+            raise VibeWikiError(ErrorCode.LLM_UNAVAILABLE, "LLM base URL is empty")
+        if provider in {"openai", "openai-compatible"} and not api_key:
+            raise VibeWikiError(
+                ErrorCode.LLM_UNAVAILABLE,
+                "an API key is required for the configured provider",
+            )
+        return cls(provider, model, base_url, api_key)
+
+    @classmethod
+    def from_environment(cls) -> LLMSettings:
+        provider = os.environ.get("VIBEWIKI_LLM_PROVIDER", "none").strip().casefold()
+        model = os.environ.get("VIBEWIKI_LLM_MODEL", "qwen2.5:7b").strip()
         if provider == "ollama":
             base_url = os.environ.get(
                 "VIBEWIKI_LLM_BASE_URL", "http://127.0.0.1:11434"
@@ -84,16 +105,7 @@ class LLMSettings:
                 "VIBEWIKI_LLM_BASE_URL", "https://api.openai.com"
             ).strip()
         api_key = os.environ.get("VIBEWIKI_LLM_API_KEY")
-        if provider in {"openai", "openai-compatible"} and not api_key:
-            raise VibeWikiError(
-                ErrorCode.LLM_UNAVAILABLE,
-                "VIBEWIKI_LLM_API_KEY is required for the configured provider",
-            )
-        if not model:
-            raise VibeWikiError(
-                ErrorCode.LLM_UNAVAILABLE, "VIBEWIKI_LLM_MODEL is empty"
-            )
-        return cls(provider, model, base_url, api_key)
+        return cls.from_values(provider, model, base_url, api_key)
 
 
 def _provider(settings: LLMSettings) -> LLMProvider:
@@ -104,9 +116,9 @@ def _provider(settings: LLMSettings) -> LLMProvider:
     return OpenAICompatibleProvider(settings.base_url, settings.api_key or "")
 
 
-def llm_status() -> dict[str, Any]:
+def llm_status(settings: LLMSettings | None = None) -> dict[str, Any]:
     try:
-        settings = LLMSettings.from_environment()
+        settings = settings or LLMSettings.from_environment()
     except VibeWikiError as error:
         return {"provider": "error", "configured": False, "message": error.message}
     return {
@@ -114,7 +126,46 @@ def llm_status() -> dict[str, Any]:
         "model": settings.model,
         "configured": settings.provider != "none",
         "mode": "local" if settings.provider == "ollama" else settings.provider,
+        "base_url": settings.base_url,
+        "has_api_key": bool(settings.api_key),
     }
+
+
+def configure_llm(
+    payload: dict[str, Any], current: LLMSettings | None = None
+) -> LLMSettings:
+    """Validate a UI-supplied runtime config without persisting credentials."""
+
+    provider = payload.get("provider")
+    if not isinstance(provider, str):
+        raise VibeWikiError(ErrorCode.INVALID_OUTPUT, "LLM provider is required")
+    provider = provider.strip().casefold()
+    default_base_url = (
+        "http://127.0.0.1:11434"
+        if provider == "ollama"
+        else "https://api.openai.com"
+    )
+    model = payload.get("model", current.model if current else "qwen2.5:7b")
+    base_url = payload.get(
+        "base_url",
+        current.base_url
+        if current and current.provider == provider
+        else default_base_url,
+    )
+    if not isinstance(model, str) or not isinstance(base_url, str):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT, "LLM model or base URL is invalid"
+        )
+    supplied_key = payload.get("api_key")
+    if supplied_key is None:
+        api_key = current.api_key if current and current.provider == provider else None
+    elif isinstance(supplied_key, str):
+        api_key = supplied_key.strip() or None
+    else:
+        raise VibeWikiError(ErrorCode.INVALID_OUTPUT, "LLM API key is invalid")
+    if provider == "none":
+        api_key = None
+    return LLMSettings.from_values(provider, model, base_url, api_key)
 
 
 def _tokens(value: str) -> set[str]:
@@ -277,7 +328,10 @@ def _history(value: object) -> list[dict[str, str]]:
 
 
 def ask_repository(
-    root: Path, artifact: dict[str, Any], payload: dict[str, Any]
+    root: Path,
+    artifact: dict[str, Any],
+    payload: dict[str, Any],
+    settings: LLMSettings | None = None,
 ) -> dict[str, Any]:
     question = payload.get("question")
     if not isinstance(question, str) or not question.strip():
@@ -288,7 +342,7 @@ def ask_repository(
             ErrorCode.INVALID_OUTPUT, "question exceeds the local safety limit"
         )
     selected, evidence, context = _retrieval(root, artifact, question)
-    settings = LLMSettings.from_environment()
+    settings = settings or LLMSettings.from_environment()
     provider = _provider(settings)
     messages = [
         {

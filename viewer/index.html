@@ -189,7 +189,9 @@
       border: 1px solid rgba(166, 233, 239, 0.15);
       border-radius: 12px;
       background: linear-gradient(145deg, rgba(166, 233, 239, 0.09), rgba(255,255,255,0.02));
+      cursor: pointer;
     }
+    .runtime-card:hover { border-color: rgba(166, 233, 239, 0.35); background: linear-gradient(145deg, rgba(166, 233, 239, 0.13), rgba(255,255,255,0.03)); }
 
     .runtime-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .runtime-title { color: var(--ink-soft); font-size: 11px; font-weight: 650; }
@@ -383,6 +385,15 @@
     .modal-backdrop.open { opacity: 1; pointer-events: auto; }
     .command-modal { width: min(560px, calc(100vw - 32px)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 13px; background: #141c1f; box-shadow: 0 28px 90px rgba(0,0,0,0.5); transform: translateY(-12px); transition: transform .2s ease; }
     .modal-backdrop.open .command-modal { transform: translateY(0); }
+    .settings-form { display: grid; gap: 12px; padding: 16px; }
+    .settings-copy { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .settings-field { display: grid; gap: 6px; }
+    .settings-field label { color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+    .settings-field input, .settings-field select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--panel-2); font-size: 11px; }
+    .settings-field input:focus, .settings-field select:focus { border-color: var(--lime); }
+    .settings-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+    .settings-status { min-height: 16px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .settings-status.error { color: #ffb4a8; }
     .command-input { display: flex; align-items: center; gap: 10px; padding: 15px 16px; border-bottom: 1px solid var(--line); }
     .command-input span { color: var(--lime); font-family: var(--mono); }
     .command-input input { width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 13px; }
@@ -485,7 +496,7 @@
         </button>
       </nav>
 
-      <div class="runtime-card">
+      <div class="runtime-card" id="runtime-card" role="button" tabindex="0" aria-label="Configure LLM">
         <div class="runtime-top">
           <span class="runtime-title">Local runtime</span>
           <span class="status-dot" title="Connected"></span>
@@ -508,6 +519,7 @@
             <span class="browse-hint">JS/TS · Python · Go · Rust · config/docs</span>
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
           </div>
+          <button class="text-button" type="button" id="llm-settings-button" title="Configure local LLM">LLM setup</button>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
           <button class="icon-button" type="button" data-toast="No unsynced changes. Local index is current." aria-label="Notifications" title="Notifications">◌</button>
           <button class="text-button" type="button" data-toast="Share is disabled in local-only preview.">Share</button>
@@ -675,6 +687,40 @@
   </div>
 
   <div class="toast" id="toast" role="status"><span class="toast-mark">◆</span><span id="toast-text">Local workspace is ready.</span></div>
+
+  <div class="modal-backdrop" id="llm-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="LLM setup">
+      <div class="command-input"><span>✦</span><strong>Configure LLM</strong></div>
+      <form class="settings-form" id="llm-form">
+        <p class="settings-copy">Cấu hình được giữ trong memory của server local. API key không được ghi vào source hoặc artifact.</p>
+        <div class="settings-field">
+          <label for="llm-provider">Provider</label>
+          <select id="llm-provider">
+            <option value="none">Evidence-only (không gọi model)</option>
+            <option value="ollama">Ollama local</option>
+            <option value="openai-compatible">OpenAI-compatible API</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="llm-model">Model</label>
+          <input id="llm-model" type="text" placeholder="qwen2.5:7b" autocomplete="off" />
+        </div>
+        <div class="settings-field">
+          <label for="llm-base-url">Base URL</label>
+          <input id="llm-base-url" type="url" placeholder="http://127.0.0.1:11434" autocomplete="off" />
+        </div>
+        <div class="settings-field" id="llm-key-field">
+          <label for="llm-api-key">API key</label>
+          <input id="llm-api-key" type="password" placeholder="Để trống để giữ key hiện tại" autocomplete="new-password" />
+        </div>
+        <div class="settings-status" id="llm-settings-status" role="status"></div>
+        <div class="settings-actions">
+          <button class="text-button" type="button" id="llm-cancel">Cancel</button>
+          <button class="text-button primary" type="submit">Save setup</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div class="modal-backdrop" id="command-modal" aria-hidden="true">
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Command palette">
@@ -1000,6 +1046,94 @@
     document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
     document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
 
+    const llmModal = document.getElementById('llm-modal');
+    const llmForm = document.getElementById('llm-form');
+    const llmProvider = document.getElementById('llm-provider');
+    const llmModel = document.getElementById('llm-model');
+    const llmBaseUrl = document.getElementById('llm-base-url');
+    const llmApiKey = document.getElementById('llm-api-key');
+    const llmKeyField = document.getElementById('llm-key-field');
+    const llmSettingsStatus = document.getElementById('llm-settings-status');
+    function applyLLMStatus(status) {
+      if (!status) return;
+      const runtime = document.getElementById('runtime-status');
+      if (status.configured) runtime.textContent = `${status.provider} · ${status.model}`;
+      else if (status.provider === 'error') runtime.textContent = 'LLM config · check setup';
+      else runtime.textContent = 'Offline · evidence only';
+    }
+    async function refreshLLMStatus() {
+      try {
+        const response = await fetch('/api/llm/status', {cache: 'no-store'});
+        if (!response.ok) return null;
+        const status = await response.json();
+        applyLLMStatus(status);
+        return status;
+      } catch (error) {
+        return null;
+      }
+    }
+    function updateLLMFormVisibility() {
+      const isKeyProvider = llmProvider.value === 'openai-compatible';
+      llmKeyField.hidden = !isKeyProvider;
+      if (llmProvider.value === 'ollama') llmBaseUrl.placeholder = 'http://127.0.0.1:11434';
+      if (isKeyProvider) llmBaseUrl.placeholder = 'https://api.example.com';
+    }
+    async function openLLMSettings() {
+      llmModal.classList.add('open');
+      llmModal.setAttribute('aria-hidden', 'false');
+      llmSettingsStatus.className = 'settings-status';
+      llmSettingsStatus.textContent = 'Đang đọc cấu hình runtime…';
+      const status = await refreshLLMStatus();
+      if (status) {
+        llmProvider.value = status.provider === 'error' ? 'none' : status.provider;
+        llmModel.value = status.model || 'qwen2.5:7b';
+        llmBaseUrl.value = status.base_url || (llmProvider.value === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com');
+        llmApiKey.value = '';
+        llmSettingsStatus.textContent = status.has_api_key ? 'API key hiện tại đang được giữ trong server memory.' : 'Chưa có API key.';
+      }
+      updateLLMFormVisibility();
+      llmModel.focus();
+    }
+    function closeLLMSettings() {
+      llmModal.classList.remove('open');
+      llmModal.setAttribute('aria-hidden', 'true');
+      llmApiKey.value = '';
+    }
+    document.getElementById('llm-settings-button').addEventListener('click', openLLMSettings);
+    document.getElementById('runtime-card').addEventListener('click', openLLMSettings);
+    document.getElementById('runtime-card').addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openLLMSettings(); }
+    });
+    document.getElementById('llm-cancel').addEventListener('click', closeLLMSettings);
+    llmModal.addEventListener('click', event => { if (event.target === llmModal) closeLLMSettings(); });
+    llmProvider.addEventListener('change', updateLLMFormVisibility);
+    llmForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      llmSettingsStatus.className = 'settings-status';
+      llmSettingsStatus.textContent = 'Đang lưu cấu hình trong server memory…';
+      const payload = {
+        provider: llmProvider.value,
+        model: llmModel.value,
+        base_url: llmBaseUrl.value
+      };
+      if (llmProvider.value === 'openai-compatible' && llmApiKey.value) payload.api_key = llmApiKey.value;
+      try {
+        const response = await fetch('/api/llm/config', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể lưu cấu hình LLM.');
+        applyLLMStatus(result);
+        closeLLMSettings();
+        showToast(`LLM setup saved: ${result.provider} · ${result.model}`);
+      } catch (error) {
+        llmSettingsStatus.className = 'settings-status error';
+        llmSettingsStatus.textContent = error.message || 'Không thể lưu cấu hình LLM.';
+      }
+    });
+
     const modal = document.getElementById('command-modal');
     const commandSearch = document.getElementById('command-search');
     function openCommand() { modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); setTimeout(() => commandSearch.focus(), 30); }
@@ -1086,11 +1220,7 @@
         setText('sidebar-unknown-count', pad(summary.counts.unknowns));
         setText('sidebar-scan-count', '01');
         setText('runtime-status', 'Offline · evidence only');
-        fetch('/api/llm/status', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(status => {
-          if (!status) return;
-          if (status.configured) setText('runtime-status', `${status.provider} · ${status.model}`);
-          else if (status.provider === 'error') setText('runtime-status', 'LLM config · check env');
-        }).catch(() => {});
+        refreshLLMStatus();
         setText('graph-caption-meta', `${nodes.length} nodes · ${edges.length} edges · current build`);
         setText('command-ask-meta', `${evidenceCount} source-linked evidence items`);
         setText('command-unknowns-meta', `${summary.counts.unknowns} findings need human context`);

@@ -19,7 +19,13 @@ from .importer import (
     cleanup_workspace,
     import_uploaded_workspace,
 )
-from .llm import MAX_QUESTION_CHARS, ask_repository, llm_status
+from .llm import (
+    MAX_QUESTION_CHARS,
+    LLMSettings,
+    ask_repository,
+    configure_llm,
+    llm_status,
+)
 
 
 def _artifact(root: Path) -> dict[str, Any]:
@@ -302,13 +308,16 @@ def create_server(
             parsed = urlparse(self.path)
             if parsed.path.startswith("/api/"):
                 try:
-                    payload = api_payload(
-                        self.server.workspace_root,
-                        self.server.workspace_artifact,
-                        parsed.path,
-                        parse_qs(parsed.query).get("q", [""])[0],
-                        parse_qs(parsed.query),
-                    )
+                    if parsed.path == "/api/llm/status":
+                        payload = llm_status(self.server.llm_settings)
+                    else:
+                        payload = api_payload(
+                            self.server.workspace_root,
+                            self.server.workspace_artifact,
+                            parsed.path,
+                            parse_qs(parsed.query).get("q", [""])[0],
+                            parse_qs(parsed.query),
+                        )
                 except KeyError:
                     self.send_error(404, "not found")
                     return
@@ -330,6 +339,38 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/llm/config":
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "LLM configuration payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "LLM configuration payload is invalid",
+                        )
+                    settings = configure_llm(
+                        payload, getattr(self.server, "llm_settings", None)
+                    )
+                    self.server.llm_settings = settings
+                    self._write_json(200, {"saved": True, **llm_status(settings)})
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/ask":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))
@@ -353,6 +394,7 @@ def create_server(
                         self.server.workspace_root,
                         self.server.workspace_artifact,
                         payload,
+                        getattr(self.server, "llm_settings", None),
                     )
                     self._write_json(200, result)
                 except VibeWikiError as error:
@@ -421,6 +463,7 @@ def create_server(
     server = ThreadingHTTPServer((host, port), Handler)
     server.workspace_root = root
     server.workspace_artifact = artifact
+    server.llm_settings: LLMSettings | None = None
     server.imported_workspace: ImportedWorkspace | None = None
     return server
 

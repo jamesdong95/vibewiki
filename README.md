@@ -130,6 +130,10 @@ results. When a model is enabled, retrieval sends only bounded graph neighbors
 and cited source excerpts, never the whole repository. API keys stay server-side
 and are not written to `.vibewiki` or returned by the status endpoint.
 
+You can also click **LLM setup** in the viewer's Local runtime card. The form
+updates the running server in memory; restarting the server clears that runtime
+configuration unless environment variables or CLI flags are supplied again.
+
 ## Evidence model
 
 A future claim should carry enough metadata to be inspected and challenged:
