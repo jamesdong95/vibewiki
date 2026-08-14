@@ -54,7 +54,11 @@ def test_build_requires_scan_output(tmp_path: Path) -> None:
     assert raised.value.code is ErrorCode.INVALID_OUTPUT
 
 
-def test_serve_exposes_real_artifact_apis(tmp_path: Path) -> None:
+def test_serve_exposes_real_artifact_apis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("VIBEWIKI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("VIBEWIKI_LLM_API_KEY", raising=False)
     root = _fixture_copy(tmp_path)
     scan_repository(root)
     build_repository(root)
@@ -73,6 +77,16 @@ def test_serve_exposes_real_artifact_apis(tmp_path: Path) -> None:
             f"{base}/api/source?path=app%2Fpage.tsx&start=1&end=1"
         ) as response:
             source = json.load(response)
+        with urlopen(f"{base}/api/llm/status") as response:
+            llm = json.load(response)
+        ask_request = Request(
+            f"{base}/api/ask",
+            data=json.dumps({"question": "What is connected to signup?"}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(ask_request) as response:
+            answer = json.load(response)
     finally:
         server.shutdown()
         server.server_close()
@@ -90,6 +104,10 @@ def test_serve_exposes_real_artifact_apis(tmp_path: Path) -> None:
     assert any(edge["relation"] == "calls" for edge in inspected["connected"])
     assert source["path"] == "app/page.tsx"
     assert source["lines"][0]["number"] == 1
+    assert llm["provider"] == "none"
+    assert answer["provider"] == "none"
+    assert answer["citations"]
+    assert answer["schema_version"] == 1
 
 
 def test_serve_imports_a_browser_selected_source_folder(tmp_path: Path) -> None:

@@ -363,6 +363,12 @@
     .mini-prompt input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 11px; }
     .mini-prompt input::placeholder { color: var(--muted-2); }
     .mini-prompt button { border: 0; color: var(--lime); background: transparent; cursor: pointer; font-family: var(--mono); font-size: 11px; }
+    .ask-result { display: none; margin-top: 9px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft); background: rgba(255,255,255,0.025); font-size: 10px; line-height: 1.5; }
+    .ask-result.show { display: block; }
+    .ask-result.busy { color: var(--cyan); border-color: rgba(166,233,239,0.28); }
+    .ask-result.error { color: #ffb4a8; border-color: rgba(255,129,111,0.35); }
+    .ask-result strong { color: var(--ink); font-weight: 650; }
+    .ask-citations { margin-top: 8px; color: var(--lime); font-family: var(--mono); font-size: 9px; }
 
     .toast { position: fixed; z-index: 20; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 12px 14px; border: 1px solid rgba(216,249,139,0.25); border-radius: 9px; color: var(--ink); background: #1a2521; box-shadow: var(--shadow); opacity: 0; transform: translateY(9px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
     .browse-status { display: none; margin: 0 30px 16px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(16,22,24,0.72); font-family: var(--mono); font-size: 9px; line-height: 1.4; }
@@ -663,6 +669,7 @@
           <input id="mini-question" type="text" placeholder="Ask about this concept…" aria-label="Ask about this concept" />
           <button type="button" id="mini-submit" aria-label="Submit question">↵</button>
         </div>
+        <div class="ask-result" id="ask-result" role="status" aria-live="polite"></div>
       </div>
     </aside>
   </div>
@@ -952,11 +959,43 @@
       showToast('Ask a question about this product or selected concept.');
     });
 
-    function submitQuestion(input) {
+    const askResult = document.getElementById('ask-result');
+    const questionHistory = [];
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
+    }
+    function renderAskResult(result, kind = '') {
+      askResult.className = `ask-result show ${kind}`.trim();
+      if (kind === 'busy') {
+        askResult.textContent = 'Đang tìm evidence và thảo luận với model…';
+        return;
+      }
+      if (kind === 'error') {
+        askResult.textContent = result;
+        return;
+      }
+      const citations = (result.citations || []).map(item => `${item.path}:${item.line_start}`).join(' · ');
+      const providerLabel = result.provider === 'none' ? 'Evidence-only' : `${escapeHtml(result.provider)} · ${escapeHtml(result.model || '')}`;
+      askResult.innerHTML = `<strong>${providerLabel}</strong><br>${escapeHtml(result.answer || '')}${result.unknowns?.length ? `<br><span style="color:var(--orange);">Unknown: ${escapeHtml(result.unknowns.join(' '))}</span>` : ''}${citations ? `<div class="ask-citations">Evidence: ${escapeHtml(citations)}</div>` : ''}`;
+    }
+    async function submitQuestion(input) {
       const question = input.value.trim();
       if (!question) return input.focus();
-      showToast(`Question indexed: “${question}”`);
-      input.value = '';
+      renderAskResult('', 'busy');
+      try {
+        const response = await fetch('/api/ask', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({question, history: questionHistory.slice(-6)})
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể gọi LLM local.');
+        renderAskResult(result);
+        questionHistory.push({role: 'user', content: question}, {role: 'assistant', content: result.answer || ''});
+        input.value = '';
+      } catch (error) {
+        renderAskResult(error.message || 'Không thể phân tích source local.', 'error');
+      }
     }
     document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
     document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
@@ -1046,7 +1085,12 @@
         setText('sidebar-evidence-count', evidenceCount);
         setText('sidebar-unknown-count', pad(summary.counts.unknowns));
         setText('sidebar-scan-count', '01');
-        setText('runtime-status', 'Offline · no LLM required');
+        setText('runtime-status', 'Offline · evidence only');
+        fetch('/api/llm/status', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(status => {
+          if (!status) return;
+          if (status.configured) setText('runtime-status', `${status.provider} · ${status.model}`);
+          else if (status.provider === 'error') setText('runtime-status', 'LLM config · check env');
+        }).catch(() => {});
         setText('graph-caption-meta', `${nodes.length} nodes · ${edges.length} edges · current build`);
         setText('command-ask-meta', `${evidenceCount} source-linked evidence items`);
         setText('command-unknowns-meta', `${summary.counts.unknowns} findings need human context`);

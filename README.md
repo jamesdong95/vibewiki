@@ -67,7 +67,8 @@ uv run vibewiki serve /path/to/next-app --port 4173
 ```
 
 Open `http://127.0.0.1:4173/` to inspect the generated graph, evidence and
-unknowns. The server binds to loopback and does not contact external services.
+unknowns. By default the server binds to loopback and does not contact
+external services.
 You can also use **Browse source** in the viewer to choose a local source
 folder. Browse accepts common source, config, and documentation files
 (including JavaScript/JSX, TypeScript/TSX, Python, Go, Rust, Java/Kotlin,
@@ -79,8 +80,14 @@ workspace is removed when the server exits. The CLI's default scan remains
 strict for the original direct Next.js App Router contract; Browse uses the
 generic local import profile.
 
+The server remains offline when no LLM provider is configured. If a remote
+provider is explicitly enabled, only the bounded retrieved context for the
+current question is sent to that provider; source import and graph generation
+remain local.
+
 Every build also exposes `/api/files`, `/api/packages`, `/api/modules`,
-`/api/symbols`, and `/api/source` for bounded local evidence inspection.
+`/api/symbols`, `/api/source`, `/api/llm/status`, and `/api/ask` for bounded
+local evidence inspection and optional grounded discussion.
 Package, symbol, and call edges are deterministic; source evidence is served
 by relative path and line range only. Traversal, symlinks, ignored paths, and
 sensitive names are rejected.
@@ -99,7 +106,28 @@ Markdown/Mermaid product wiki and viewer
 optional bounded retrieval for local Q&A
 ```
 
-The core should remain useful without an LLM. Ollama/local models and cloud providers would be optional enhancement layers, never the only source of truth.
+The core remains useful without an LLM. Configure the optional discussion layer
+with Ollama on the local machine:
+
+```bash
+export VIBEWIKI_LLM_PROVIDER=ollama
+export VIBEWIKI_LLM_MODEL=qwen2.5:7b
+export VIBEWIKI_LLM_BASE_URL=http://127.0.0.1:11434
+```
+
+Or use a BYOK OpenAI-compatible endpoint from the server environment:
+
+```bash
+export VIBEWIKI_LLM_PROVIDER=openai-compatible
+export VIBEWIKI_LLM_MODEL=your-model
+export VIBEWIKI_LLM_API_KEY=your-key
+export VIBEWIKI_LLM_BASE_URL=https://api.example.com
+```
+
+The default provider is `none`: VibeWiki returns deterministic evidence-only
+results. When a model is enabled, retrieval sends only bounded graph neighbors
+and cited source excerpts, never the whole repository. API keys stay server-side
+and are not written to `.vibewiki` or returned by the status endpoint.
 
 ## Evidence model
 

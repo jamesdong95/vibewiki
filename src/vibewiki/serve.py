@@ -18,6 +18,7 @@ from .importer import (
     cleanup_workspace,
     import_uploaded_workspace,
 )
+from .llm import MAX_QUESTION_CHARS, ask_repository, llm_status
 
 
 def _artifact(root: Path) -> dict[str, Any]:
@@ -255,6 +256,8 @@ def api_payload(
         }
     if path == "/api/source":
         return _source_payload(root, artifact, params)
+    if path == "/api/llm/status":
+        return llm_status()
     if path == "/api/search":
         needle = query.casefold()
         return {
@@ -326,6 +329,42 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/ask":
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT, "question payload is empty"
+                        )
+                    if content_length > MAX_QUESTION_CHARS * 8:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "question payload exceeds the local safety limit",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT, "question payload is invalid"
+                        )
+                    result = ask_repository(
+                        self.server.workspace_root,
+                        self.server.workspace_artifact,
+                        payload,
+                    )
+                    self._write_json(200, result)
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path != "/api/import":
                 self.send_error(404, "not found")
                 return

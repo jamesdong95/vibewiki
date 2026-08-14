@@ -356,6 +356,11 @@ MVP không cần lưu source code đầy đủ trong SQLite; chỉ lưu path, ha
 
 **Mục tiêu:** thêm giải thích tự nhiên nhưng vẫn bị ràng buộc bởi graph/evidence.
 
+**Implementation slice hiện tại:** đã bắt đầu với provider interface, fallback
+evidence-only, adapter Ollama/OpenAI-compatible, retrieval bounded và API
+`/api/ask`; UI Ask giữ conversation ngắn và hiển thị citations. Model vẫn là
+optional, API key chỉ được đọc ở server environment.
+
 **Kết quả:**
 
 - `providers/base.py` với interface `generate(prompt, context)`.
