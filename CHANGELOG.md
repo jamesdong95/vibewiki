@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Ask modes for grounded discussion, flow explanation, impact analysis, and
+  unknowns investigation, each with a deterministic evidence-only fallback.
 - Grounded `/api/ask` with evidence-only fallback and optional Ollama/OpenAI-compatible providers.
 - Local bounded retrieval and source citations for the viewer's Ask control.
 - Added `vibewiki serve --llm-provider/--llm-model/--llm-base-url` runtime configuration without accepting API keys on the command line.

@@ -23,6 +23,13 @@ MAX_HISTORY_TURNS = 6
 MAX_RETRIEVED_NODES = 8
 MAX_CONTEXT_CHARS = 24_000
 MAX_EXCERPT_LINES = 36
+ANALYSIS_MODES = frozenset({"general", "flow", "impact", "unknowns"})
+MODE_LABELS = {
+    "general": "Grounded discussion",
+    "flow": "Flow explainer",
+    "impact": "Impact analyzer",
+    "unknowns": "Unknowns investigator",
+}
 _TOKEN = re.compile(r"[A-Za-z0-9_]{3,}")
 _STOPWORDS = frozenset(
     {
@@ -233,8 +240,13 @@ def _evidence_key(item: dict[str, Any]) -> tuple[str, int, int]:
 
 
 def _retrieval(
-    root: Path, artifact: dict[str, Any], question: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    root: Path, artifact: dict[str, Any], question: str, mode: str = "general"
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    str,
+]:
     nodes = []
     nodes.extend(
         {
@@ -288,14 +300,39 @@ def _retrieval(
         seen_ids.add(node["id"])
         unique_nodes.append(node)
     selected = unique_nodes
+    selected_ids = {node["id"] for node in selected}
+    relevant_edges = [
+        edge
+        for edge in edges
+        if edge["source"] in selected_ids or edge["target"] in selected_ids
+    ][:16]
     evidence: list[dict[str, Any]] = []
     for node in selected:
         evidence.extend(node.get("evidence", []))
+    if mode == "unknowns":
+        for unknown in artifact.get("unknowns", [])[:12]:
+            evidence.extend(unknown.get("evidence", []))
     unique_evidence = sorted(
         {_evidence_key(item): item for item in evidence}.values(),
         key=_evidence_key,
     )
-    context_parts: list[str] = []
+    context_parts: list[str] = [
+        f"ANALYSIS MODE: {MODE_LABELS.get(mode, MODE_LABELS['general'])}"
+    ]
+    if mode == "unknowns":
+        for unknown in artifact.get("unknowns", [])[:12]:
+            context_parts.append(
+                f"UNKNOWN {unknown.get('subject', '')}: {unknown.get('reason', '')}"
+            )
+            for item in unknown.get("evidence", [])[:2]:
+                context_parts.append(
+                    "UNKNOWN EVIDENCE "
+                    f"{item.get('path', '')}:{item.get('line_start', 1)}"
+                )
+    for edge in relevant_edges:
+        context_parts.append(
+            f"EDGE {edge['source']} --{edge['relation']}--> {edge['target']}"
+        )
     for node in selected:
         context_parts.append(f"NODE {node['id']} ({node['kind']})")
         context_parts.append(f"attributes: {json_safe(node.get('attributes', {}))}")
@@ -311,7 +348,43 @@ def _retrieval(
             end_line = min(len(lines), line + MAX_EXCERPT_LINES - 1)
             for number in range(max(1, line - 2), end_line + 1):
                 context_parts.append(f"{path}:{number}: {lines[number - 1]}")
-    return selected, unique_evidence, "\n".join(context_parts)[:MAX_CONTEXT_CHARS]
+    return (
+        selected,
+        unique_evidence,
+        relevant_edges,
+        "\n".join(context_parts)[:MAX_CONTEXT_CHARS],
+    )
+
+
+def _evidence_only_answer(
+    mode: str,
+    selected: Sequence[dict[str, Any]],
+    edges: Sequence[dict[str, Any]],
+    artifact: dict[str, Any],
+) -> str:
+    if mode == "unknowns":
+        unknowns = artifact.get("unknowns", [])
+        if not unknowns:
+            return "Evidence-only: chưa phát hiện unknown nào trong artifact hiện tại."
+        return "Evidence-only: các unknown cần review:\n" + "\n".join(
+            f"- {item.get('subject', 'unknown')}: {item.get('reason', '')}"
+            for item in unknowns[:8]
+        )
+    if not selected:
+        return "Evidence-only: chưa tìm thấy node phù hợp trong graph hiện tại."
+    prefix = {
+        "flow": "Evidence-only: flow candidates theo graph",
+        "impact": "Evidence-only: impact neighborhood theo graph",
+    }.get(mode, "Evidence-only: evidence liên quan")
+    lines = [f"{prefix}:"]
+    lines.extend(f"- {node['id']}" for node in selected[:8])
+    if edges and mode in {"flow", "impact"}:
+        lines.append("Edges:")
+        lines.extend(
+            f"- {edge['source']} --{edge['relation']}--> {edge['target']}"
+            for edge in edges[:8]
+        )
+    return "\n".join(lines)
 
 
 def _history(value: object) -> list[dict[str, str]]:
@@ -341,7 +414,13 @@ def ask_repository(
         raise VibeWikiError(
             ErrorCode.INVALID_OUTPUT, "question exceeds the local safety limit"
         )
-    selected, evidence, context = _retrieval(root, artifact, question)
+    mode = payload.get("mode", "general")
+    if not isinstance(mode, str) or mode not in ANALYSIS_MODES:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "analysis mode must be general, flow, impact, or unknowns",
+        )
+    selected, evidence, edges, context = _retrieval(root, artifact, question, mode)
     settings = settings or LLMSettings.from_environment()
     provider = _provider(settings)
     messages = [
@@ -351,7 +430,8 @@ def ask_repository(
                 "You are VibeWiki, a codebase analysis assistant. Use only the "
                 "retrieved evidence below. Do not invent runtime behavior. Cite "
                 "claims as [path:line]. If evidence is insufficient, say Unknown. "
-                "Answer in Vietnamese when the question is Vietnamese.\n\n"
+                "Answer in Vietnamese when the question is Vietnamese. Follow "
+                f"the requested analysis mode: {MODE_LABELS[mode]}.\n\n"
                 f"Retrieved evidence:\n{context or 'No matching evidence was found.'}"
             ),
         },
@@ -359,17 +439,29 @@ def ask_repository(
         {"role": "user", "content": question},
     ]
     response = provider.generate(messages, model=settings.model)
+    answer = (
+        _evidence_only_answer(mode, selected, edges, artifact)
+        if provider.name == "none"
+        else response.text
+    )
     cited = [
         item
         for item in evidence
-        if f"{item.get('path')}:{item.get('line_start')}" in response.text
+        if f"{item.get('path')}:{item.get('line_start')}" in answer
     ]
     grounded = provider.name == "none" or bool(cited) or not selected
-    unknowns = [] if grounded else [
-        "Model response did not cite one of the retrieved source locations."
-    ]
+    unknowns = (
+        [
+            f"{item.get('subject', 'unknown')}: {item.get('reason', '')}"
+            for item in artifact.get("unknowns", [])[:8]
+        ]
+        if mode == "unknowns" and provider.name == "none"
+        else []
+        if grounded
+        else ["Model response did not cite one of the retrieved source locations."]
+    )
     return {
-        "answer": response.text,
+        "answer": answer,
         "citations": cited or evidence[:8],
         "confidence": "medium" if grounded else "low",
         "grounded": grounded,
@@ -377,5 +469,7 @@ def ask_repository(
         "provider": provider.name,
         "model": response.model,
         "retrieved": [node["id"] for node in selected],
+        "mode": mode,
+        "mode_label": MODE_LABELS[mode],
         "schema_version": SCHEMA_VERSION,
     }

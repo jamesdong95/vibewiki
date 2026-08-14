@@ -27,6 +27,7 @@ REQUIRED_HTML_MARKERS = (
     'id="browse-status"',
     'id="llm-settings-button"',
     'id="llm-form"',
+    'id="ask-mode"',
     'JS/TS · Python · Go · Rust · config/docs',
     'MAX_IMPORT_BYTES',
     'id="sidebar-product-count"',

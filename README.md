@@ -134,6 +134,13 @@ You can also click **LLM setup** in the viewer's Local runtime card. The form
 updates the running server in memory; restarting the server clears that runtime
 configuration unless environment variables or CLI flags are supplied again.
 
+The Ask panel supports four grounded use cases: **Discuss** for general
+questions, **Explain flow** for graph-connected execution paths, **Impact
+analysis** for connected neighborhoods, and **Find unknowns** for gaps already
+recorded by the analyzer. With provider `none`, each mode still returns a
+deterministic evidence-only result, so the graph remains useful without a
+model.
+
 ## Evidence model
 
 A future claim should carry enough metadata to be inspected and challenged:

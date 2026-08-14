@@ -105,7 +105,9 @@ def test_serve_exposes_real_artifact_apis(
             pass
         ask_request = Request(
             f"{base}/api/ask",
-            data=json.dumps({"question": "What is connected to signup?"}).encode(),
+            data=json.dumps(
+                {"question": "What is connected to signup?", "mode": "flow"}
+            ).encode(),
             method="POST",
             headers={"Content-Type": "application/json"},
         )
@@ -133,6 +135,8 @@ def test_serve_exposes_real_artifact_apis(
     assert configured_status["provider"] == "ollama"
     assert configured_status["has_api_key"] is False
     assert answer["provider"] == "none"
+    assert answer["mode"] == "flow"
+    assert answer["mode_label"] == "Flow explainer"
     assert answer["citations"]
     assert answer["schema_version"] == 1
 

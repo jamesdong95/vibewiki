@@ -98,6 +98,57 @@ def test_evidence_only_answer_is_local_and_cited(tmp_path: Path, monkeypatch) ->
     assert result["provider"] == "none"
     assert result["citations"][0]["path"] == "app/page.tsx"
     assert result["grounded"] is True
+    assert result["mode"] == "general"
+
+
+def test_analysis_modes_return_grounded_local_summaries(tmp_path: Path) -> None:
+    artifact = {
+        "facts": [
+            {
+                "semantic_key": "route:page:/signup",
+                "kind": "route",
+                "attributes": {"path": "/signup", "file": "app/page.tsx"},
+                "evidence": [
+                    {"path": "app/page.tsx", "line_start": 1, "line_end": 1}
+                ],
+            }
+        ],
+        "relations": [],
+        "module_edges": [],
+        "package_edges": [],
+        "symbol_edges": [],
+        "unknowns": [
+            {
+                "subject": "route:page:/signup",
+                "reason": "No test evidence was found.",
+                "evidence": [
+                    {"path": "app/page.tsx", "line_start": 1, "line_end": 1}
+                ],
+            }
+        ],
+    }
+
+    flow = ask_repository(tmp_path, artifact, {"question": "signup", "mode": "flow"})
+    unknowns = ask_repository(
+        tmp_path, artifact, {"question": "signup", "mode": "unknowns"}
+    )
+
+    assert flow["mode"] == "flow"
+    assert flow["mode_label"] == "Flow explainer"
+    assert "flow candidates" in flow["answer"]
+    assert unknowns["mode"] == "unknowns"
+    assert "No test evidence was found." in unknowns["answer"]
+    assert unknowns["unknowns"] == [
+        "route:page:/signup: No test evidence was found."
+    ]
+
+
+def test_analysis_mode_rejects_unknown_value(tmp_path: Path) -> None:
+    with pytest.raises(VibeWikiError) as raised:
+        ask_repository(tmp_path, {"facts": []}, {"question": "hello", "mode": "map"})
+
+    assert raised.value.code is ErrorCode.INVALID_OUTPUT
+    assert "analysis mode" in raised.value.message
 
 
 def test_ollama_provider_uses_local_chat_contract() -> None:
