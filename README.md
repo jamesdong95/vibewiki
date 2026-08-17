@@ -59,6 +59,8 @@ The prototype demonstrates:
 - Product map and evidence-oriented graph navigation.
 - Inspector panels for routes, flows, APIs, services, entities, tests, and commits.
 - Search, graph zoom, node selection, and command-palette interactions.
+- One-click ZIP export of the generated wiki, graph, evidence, and unknowns
+  artifacts without bundling source files.
 - Explicit confidence, unknowns, and local-runtime status.
 - A local-first visual language that does not require a hosted backend.
 
@@ -146,6 +148,11 @@ analysis** for connected neighborhoods, and **Find unknowns** for gaps already
 recorded by the analyzer. With provider `none`, each mode still returns a
 deterministic evidence-only result, so the graph remains useful without a
 model.
+
+Use **Export wiki** in the top bar or command palette to download a ZIP of the
+current `.vibewiki` artifacts. The export includes Markdown/Mermaid wiki files,
+graph JSON/SQLite, evidence manifests, and unknowns; it deliberately excludes
+repository source files.
 
 ## Evidence model
 

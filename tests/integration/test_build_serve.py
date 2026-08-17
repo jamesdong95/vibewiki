@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import shutil
 import threading
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -79,6 +81,9 @@ def test_serve_exposes_real_artifact_apis(
             source = json.load(response)
         with urlopen(f"{base}/api/llm/status") as response:
             llm = json.load(response)
+        with urlopen(f"{base}/api/export") as response:
+            export_headers = dict(response.headers)
+            export_bytes = response.read()
         config_request = Request(
             f"{base}/api/llm/config",
             data=json.dumps(
@@ -131,6 +136,13 @@ def test_serve_exposes_real_artifact_apis(
     assert source["path"] == "app/page.tsx"
     assert source["lines"][0]["number"] == 1
     assert llm["provider"] == "none"
+    assert export_headers["Content-Type"] == "application/zip"
+    assert "next-ts-demo-vibewiki-export.zip" in export_headers["Content-Disposition"]
+    with zipfile.ZipFile(BytesIO(export_bytes)) as exported:
+        exported_names = set(exported.namelist())
+        assert "vibewiki-export/wiki/index.md" in exported_names
+        assert "vibewiki-export/graph.json" in exported_names
+        assert not any(name.endswith("page.tsx") for name in exported_names)
     assert configured["saved"] is True
     assert configured_status["provider"] == "ollama"
     assert configured_status["has_api_key"] is False

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -43,6 +45,44 @@ def _artifact(root: Path) -> dict[str, Any]:
     if data.get("schema_version") != SCHEMA_VERSION:
         raise VibeWikiError(ErrorCode.INVALID_OUTPUT, "build output is invalid")
     return data
+
+
+def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
+    """Create a safe, source-free ZIP of the generated VibeWiki artifacts."""
+    output = root / MANIFEST_DIRECTORY
+    files = (
+        "manifest.json",
+        "facts.json",
+        "claims.json",
+        "sources.json",
+        "graph.json",
+        "graph.db",
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "vibewiki-export/README.md",
+            "# VibeWiki export\n\n"
+            "Generated from the local deterministic scan. This archive contains "
+            "graph, evidence, wiki, and unknowns artifacts; source files are not "
+            "included.\n",
+        )
+        for name in files:
+            path = output / name
+            if path.is_file():
+                archive.write(path, f"vibewiki-export/{name}")
+        wiki = output / "wiki"
+        if wiki.is_dir():
+            for path in sorted(wiki.rglob("*")):
+                if path.is_file():
+                    relative = path.relative_to(output).as_posix()
+                    archive.write(path, f"vibewiki-export/{relative}")
+    project = str(artifact.get("fixture", "workspace"))
+    safe_project = "".join(
+        character if character.isalnum() or character in "-_" else "-"
+        for character in project
+    ).strip("-") or "workspace"
+    return buffer.getvalue(), f"{safe_project}-vibewiki-export.zip"
 
 
 def _node(fact: dict[str, Any]) -> dict[str, Any]:
@@ -306,6 +346,26 @@ def create_server(
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/export":
+                try:
+                    body, filename = _export_archive(
+                        self.server.workspace_root, self.server.workspace_artifact
+                    )
+                except (OSError, ValueError, zipfile.BadZipFile) as error:
+                    self._write_json(
+                        500,
+                        {"error": "export_failed", "message": str(error)},
+                    )
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header(
+                    "Content-Disposition", f'attachment; filename="{filename}"'
+                )
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if parsed.path.startswith("/api/"):
                 try:
                     if parsed.path == "/api/llm/status":

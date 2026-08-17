@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1-preview] - 2026-08-17
+
+### Added
+
+- Downloadable ZIP export for generated wiki, graph, evidence, and unknowns
+  artifacts through the viewer and `/api/export`.
+- Live product preview screenshot in the README and release assets.
+
 ## [0.1.0-preview] - 2026-08-13
 
 ### Added

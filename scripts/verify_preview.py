@@ -29,6 +29,8 @@ REQUIRED_HTML_MARKERS = (
     'id="llm-settings-button"',
     'id="llm-form"',
     'id="ask-mode"',
+    'id="export-button"',
+    "function exportWiki",
     'renderMarkdown',
     'JS/TS · Python · Go · Rust · config/docs',
     'MAX_IMPORT_BYTES',

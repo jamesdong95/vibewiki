@@ -538,6 +538,7 @@
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
           </div>
           <button class="text-button" type="button" id="llm-settings-button" title="Configure local LLM">LLM setup</button>
+          <button class="text-button" type="button" id="export-button" title="Download the current wiki export">Export wiki</button>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
           <button class="icon-button" type="button" data-toast="No unsynced changes. Local index is current." aria-label="Notifications" title="Notifications">◌</button>
           <button class="text-button" type="button" data-toast="Share is disabled in local-only preview.">Share</button>
@@ -1161,8 +1162,32 @@
         renderAskResult(error.message || 'Không thể phân tích source local.', 'error');
       }
     }
+    async function exportWiki() {
+      try {
+        const response = await fetch('/api/export', {cache: 'no-store'});
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          throw new Error(result.message || 'Không thể export wiki hiện tại.');
+        }
+        const blob = await response.blob();
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'vibewiki-export.zip';
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast(`Wiki export downloaded: ${filename}`);
+      } catch (error) {
+        showToast(error.message || 'Không thể export wiki hiện tại.');
+      }
+    }
     document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
     document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
+    document.getElementById('export-button').addEventListener('click', exportWiki);
 
     const llmModal = document.getElementById('llm-modal');
     const llmForm = document.getElementById('llm-form');
@@ -1467,7 +1492,7 @@
             if (command === 'ask') { document.getElementById('mini-question').focus(); showToast('Ask a question grounded in local evidence.'); }
             if (command === 'unknowns') this.setView('Unknowns');
             if (command === 'scan') chooseSourceFolder();
-            if (command === 'export') showToast('Wiki files are available under .vibewiki/wiki.');
+            if (command === 'export') exportWiki();
           }
         };
         canvas.onclick = event => {

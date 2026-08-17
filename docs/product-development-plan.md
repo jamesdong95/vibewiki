@@ -32,20 +32,39 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 
 ---
 
-## 2. Baseline hiện tại và giả định
+## 2. Baseline hiện tại và kế hoạch tự động tiếp theo
 
-### Đã có
+> Cập nhật 2026-08-17 từ worktree và live preview hiện tại. Mỗi phase chỉ được
+> gọi hoàn thành khi có artifact, test và smoke evidence tương ứng.
 
-- Prototype UI standalone tại `vibewiki-ui/index.html`.
-- Giao diện dark developer-tool gồm sidebar, metrics, product graph, inspector, search, zoom, command palette và local runtime status.
-- Preview local đã được kiểm tra bằng ad-hoc verification: UI hooks, graph nodes, JavaScript syntax và HTTP serving đều pass.
+### Đã triển khai
 
-### Chưa có
+- CLI `scan → build → serve` với artifact `.vibewiki/` và SQLite graph.
+- Browse/import local cho repository generic, monorepo/package lồng nhau, JS/JSX/TS/TSX,
+  Python, Go, Rust, Java/Kotlin, C-family, Swift/Dart, shell, SQL, config/docs và Prisma.
+- Route/module/package/symbol/API/test graph với evidence path/line và unknowns deterministic.
+- Viewer đọc artifact thật, search/graph/inspector/source preview, Browse source và
+  trạng thái lỗi import.
+- LLM setup memory-only, Ollama/OpenAI-compatible BYOK, Ask grounded với Discuss,
+  Flow, Impact và Unknowns modes; câu trả lời Markdown được render an toàn.
+- Export thật qua nút/command palette và `/api/export`: ZIP wiki, Mermaid, graph,
+  evidence manifests và unknowns, không chứa source files.
+- README, changelog, screenshot live preview, release metadata và draft PR đã có.
 
-- Repository sản phẩm VibeWiki thực tế.
-- CLI, static analyzer, SQLite schema, graph persistence, wiki generator, local API hoặc Ollama integration.
-- Test suite, fixture repository và CI.
-- Product seed YAML thực tế.
+### Khoảng trống còn lại theo ưu tiên người dùng
+
+- Product seed/comparator để trả lời intent nào đã implement và gap nào chưa.
+- Git history/staleness để biết node/evidence thay đổi từ commit nào.
+- Scan history trong một workspace và diff giữa hai lần scan.
+- Runtime observer read-only với route/network/console evidence tách khỏi static facts.
+- Packaging/CI/cài đặt sạch cho người dùng ngoài môi trường phát triển.
+
+### Thứ tự implementation tự động tiếp theo
+
+1. **Intent gap:** thêm `product.seed.yaml`, comparator và UI Unknowns có expected-vs-observed.
+2. **History:** lưu scan run metadata, changed paths và stale evidence theo Git commit.
+3. **Runtime:** `vibewiki observe` read-only, không login/form side effect mặc định.
+4. **Distribution:** clean install, CI macOS/Linux, quickstart fixture và release gate.
 
 ### Giả định để triển khai
 
@@ -411,7 +430,7 @@ Unknowns
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.0` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.1-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
@@ -420,6 +439,7 @@ Unknowns
 - Version CLI hiển thị analyzer version và schema version.
 - CI chạy unit/integration/golden tests trên macOS/Linux.
 - Demo repository không chứa secret và có screenshot/GIF tùy chọn.
+- Viewer có export ZIP thật cho wiki/graph/evidence mà không đóng gói source.
 - Build/serve error messages có exit code ổn định.
 - Kiểm tra localhost binding và network-offline behavior.
 
