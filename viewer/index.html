@@ -1322,6 +1322,7 @@
         const nodes = nodePayload.nodes || [];
         const edges = edgePayload.edges || [];
         const unknowns = nodePayload.unknowns || [];
+        const intent = summary.intent || { configured: false, gaps: 0 };
         const nodeById = new Map(nodes.map(node => [node.id, node]));
         const realData = new Map(nodes.map(node => [node.id, {
           title: node.title,
@@ -1354,7 +1355,7 @@
         setText('stat-facts-trend', `${summary.counts.scanned_files} source files`);
         setText('stat-evidence-trend', 'source-linked');
         setText('stat-relations-trend', 'verified edges');
-        setText('stat-unknowns-trend', 'review queue');
+        setText('stat-unknowns-trend', intent.configured ? `${intent.gaps} intent gaps` : 'review queue');
         setText('sidebar-product-count', summary.counts.facts);
         setText('sidebar-flow-count', pad(routeCount));
         setText('sidebar-architecture-count', pad(architectureCount));
@@ -1366,7 +1367,9 @@
         refreshLLMStatus();
         setText('graph-caption-meta', `${nodes.length} nodes · ${edges.length} edges · current build`);
         setText('command-ask-meta', `${evidenceCount} source-linked evidence items`);
-        setText('command-unknowns-meta', `${summary.counts.unknowns} findings need human context`);
+        setText('command-unknowns-meta', intent.configured
+          ? `${intent.gaps} intent gaps · ${summary.counts.unknowns} total findings`
+          : `${summary.counts.unknowns} findings need human context`);
         setText('command-scan-meta', `${summary.counts.scanned_files} files in current build`);
         setText('command-export-meta', 'Markdown + Mermaid files in .vibewiki/wiki');
 
@@ -1408,14 +1411,20 @@
 
         function renderUnknownInspector() {
           const unknown = unknowns[0];
+          const intentGap = unknown?.type === 'intent_gap';
+          const expected = unknown?.expected;
           nodeList().forEach(item => item.classList.remove('selected'));
-          els.title.textContent = unknown ? unknown.subject : 'No unknowns';
-          els.copy.textContent = unknown ? unknown.reason.replaceAll('_', ' ') : 'The current deterministic scan emitted no unresolved findings.';
+          els.title.textContent = intentGap ? `${unknown.flow_id} · ${expected.kind}` : (unknown ? unknown.subject : 'No unknowns');
+          els.copy.textContent = intentGap
+            ? `Expected ${expected.kind}: ${expected.value}. ${unknown.reason}`
+            : (unknown ? unknown.reason.replaceAll('_', ' ') : 'The current deterministic scan emitted no unresolved findings.');
           els.confidenceText.textContent = 'unknown';
           els.badge.classList.remove('inferred');
           els.badge.querySelector('.legend-dot').className = 'legend-dot unknown';
           els.evidence.innerHTML = unknown?.evidence?.length ? unknown.evidence.map(item => `<div class="evidence-row" data-toast="Evidence from ${item.path}."><span class="file-icon">${item.kind.toUpperCase()}</span><span class="evidence-info"><span class="evidence-path">${item.path}</span><span class="evidence-line">line ${item.line_start} · finding</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No unresolved findings in this build.</div>';
-          els.connected.innerHTML = unknown ? '<div class="empty-state">Review the source evidence before marking this finding resolved.</div>' : '<div class="empty-state">Unknown queue is empty.</div>';
+          els.connected.innerHTML = intentGap
+            ? `<div class="impact-row"><span>Expected outcome</span><span>${escapeHtml(expected.value)}</span></div>`
+            : (unknown ? '<div class="empty-state">Review the source evidence before marking this finding resolved.</div>' : '<div class="empty-state">Unknown queue is empty.</div>');
           bindToastTargets();
         }
 

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2-preview] - 2026-08-17
+
+### Added
+
+- Optional `product.seed.yaml` intent contract with deterministic
+  expected-vs-observed comparison, `/api/intent`, and Unknowns intent gaps.
+- Exported `intent.json` artifact and a documented product-seed example.
+
 ## [0.1.1-preview] - 2026-08-17
 
 ### Added

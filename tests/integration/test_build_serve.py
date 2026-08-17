@@ -153,6 +153,49 @@ def test_serve_exposes_real_artifact_apis(
     assert answer["schema_version"] == 1
 
 
+def test_serve_exposes_product_intent_and_intent_gaps(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    (root / "product.seed.yaml").write_text(
+        "product:\n"
+        "  name: Signup demo\n"
+        "flows:\n"
+        "  - id: signup\n"
+        "    expected:\n"
+        "      - route: /signup\n"
+        "      - api: /api/users\n"
+        "  - id: admin\n"
+        "    expected:\n"
+        "      - route: /admin\n"
+        "      - test: tests/admin.test.ts\n",
+        encoding="utf-8",
+    )
+    scan_repository(root)
+    build_repository(root)
+    intent_artifact = json.loads((root / ".vibewiki/intent.json").read_text())
+    assert intent_artifact["counts"]["gaps"] == 1
+    assert (root / ".vibewiki/intent.json").is_file()
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        with urlopen(f"{base}/api/intent") as response:
+            intent = json.load(response)
+        with urlopen(f"{base}/api/summary") as response:
+            summary = json.load(response)
+        with urlopen(f"{base}/api/nodes") as response:
+            nodes = json.load(response)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert intent["counts"] == {"flows": 2, "gaps": 1, "observed": 1, "partial": 1}
+    assert summary["counts"]["unknowns"] == 2
+    assert summary["intent"]["configured"] is True
+    assert any(item["type"] == "intent_gap" for item in nodes["unknowns"])
+
+
 def test_serve_imports_a_browser_selected_source_folder(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     scan_repository(root)

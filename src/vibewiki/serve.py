@@ -21,6 +21,7 @@ from .importer import (
     cleanup_workspace,
     import_uploaded_workspace,
 )
+from .intent import compare_product_intent
 from .llm import (
     MAX_QUESTION_CHARS,
     LLMSettings,
@@ -57,6 +58,7 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
         "sources.json",
         "graph.json",
         "graph.db",
+        "intent.json",
     )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -260,6 +262,8 @@ def api_payload(
     nodes = _artifact_nodes(artifact)
     edges = _artifact_edges(artifact)
     params = params or {}
+    intent = compare_product_intent(root, artifact)
+    unknowns = artifact["unknowns"] + intent["gaps"]
     if path == "/api/summary":
         return {
             "project": artifact["fixture"],
@@ -268,7 +272,7 @@ def api_payload(
             "counts": {
                 "facts": len(facts),
                 "relations": len(artifact["relations"]),
-                "unknowns": len(artifact["unknowns"]),
+                "unknowns": len(unknowns),
                 "scanned_files": len(
                     json.loads(
                         (root / MANIFEST_DIRECTORY / "manifest.json").read_text()
@@ -279,9 +283,15 @@ def api_payload(
             + sum(len(edge["evidence"]) for edge in artifact["relations"]),
             "status": "ready",
             "graph_counts": {"nodes": len(nodes), "edges": len(edges)},
+            "intent": {
+                "configured": intent["configured"],
+                **intent["counts"],
+            },
         }
     if path == "/api/nodes":
-        return {"nodes": nodes, "unknowns": artifact["unknowns"]}
+        return {"nodes": nodes, "unknowns": unknowns}
+    if path == "/api/intent":
+        return intent
     if path == "/api/edges":
         return {"edges": edges}
     if path == "/api/files":
@@ -320,7 +330,7 @@ def api_payload(
         match = next((node for node in nodes if node["id"] == subject), None)
         if match is None:
             unknown = next(
-                (item for item in artifact["unknowns"] if item["subject"] == subject),
+                (item for item in unknowns if item["subject"] == subject),
                 None,
             )
             return {"node": None, "unknown": unknown, "connected": []}

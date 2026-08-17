@@ -100,6 +100,15 @@ Package, symbol, and call edges are deterministic; source evidence is served
 by relative path and line range only. Traversal, symlinks, ignored paths, and
 sensitive names are rejected.
 
+### Compare product intent with the implementation
+
+For a lightweight product contract, add `product.seed.yaml` at the repository
+root. VibeWiki compares each expected route, API, test, file, function, module,
+symbol, entity, or package with deterministic scan facts and exposes the result
+in `.vibewiki/intent.json`, `/api/intent`, and the viewer's Unknowns view. Missing
+expectations become explicit `intent_gap` findings rather than LLM guesses.
+Start from [`docs/product.seed.example.yaml`](docs/product.seed.example.yaml).
+
 The planned pipeline is:
 
 ```text
@@ -180,6 +189,7 @@ Planned evidence states include `verified`, `inferred`, `unknown`, and `stale`. 
 .
 ├── docs/
 │   ├── assets/vibewiki-hero.png
+│   ├── product.seed.example.yaml
 │   └── product-development-plan.md
 ├── scripts/
 │   └── verify_preview.py
@@ -219,9 +229,9 @@ use the presentation fixture when running under `vibewiki serve`.
 2. Add file discovery and deterministic Next.js/TypeScript facts.
 3. Persist sources, nodes, edges, claims, and evidence in SQLite.
 4. Generate Markdown/Mermaid wiki pages and replace demo data in the viewer.
-5. Add product-seed intent comparison and explicit implementation gaps.
-6. Add bounded local Q&A through an Ollama provider interface.
-7. Add Git history and, after the MVP is stable, Playwright runtime evidence.
+5. Add Git history/staleness and scan-to-scan diffs.
+6. Add bounded runtime observation evidence with safe read-only defaults.
+7. Package clean installs and CI gates for external users.
 
 See the detailed phase plan in [`docs/product-development-plan.md`](docs/product-development-plan.md).
 

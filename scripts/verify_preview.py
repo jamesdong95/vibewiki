@@ -17,6 +17,7 @@ REQUIRED_FILES = (
     "docs/assets/vibewiki-hero.png",
     "docs/assets/vibewiki-product-preview.jpg",
     "docs/product-development-plan.md",
+    "docs/product.seed.example.yaml",
 )
 REQUIRED_HTML_MARKERS = (
     "<title>VibeWiki",

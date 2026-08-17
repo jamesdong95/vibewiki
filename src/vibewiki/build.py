@@ -13,6 +13,7 @@ from .config import MANIFEST_DIRECTORY
 from .discovery.hashing import hash_file
 from .discovery.manifest import canonical_json
 from .errors import ErrorCode, VibeWikiError
+from .intent import compare_product_intent
 
 
 def _load_manifest(root: Path) -> dict[str, Any]:
@@ -68,7 +69,7 @@ def _write_wiki(output: Path, artifact: dict[str, Any]) -> list[str]:
     facts = artifact["facts"]
     relations = artifact["relations"] + artifact.get("module_edges", [])
     relations += artifact.get("package_edges", []) + artifact.get("symbol_edges", [])
-    unknowns = artifact["unknowns"]
+    unknowns = artifact["unknowns"] + artifact.get("intent", {}).get("gaps", [])
     rows = [
         "# VibeWiki",
         "",
@@ -264,14 +265,18 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
         **build_module_graph(root, manifest, inventory),
         "inventory": inventory,
     }
+    intent = compare_product_intent(root, graph_artifact)
+    graph_artifact["intent"] = intent
     output = root / MANIFEST_DIRECTORY
     write_json(output / "facts.json", facts_artifact)
     claims = {
         "schema_version": SCHEMA_VERSION,
         "claims": [],
         "unknowns": facts_artifact["unknowns"],
+        "intent": intent,
     }
     write_json(output / "claims.json", claims)
+    write_json(output / "intent.json", intent)
     sources = []
     for item in manifest["files"]:
         sources.append(
@@ -306,6 +311,7 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
             "sources.json",
             "graph.json",
             "graph.db",
+            "intent.json",
         )
     ] + wiki_paths
     return {

@@ -49,11 +49,12 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   Flow, Impact và Unknowns modes; câu trả lời Markdown được render an toàn.
 - Export thật qua nút/command palette và `/api/export`: ZIP wiki, Mermaid, graph,
   evidence manifests và unknowns, không chứa source files.
+- Product intent seed tùy chọn qua `product.seed.yaml`, comparator deterministic,
+  `.vibewiki/intent.json`, `/api/intent`, và Unknowns intent gaps trong viewer.
 - README, changelog, screenshot live preview, release metadata và draft PR đã có.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
-- Product seed/comparator để trả lời intent nào đã implement và gap nào chưa.
 - Git history/staleness để biết node/evidence thay đổi từ commit nào.
 - Scan history trong một workspace và diff giữa hai lần scan.
 - Runtime observer read-only với route/network/console evidence tách khỏi static facts.
@@ -61,10 +62,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 
 ### Thứ tự implementation tự động tiếp theo
 
-1. **Intent gap:** thêm `product.seed.yaml`, comparator và UI Unknowns có expected-vs-observed.
-2. **History:** lưu scan run metadata, changed paths và stale evidence theo Git commit.
-3. **Runtime:** `vibewiki observe` read-only, không login/form side effect mặc định.
-4. **Distribution:** clean install, CI macOS/Linux, quickstart fixture và release gate.
+1. **History:** lưu scan run metadata, changed paths và stale evidence theo Git commit.
+2. **Runtime:** `vibewiki observe` read-only, không login/form side effect mặc định.
+3. **Distribution:** clean install, CI macOS/Linux, quickstart fixture và release gate.
 
 ### Giả định để triển khai
 
@@ -93,6 +93,7 @@ Sau khi chạy scan/build, VibeWiki tạo:
 ├── manifest.json
 ├── claims.json
 ├── sources.json
+├── intent.json
 └── wiki/
     ├── index.md
     ├── routes.md
@@ -430,7 +431,7 @@ Unknowns
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.1-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.2-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
