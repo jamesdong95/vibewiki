@@ -421,6 +421,13 @@ Scan history inspector; export kèm history và staleness snapshot.
 
 **Gate:** fixture Git nhỏ chứng minh source đổi sẽ đánh dấu claim liên quan stale và re-scan cập nhật đúng node.
 
+**Runtime baseline đã triển khai trong 0.1.4-preview:** `vibewiki observe`
+và `/api/observe` chỉ thực hiện bounded same-origin `GET` trên loopback mặc
+định; `/api/runtime` và `runtime.json` lưu route/network metadata, timestamp,
+và unknown rõ ràng cho JavaScript/console/side effects chưa được chạy. Viewer
+có nút Observe runtime và export chứa runtime artifact. Browser adapter có
+thể được bổ sung sau khi có approval/flow contract riêng.
+
 ### Phase 9 — Runtime explorer bằng Playwright
 
 **Mục tiêu:** bổ sung observed behavior cho phần static analysis không thể chứng minh.
@@ -437,7 +444,7 @@ Scan history inspector; export kèm history và staleness snapshot.
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.3-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.4-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 

@@ -538,6 +538,7 @@
             <span class="browse-hint">JS/TS · Python · Go · Rust · config/docs</span>
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
           </div>
+          <button class="text-button" type="button" id="observe-button" title="Observe a local app with safe GET requests">Observe runtime</button>
           <button class="text-button" type="button" id="llm-settings-button" title="Configure local LLM">LLM setup</button>
           <button class="text-button" type="button" id="export-button" title="Download the current wiki export">Export wiki</button>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
@@ -836,6 +837,7 @@
 
     let toastTimer;
     let zoom = 1;
+    let runtimeObservationLabel = '';
 
     function showToast(message) {
       els.toastText.textContent = message;
@@ -1186,9 +1188,30 @@
         showToast(error.message || 'Không thể export wiki hiện tại.');
       }
     }
+    async function observeRuntime() {
+      const fallback = window.location.origin;
+      const target = window.prompt('Local app URL to observe (GET only):', fallback);
+      if (!target) return;
+      showToast('Runtime observation started…');
+      try {
+        const response = await fetch('/api/observe', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({target: target.trim()})
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Runtime observation failed.');
+        const counts = result.counts || {};
+        showToast(`Runtime observed: ${counts.routes || 0} routes · ${counts.network || 0} GET requests.`);
+        setTimeout(() => window.location.reload(), 1400);
+      } catch (error) {
+        showToast(error.message || 'Không thể observe runtime local.');
+      }
+    }
     document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
     document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
     document.getElementById('export-button').addEventListener('click', exportWiki);
+    document.getElementById('observe-button').addEventListener('click', observeRuntime);
 
     const llmModal = document.getElementById('llm-modal');
     const llmForm = document.getElementById('llm-form');
@@ -1201,7 +1224,9 @@
     function applyLLMStatus(status) {
       if (!status) return;
       const runtime = document.getElementById('runtime-status');
-      if (status.configured) runtime.textContent = `${status.provider} · ${status.model}`;
+      if (runtimeObservationLabel) {
+        runtime.textContent = runtimeObservationLabel;
+      } else if (status.configured) runtime.textContent = `${status.provider} · ${status.model}`;
       else if (status.provider === 'error') runtime.textContent = 'LLM config · check setup';
       else runtime.textContent = 'Offline · evidence only';
     }
@@ -1313,11 +1338,12 @@
         const response = await fetch('/api/summary', { cache: 'no-store' });
         if (!response.ok) return;
         const summary = await response.json();
-        const [nodeResponse, edgeResponse, historyResponse, staleResponse] = await Promise.all([
+        const [nodeResponse, edgeResponse, historyResponse, staleResponse, runtimeResponse] = await Promise.all([
           fetch('/api/nodes', { cache: 'no-store' }),
           fetch('/api/edges', { cache: 'no-store' }),
           fetch('/api/history', { cache: 'no-store' }),
-          fetch('/api/stale', { cache: 'no-store' })
+          fetch('/api/stale', { cache: 'no-store' }),
+          fetch('/api/runtime', { cache: 'no-store' })
         ]);
         if (!nodeResponse.ok || !edgeResponse.ok) return;
         const nodePayload = await nodeResponse.json();
@@ -1328,6 +1354,7 @@
         const intent = summary.intent || { configured: false, gaps: 0 };
         const historyPayload = historyResponse.ok ? await historyResponse.json() : { runs: [] };
         const stalePayload = staleResponse.ok ? await staleResponse.json() : { files: [] };
+        const runtimePayload = runtimeResponse.ok ? await runtimeResponse.json() : { routes: [], network: [], unknowns: [] };
         const historyRuns = historyPayload.runs || [];
         const staleSources = stalePayload.files || [];
         const nodeById = new Map(nodes.map(node => [node.id, node]));
@@ -1372,14 +1399,17 @@
         setText('sidebar-evidence-count', evidenceCount);
         setText('sidebar-unknown-count', pad(summary.counts.unknowns));
         setText('sidebar-scan-count', pad(historyRuns.length));
-        setText('runtime-status', 'Offline · evidence only');
+        runtimeObservationLabel = runtimePayload.routes?.length
+          ? `Observed · ${runtimePayload.routes.length} route${runtimePayload.routes.length === 1 ? '' : 's'}`
+          : '';
+        setText('runtime-status', runtimeObservationLabel || 'Offline · evidence only');
         refreshLLMStatus();
         setText('graph-caption-meta', `${nodes.length} nodes · ${edges.length} edges · current build`);
         setText('command-ask-meta', `${evidenceCount} source-linked evidence items`);
         setText('command-unknowns-meta', intent.configured
           ? `${intent.gaps} intent gaps · ${summary.counts.unknowns} total findings`
           : `${summary.counts.unknowns} findings need human context`);
-        setText('command-scan-meta', `${historyRuns.length} scan runs · ${summary.counts.scanned_files} files`);
+        setText('command-scan-meta', `${historyRuns.length} scan runs · ${summary.counts.scanned_files} files · ${runtimePayload.routes?.length || 0} runtime routes`);
         setText('command-export-meta', 'Markdown + Mermaid files in .vibewiki/wiki');
 
         const canvas = document.getElementById('graph-canvas');

@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `vibewiki history`, `/api/history`, and a real Scan history viewer inspector.
 - Post-build hash checks through `/api/stale`, stale node/edge/source evidence, and export snapshots.
 
+## [0.1.4-preview] - 2026-08-18
+
+### Added
+
+- Safe, read-only runtime observation through `vibewiki observe`, `/api/observe`,
+  and `/api/runtime`.
+- Viewer action **Observe runtime** with loopback-first GET-only behavior.
+- `runtime.json` in `.vibewiki` and export archives, including route/network
+  metadata and explicit unknowns for JavaScript side effects not executed.
+- Release screenshot showing the live evidence graph and Scan history workspace.
+
 ## [0.1.2-preview] - 2026-08-17
 
 ### Added

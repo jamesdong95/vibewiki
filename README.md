@@ -1,6 +1,6 @@
 # VibeWiki
 
-**Evidence-based product reverse engineering for AI-built codebases.**
+**Evidence-based product reverse engineering for AI-built codebases — from source scan to runtime evidence.**
 
 <p align="center">
   <img src="docs/assets/vibewiki-hero.png" alt="A software product represented as a local evidence graph connecting user flows, code, data, and tests" width="100%">
@@ -63,6 +63,22 @@ The prototype demonstrates:
   artifacts without bundling source files.
 - Explicit confidence, unknowns, and local-runtime status.
 - A local-first visual language that does not require a hosted backend.
+
+Runtime observation is available as an explicit, safe baseline. Start a local
+application, then run:
+
+```bash
+uv run vibewiki observe http://127.0.0.1:3000 --repository /path/to/repo
+```
+
+The observer follows same-origin document routes with bounded `GET` requests,
+never submits forms, and refuses remote hosts unless `--allow-network` is
+passed explicitly. The viewer's **Observe runtime** button uses the same
+loopback-only default. Results are written to `.vibewiki/runtime.json`, shown
+through `/api/runtime`, and included in the source-free export. JavaScript
+execution, console capture, screenshots, authentication, and side-effecting
+flows remain explicit unknowns until a future approved browser adapter is
+configured.
 
 ## Product direction
 
@@ -236,7 +252,7 @@ use the presentation fixture when running under `vibewiki serve`.
 2. Add file discovery and deterministic Next.js/TypeScript facts.
 3. Persist sources, nodes, edges, claims, and evidence in SQLite.
 4. Generate Markdown/Mermaid wiki pages and replace demo data in the viewer.
-5. Add bounded runtime observation evidence with safe read-only defaults.
+5. Add bounded runtime observation evidence with safe read-only defaults. *(implemented in 0.1.4-preview)*
 6. Package clean installs and CI gates for external users.
 7. Add broader language/framework adapters behind fixture-backed gates.
 

@@ -11,6 +11,7 @@ from .build import build_repository
 from .discovery.manifest import canonical_json
 from .errors import VibeWikiError, format_error
 from .history import history_for_subject
+from .observe import observe_repository
 from .scan import scan_repository
 from .serve import serve_repository
 
@@ -47,6 +48,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     history_parser.add_argument("repository", help="repository directory")
     history_parser.add_argument("subject", help="relative path or graph subject")
+    observe_parser = commands.add_parser(
+        "observe",
+        help="observe local HTTP routes with read-only GET requests",
+    )
+    observe_parser.add_argument("target", help="http(s) application URL")
+    observe_parser.add_argument(
+        "--repository",
+        default=".",
+        help="workspace where runtime.json is written (default: current directory)",
+    )
+    observe_parser.add_argument(
+        "--allow-network",
+        action="store_true",
+        help="allow explicitly remote same-origin targets",
+    )
+    observe_parser.add_argument(
+        "--max-routes",
+        default=24,
+        type=int,
+        help="maximum same-origin document routes to GET",
+    )
     serve_parser = commands.add_parser(
         "serve",
         help="serve the built local viewer on loopback",
@@ -85,6 +107,18 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(
             canonical_json(
                 history_for_subject(arguments.repository, arguments.subject)
+            ),
+            end="",
+        )
+    elif arguments.command == "observe":
+        print(
+            canonical_json(
+                observe_repository(
+                    arguments.repository,
+                    arguments.target,
+                    allow_network=arguments.allow_network,
+                    max_routes=arguments.max_routes,
+                )
             ),
             end="",
         )

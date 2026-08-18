@@ -30,6 +30,7 @@ from .llm import (
     configure_llm,
     llm_status,
 )
+from .observe import observe_repository
 
 
 def _artifact(root: Path) -> dict[str, Any]:
@@ -49,6 +50,28 @@ def _artifact(root: Path) -> dict[str, Any]:
     return data
 
 
+def _runtime(root: Path) -> dict[str, Any]:
+    path = root / MANIFEST_DIRECTORY / "runtime.json"
+    if not path.is_file():
+        return {
+            "configured": False,
+            "console": [],
+            "network": [],
+            "routes": [],
+            "screenshots": [],
+            "unknowns": [],
+        }
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT, "runtime artifact is invalid"
+        ) from error
+    if not isinstance(value, dict):
+        raise VibeWikiError(ErrorCode.INVALID_OUTPUT, "runtime artifact is invalid")
+    return {"configured": True, **value}
+
+
 def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
     """Create a safe, source-free ZIP of the generated VibeWiki artifacts."""
     output = root / MANIFEST_DIRECTORY
@@ -61,6 +84,7 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
         "graph.db",
         "intent.json",
         "history.json",
+        "runtime.json",
     )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -335,7 +359,8 @@ def api_payload(
     edges = _artifact_edges(artifact, stale_by_path)
     params = params or {}
     intent = compare_product_intent(root, artifact)
-    unknowns = artifact["unknowns"] + intent["gaps"]
+    runtime = _runtime(root)
+    unknowns = artifact["unknowns"] + intent["gaps"] + runtime.get("unknowns", [])
     if path == "/api/summary":
         return {
             "project": artifact["fixture"],
@@ -363,6 +388,13 @@ def api_payload(
                 "configured": intent["configured"],
                 **intent["counts"],
             },
+            "runtime": {
+                "configured": runtime["configured"],
+                "routes": len(runtime.get("routes", [])),
+                "network": len(runtime.get("network", [])),
+                "console_errors": len(runtime.get("console", [])),
+                "observed_at": runtime.get("observed_at"),
+            },
         }
     if path == "/api/nodes":
         return {"nodes": nodes, "unknowns": unknowns}
@@ -373,6 +405,8 @@ def api_payload(
             "files": stale,
             "status": "stale" if stale else "current",
         }
+    if path == "/api/runtime":
+        return runtime
     if path == "/api/history":
         return {**load_history(root), "current_staleness": stale}
     if path == "/api/history/subject":
@@ -505,6 +539,44 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/observe":
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "runtime observation payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "runtime observation payload is invalid",
+                        )
+                    target = payload.get("target")
+                    if not isinstance(target, str) or not target.strip():
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "runtime observation target is required",
+                        )
+                    result = observe_repository(
+                        self.server.workspace_root,
+                        target.strip(),
+                    )
+                    self._write_json(200, result)
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/llm/config":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))

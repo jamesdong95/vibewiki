@@ -88,6 +88,20 @@ def test_serve_exposes_real_artifact_apis(
         with urlopen(f"{base}/api/export") as response:
             export_headers = dict(response.headers)
             export_bytes = response.read()
+        observe_request = Request(
+            f"{base}/api/observe",
+            data=json.dumps({"target": base}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(observe_request) as response:
+            observed = json.load(response)
+        with urlopen(f"{base}/api/runtime") as response:
+            runtime = json.load(response)
+        with urlopen(f"{base}/api/summary") as response:
+            observed_summary = json.load(response)
+        with urlopen(f"{base}/api/export") as response:
+            export_bytes_with_runtime = response.read()
         config_request = Request(
             f"{base}/api/llm/config",
             data=json.dumps(
@@ -160,6 +174,23 @@ def test_serve_exposes_real_artifact_apis(
     assert summary["staleness"] == {"status": "current", "files": 0}
     assert len(history["runs"]) == 1
     assert staleness == {"files": [], "status": "current"}
+    assert observed["counts"] == {
+        "console_errors": 0,
+        "network": 1,
+        "routes": 1,
+        "unknowns": 1,
+    }
+    assert runtime["routes"][0]["path"] == "/"
+    assert runtime["unknowns"][0]["subject"] == "runtime:javascript-and-side-effects"
+    assert observed_summary["runtime"] == {
+        "configured": True,
+        "routes": 1,
+        "network": 1,
+        "console_errors": 0,
+        "observed_at": runtime["observed_at"],
+    }
+    with zipfile.ZipFile(BytesIO(export_bytes_with_runtime)) as exported:
+        assert "vibewiki-export/runtime.json" in set(exported.namelist())
 
 
 def test_serve_marks_source_evidence_stale_after_build(tmp_path: Path) -> None:
