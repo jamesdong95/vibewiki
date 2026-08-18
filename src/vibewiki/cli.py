@@ -10,6 +10,7 @@ from . import ANALYZER_VERSION, SCHEMA_VERSION, __version__
 from .build import build_repository
 from .discovery.manifest import canonical_json
 from .errors import VibeWikiError, format_error
+from .history import history_for_subject
 from .scan import scan_repository
 from .serve import serve_repository
 
@@ -40,6 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="build deterministic facts and wiki artifacts from a scan",
     )
     build_parser.add_argument("repository", help="repository directory to build")
+    history_parser = commands.add_parser(
+        "history",
+        help="show scan runs touching a path or graph subject",
+    )
+    history_parser.add_argument("repository", help="repository directory")
+    history_parser.add_argument("subject", help="relative path or graph subject")
     serve_parser = commands.add_parser(
         "serve",
         help="serve the built local viewer on loopback",
@@ -74,6 +81,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(canonical_json(summary), end="")
     elif arguments.command == "build":
         print(canonical_json(build_repository(arguments.repository)), end="")
+    elif arguments.command == "history":
+        print(
+            canonical_json(
+                history_for_subject(arguments.repository, arguments.subject)
+            ),
+            end="",
+        )
     elif arguments.command == "serve":
         serve_repository(
             arguments.repository,

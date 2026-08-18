@@ -94,8 +94,10 @@ current question is sent to that provider; source import and graph generation
 remain local.
 
 Every build also exposes `/api/files`, `/api/packages`, `/api/modules`,
-`/api/symbols`, `/api/source`, `/api/llm/status`, and `/api/ask` for bounded
-local evidence inspection and optional grounded discussion.
+`/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/llm/status`,
+and `/api/ask` for bounded local evidence inspection and optional grounded
+discussion. Use `vibewiki history /path/to/repo <path-or-node>` for the same
+scan history from the CLI.
 Package, symbol, and call edges are deterministic; source evidence is served
 by relative path and line range only. Traversal, symlinks, ignored paths, and
 sensitive names are rejected.
@@ -108,6 +110,11 @@ symbol, entity, or package with deterministic scan facts and exposes the result
 in `.vibewiki/intent.json`, `/api/intent`, and the viewer's Unknowns view. Missing
 expectations become explicit `intent_gap` findings rather than LLM guesses.
 Start from [`docs/product.seed.example.yaml`](docs/product.seed.example.yaml).
+
+Every scan records a bounded local history in `.vibewiki/history.json`. If a
+source file changes after the last build, the server compares its current hash
+with the built inventory and marks affected node/edge evidence as `stale`; it
+does not pretend the old line reference is current.
 
 The planned pipeline is:
 
@@ -229,9 +236,9 @@ use the presentation fixture when running under `vibewiki serve`.
 2. Add file discovery and deterministic Next.js/TypeScript facts.
 3. Persist sources, nodes, edges, claims, and evidence in SQLite.
 4. Generate Markdown/Mermaid wiki pages and replace demo data in the viewer.
-5. Add Git history/staleness and scan-to-scan diffs.
-6. Add bounded runtime observation evidence with safe read-only defaults.
-7. Package clean installs and CI gates for external users.
+5. Add bounded runtime observation evidence with safe read-only defaults.
+6. Package clean installs and CI gates for external users.
+7. Add broader language/framework adapters behind fixture-backed gates.
 
 See the detailed phase plan in [`docs/product-development-plan.md`](docs/product-development-plan.md).
 

@@ -25,8 +25,9 @@ def test_scan_writes_stable_manifest_and_inventory(tmp_path: Path) -> None:
         for path in (tmp_path / ".vibewiki").iterdir()
     )
     assert output_files == [
+        ".vibewiki/history.json",
         ".vibewiki/inventory.json",
-        ".vibewiki/manifest.json"
+        ".vibewiki/manifest.json",
     ]
     assert json.loads(first_bytes)["files"][0]["path"] == "app/page.tsx"
     assert first["counts"] == {

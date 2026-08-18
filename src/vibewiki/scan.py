@@ -13,6 +13,7 @@ from .discovery.hashing import hash_file
 from .discovery.inventory import discover_inventory, write_inventory
 from .discovery.manifest import ManifestFile, build_manifest, write_manifest
 from .errors import ErrorCode, VibeWikiError
+from .history import previous_manifest, record_scan
 from .offline import require_offline
 
 
@@ -150,6 +151,7 @@ def scan_repository(
 
     require_offline(offline)
     root = _repository_root(repository)
+    before = previous_manifest(root)
     discovered = discover_files(root, include_generic=allow_generic)
     inventory = discover_inventory(root)
     has_schema = _has_prisma_schema(root)
@@ -195,6 +197,7 @@ def scan_repository(
     manifest = build_manifest(_manifest_files(discovered))
     output = write_manifest(root, manifest)
     write_inventory(root, inventory)
+    record_scan(root, manifest, before)
     return {
         "command": "scan",
         "counts": {
@@ -203,7 +206,7 @@ def scan_repository(
             "scanned_files": len(discovered),
             "unknowns": 0,
         },
-        "outputs": [output.as_posix()],
+        "outputs": [output.as_posix(), ".vibewiki/history.json"],
         "schema_version": SCHEMA_VERSION,
         "status": "ok",
     }

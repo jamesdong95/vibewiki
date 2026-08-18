@@ -28,7 +28,7 @@ def test_cli_scan_emits_relative_deterministic_summary(
             "scanned_files": 1,
             "unknowns": 0,
         },
-        "outputs": [".vibewiki/manifest.json"],
+        "outputs": [".vibewiki/manifest.json", ".vibewiki/history.json"],
         "schema_version": 1,
         "status": "ok",
     }
@@ -51,6 +51,22 @@ def test_cli_scan_uses_stable_unsupported_stack_exit_code(
         "use an App Router or generic source tree\n"
     )
     assert not (tmp_path / ".vibewiki").exists()
+
+
+def test_cli_history_returns_runs_for_a_source_path(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app/page.tsx").write_text("export default function Page() {}\n")
+
+    assert main(["scan", str(tmp_path)]) == 0
+    capsys.readouterr()
+    assert main(["history", str(tmp_path), "app/page.tsx"]) == 0
+    history = json.loads(capsys.readouterr().out)
+
+    assert history["paths"] == ["app/page.tsx"]
+    assert len(history["runs"]) == 1
 
 
 def test_cli_scan_redacts_missing_absolute_repository_path(

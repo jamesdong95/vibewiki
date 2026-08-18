@@ -34,7 +34,7 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 
 ## 2. Baseline hiện tại và kế hoạch tự động tiếp theo
 
-> Cập nhật 2026-08-17 từ worktree và live preview hiện tại. Mỗi phase chỉ được
+> Cập nhật 2026-08-18 từ worktree và live preview hiện tại. Mỗi phase chỉ được
 > gọi hoàn thành khi có artifact, test và smoke evidence tương ứng.
 
 ### Đã triển khai
@@ -51,20 +51,21 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   evidence manifests và unknowns, không chứa source files.
 - Product intent seed tùy chọn qua `product.seed.yaml`, comparator deterministic,
   `.vibewiki/intent.json`, `/api/intent`, và Unknowns intent gaps trong viewer.
+- Scan history local qua `.vibewiki/history.json`, `vibewiki history`,
+  `/api/history`, `/api/stale`; changed/removed source được đánh dấu stale trên
+  node, edge, source và export runtime.
 - README, changelog, screenshot live preview, release metadata và draft PR đã có.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
-- Git history/staleness để biết node/evidence thay đổi từ commit nào.
-- Scan history trong một workspace và diff giữa hai lần scan.
 - Runtime observer read-only với route/network/console evidence tách khỏi static facts.
 - Packaging/CI/cài đặt sạch cho người dùng ngoài môi trường phát triển.
 
 ### Thứ tự implementation tự động tiếp theo
 
-1. **History:** lưu scan run metadata, changed paths và stale evidence theo Git commit.
-2. **Runtime:** `vibewiki observe` read-only, không login/form side effect mặc định.
-3. **Distribution:** clean install, CI macOS/Linux, quickstart fixture và release gate.
+1. **Runtime:** `vibewiki observe` read-only, không login/form side effect mặc định.
+2. **Distribution:** clean install, CI macOS/Linux, quickstart fixture và release gate.
+3. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
 
 ### Giả định để triển khai
 
@@ -413,6 +414,11 @@ Unknowns
 - Stale evidence khi source thay đổi sau lần scan/build.
 - Wiki hiển thị last observed commit, không suy luận business reason từ commit message nếu không đủ evidence.
 
+**Implementation slice hiện tại:** `history.json` lưu tối đa 50 scan runs với
+commit metadata và `added/changed/removed` paths; `/api/history` và CLI query
+theo path/subject; `/api/stale` đối chiếu hash hiện tại sau build; viewer có
+Scan history inspector; export kèm history và staleness snapshot.
+
 **Gate:** fixture Git nhỏ chứng minh source đổi sẽ đánh dấu claim liên quan stale và re-scan cập nhật đúng node.
 
 ### Phase 9 — Runtime explorer bằng Playwright
@@ -431,7 +437,7 @@ Unknowns
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.2-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.3-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
@@ -634,6 +640,7 @@ MVP chỉ được gọi là hoàn thành khi tất cả điều kiện sau đú
 7. Sinh wiki/Mermaid không LLM.
 8. Kết nối local API với prototype UI và thay mock data bằng fixture data.
 9. Chạy MVP gate với verifier độc lập.
-10. Chỉ sau gate mới thêm product seed, Ollama, Git history và Playwright theo thứ tự ưu tiên người dùng.
+10. Chỉ sau gate mới thêm runtime observer và adapter coverage; product seed,
+    Ollama và history đã có implementation slice và phải được giữ regression-tested.
 
 **Nguyên tắc release:** không bắt đầu bằng Q&A. Nếu graph và evidence core chưa đáng tin, LLM chỉ làm sản phẩm trông thông minh hơn nhưng khó kiểm chứng hơn.

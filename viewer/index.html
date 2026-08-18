@@ -332,6 +332,7 @@
     .node-confidence { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); }
     .node-confidence.inferred { background: var(--orange); }
     .node-confidence.unknown { background: var(--muted-2); }
+    .node-confidence.stale { background: var(--orange); }
     .node-title { color: var(--ink); font-size: 12px; font-weight: 650; line-height: 1.22; }
     .node-meta { overflow: hidden; margin-top: 7px; color: var(--muted-2); font-family: var(--mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1312,9 +1313,11 @@
         const response = await fetch('/api/summary', { cache: 'no-store' });
         if (!response.ok) return;
         const summary = await response.json();
-        const [nodeResponse, edgeResponse] = await Promise.all([
+        const [nodeResponse, edgeResponse, historyResponse, staleResponse] = await Promise.all([
           fetch('/api/nodes', { cache: 'no-store' }),
-          fetch('/api/edges', { cache: 'no-store' })
+          fetch('/api/edges', { cache: 'no-store' }),
+          fetch('/api/history', { cache: 'no-store' }),
+          fetch('/api/stale', { cache: 'no-store' })
         ]);
         if (!nodeResponse.ok || !edgeResponse.ok) return;
         const nodePayload = await nodeResponse.json();
@@ -1323,6 +1326,10 @@
         const edges = edgePayload.edges || [];
         const unknowns = nodePayload.unknowns || [];
         const intent = summary.intent || { configured: false, gaps: 0 };
+        const historyPayload = historyResponse.ok ? await historyResponse.json() : { runs: [] };
+        const stalePayload = staleResponse.ok ? await staleResponse.json() : { files: [] };
+        const historyRuns = historyPayload.runs || [];
+        const staleSources = stalePayload.files || [];
         const nodeById = new Map(nodes.map(node => [node.id, node]));
         const realData = new Map(nodes.map(node => [node.id, {
           title: node.title,
@@ -1355,14 +1362,16 @@
         setText('stat-facts-trend', `${summary.counts.scanned_files} source files`);
         setText('stat-evidence-trend', 'source-linked');
         setText('stat-relations-trend', 'verified edges');
-        setText('stat-unknowns-trend', intent.configured ? `${intent.gaps} intent gaps` : 'review queue');
+        setText('stat-unknowns-trend', staleSources.length
+          ? `${staleSources.length} stale sources`
+          : (intent.configured ? `${intent.gaps} intent gaps` : 'review queue'));
         setText('sidebar-product-count', summary.counts.facts);
         setText('sidebar-flow-count', pad(routeCount));
         setText('sidebar-architecture-count', pad(architectureCount));
         setText('sidebar-data-count', pad(kindCount('data_entity')));
         setText('sidebar-evidence-count', evidenceCount);
         setText('sidebar-unknown-count', pad(summary.counts.unknowns));
-        setText('sidebar-scan-count', '01');
+        setText('sidebar-scan-count', pad(historyRuns.length));
         setText('runtime-status', 'Offline · evidence only');
         refreshLLMStatus();
         setText('graph-caption-meta', `${nodes.length} nodes · ${edges.length} edges · current build`);
@@ -1370,7 +1379,7 @@
         setText('command-unknowns-meta', intent.configured
           ? `${intent.gaps} intent gaps · ${summary.counts.unknowns} total findings`
           : `${summary.counts.unknowns} findings need human context`);
-        setText('command-scan-meta', `${summary.counts.scanned_files} files in current build`);
+        setText('command-scan-meta', `${historyRuns.length} scan runs · ${summary.counts.scanned_files} files`);
         setText('command-export-meta', 'Markdown + Mermaid files in .vibewiki/wiki');
 
         const canvas = document.getElementById('graph-canvas');
@@ -1383,7 +1392,7 @@
           'Data model': node => node.kind === 'data_entity',
           Evidence: node => (node.evidence || []).length > 0,
           'Unknowns': () => false,
-          'Scan history': () => true
+          'Scan history': () => false
         };
         const tabFilters = {
           Overview: node => true,
@@ -1425,6 +1434,26 @@
           els.connected.innerHTML = intentGap
             ? `<div class="impact-row"><span>Expected outcome</span><span>${escapeHtml(expected.value)}</span></div>`
             : (unknown ? '<div class="empty-state">Review the source evidence before marking this finding resolved.</div>' : '<div class="empty-state">Unknown queue is empty.</div>');
+          bindToastTargets();
+        }
+
+        function renderHistoryInspector() {
+          const latest = historyRuns[0];
+          const commit = latest?.commit?.commit || 'no Git commit detected';
+          const changes = latest ? Object.entries(latest.changes || {})
+            .flatMap(([kind, paths]) => paths.map(path => ({kind, path}))) : [];
+          nodeList().forEach(item => item.classList.remove('selected'));
+          els.title.textContent = latest ? `${historyRuns.length} scan runs` : 'No scan history';
+          els.copy.textContent = latest
+            ? `Latest scan ${latest.scanned_at} · ${latest.files} files · ${commit}`
+            : 'Run a local scan to start the repository history.';
+          els.confidenceText.textContent = staleSources.length ? 'stale' : 'current';
+          els.badge.classList.remove('inferred');
+          els.badge.querySelector('.legend-dot').className = `legend-dot ${staleSources.length ? 'stale' : 'verified'}`;
+          els.evidence.innerHTML = changes.length ? changes.slice(0, 40).map(item => `<div class="evidence-row" data-toast="${escapeHtml(item.kind)}: ${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">latest scan change</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No file changes in the latest scan.</div>';
+          els.connected.innerHTML = staleSources.length
+            ? staleSources.map(item => `<div class="impact-row"><span>${escapeHtml(item.path)}</span><span>stale</span></div>`).join('')
+            : historyRuns.slice(0, 6).map(run => `<div class="impact-row"><span>${escapeHtml(run.scanned_at || run.run_id)}</span><span>${run.files} files</span></div>`).join('') || '<div class="empty-state">No scan runs yet.</div>';
           bindToastTargets();
         }
 
@@ -1487,9 +1516,14 @@
           setText('page-title', state.view === 'Product map' ? 'See what your app actually does.' : `${state.view} is ready to explore.`);
           document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === state.view));
           document.querySelectorAll('.workspace-tab').forEach(tab => tab.classList.toggle('active', (tab.dataset.tab || tab.textContent) === state.tab));
-          const caption = state.view === 'Unknowns' || state.tab === 'Unverified' ? `${unknowns.length} unresolved findings · current build` : `${displayNodes.length} nodes · ${edges.filter(edge => displayNodes.some(node => node.id === edge.source) && displayNodes.some(node => node.id === edge.target)).length} edges · current view`;
+          const caption = state.view === 'Unknowns' || state.tab === 'Unverified'
+            ? `${unknowns.length} unresolved findings · current build`
+            : state.view === 'Scan history'
+              ? `${historyRuns.length} scan runs · ${staleSources.length} stale sources`
+              : `${displayNodes.length} nodes · ${edges.filter(edge => displayNodes.some(node => node.id === edge.source) && displayNodes.some(node => node.id === edge.target)).length} edges · current view`;
           setText('graph-caption-meta', caption);
-          if (state.view === 'Unknowns' || (state.tab === 'Unverified' && !displayNodes.length)) renderUnknownInspector();
+          if (state.view === 'Scan history') renderHistoryInspector();
+          else if (state.view === 'Unknowns' || (state.tab === 'Unverified' && !displayNodes.length)) renderUnknownInspector();
           else if (displayNodes.length) renderRealInspector(displayNodes.some(node => node.id === state.selected) ? state.selected : displayNodes[0].id);
           else renderUnknownInspector();
         }

@@ -15,6 +15,7 @@ from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .config import MANIFEST_DIRECTORY
 from .discovery.manifest import canonical_json
 from .errors import ErrorCode, VibeWikiError
+from .history import history_for_subject, load_history, stale_files
 from .importer import (
     MAX_IMPORT_BYTES,
     ImportedWorkspace,
@@ -59,6 +60,7 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
         "graph.json",
         "graph.db",
         "intent.json",
+        "history.json",
     )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -66,8 +68,8 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
             "vibewiki-export/README.md",
             "# VibeWiki export\n\n"
             "Generated from the local deterministic scan. This archive contains "
-            "graph, evidence, wiki, and unknowns artifacts; source files are not "
-            "included.\n",
+            "graph, evidence, wiki, unknowns, scan history, and staleness "
+            "artifacts; source files are not included.\n",
         )
         for name in files:
             path = output / name
@@ -79,6 +81,10 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
                 if path.is_file():
                     relative = path.relative_to(output).as_posix()
                     archive.write(path, f"vibewiki-export/{relative}")
+        archive.writestr(
+            "vibewiki-export/staleness.json",
+            canonical_json({"files": stale_files(root, artifact)}),
+        )
     project = str(artifact.get("fixture", "workspace"))
     safe_project = "".join(
         character if character.isalnum() or character in "-_" else "-"
@@ -109,15 +115,39 @@ def _node(fact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
-    nodes = [_node(fact) for fact in artifact["facts"]]
+def _mark_stale(
+    node: dict[str, Any], stale_by_path: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    if not stale_by_path:
+        return node
+    evidence = []
+    stale = False
+    for item in node.get("evidence", []):
+        detail = stale_by_path.get(item.get("path"))
+        if detail is None:
+            evidence.append(item)
+            continue
+        stale = True
+        evidence.append({**item, "stale_reason": detail["reason"], "status": "stale"})
+    if not stale:
+        return node
+    return {**node, "evidence": evidence, "status": "stale"}
+
+
+def _artifact_nodes(
+    artifact: dict[str, Any],
+    stale_by_path: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    stale_by_path = stale_by_path or {}
+    nodes = [_mark_stale(_node(fact), stale_by_path) for fact in artifact["facts"]]
     existing = {node["id"] for node in nodes}
     for module in artifact.get("modules", []):
         if module["id"] in existing:
             continue
         attributes = module["attributes"]
         nodes.append(
-            {
+            _mark_stale(
+                {
                 "id": module["id"],
                 "kind": module["kind"],
                 "status": module["status"],
@@ -129,7 +159,9 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
                 "meta": attributes.get("file") or attributes.get("module", ""),
                 "attributes": attributes,
                 "evidence": module["evidence"],
-            }
+                },
+                stale_by_path,
+            )
         )
         existing.add(module["id"])
     for node_group in (artifact.get("packages", []), artifact.get("symbols", [])):
@@ -138,7 +170,8 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             attributes = item["attributes"]
             nodes.append(
-                {
+                _mark_stale(
+                    {
                     "id": item["id"],
                     "kind": item["kind"],
                     "status": item["status"],
@@ -151,7 +184,9 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
                     "meta": attributes.get("file") or attributes.get("path", ""),
                     "attributes": attributes,
                     "evidence": item["evidence"],
-                }
+                    },
+                    stale_by_path,
+                )
             )
             existing.add(item["id"])
     module_ids = {
@@ -162,7 +197,8 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         node_id = f"file:{item['path']}"
         nodes.append(
-            {
+            _mark_stale(
+                {
                 "id": node_id,
                 "kind": "file",
                 "status": "verified",
@@ -178,18 +214,42 @@ def _artifact_nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
                         "status": "verified",
                     }
                 ],
-            }
+                },
+                stale_by_path,
+            )
         )
     return sorted(nodes, key=lambda node: (node["kind"], node["id"]))
 
 
-def _artifact_edges(artifact: dict[str, Any]) -> list[dict[str, Any]]:
-    return (
+def _mark_edge_stale(
+    edge: dict[str, Any], stale_by_path: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    if not stale_by_path:
+        return edge
+    evidence = []
+    stale = False
+    for item in edge.get("evidence", []):
+        detail = stale_by_path.get(item.get("path"))
+        if detail is None:
+            evidence.append(item)
+            continue
+        stale = True
+        evidence.append({**item, "stale_reason": detail["reason"], "status": "stale"})
+    return {**edge, "evidence": evidence, "status": "stale"} if stale else edge
+
+
+def _artifact_edges(
+    artifact: dict[str, Any],
+    stale_by_path: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    stale_by_path = stale_by_path or {}
+    edges = (
         artifact["relations"]
         + artifact.get("module_edges", [])
         + artifact.get("package_edges", [])
         + artifact.get("symbol_edges", [])
     )
+    return [_mark_edge_stale(edge, stale_by_path) for edge in edges]
 
 
 def _safe_source_path(value: str) -> str:
@@ -201,7 +261,10 @@ def _safe_source_path(value: str) -> str:
 
 
 def _source_payload(
-    root: Path, artifact: dict[str, Any], params: dict[str, list[str]]
+    root: Path,
+    artifact: dict[str, Any],
+    params: dict[str, list[str]],
+    stale_by_path: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     requested = _safe_source_path(params.get("path", [""])[0])
     item = next(
@@ -219,7 +282,13 @@ def _source_payload(
         if absolute.is_symlink() or not absolute.is_file():
             raise VibeWikiError(ErrorCode.PATH_NOT_FOUND, "source path was not found")
         if item["kind"] == "binary":
-            return {"binary": True, "lines": [], "path": requested, "source": item}
+            return {
+                "binary": True,
+                "lines": [],
+                "path": requested,
+                "source": item,
+                "stale": (stale_by_path or {}).get(requested),
+            }
         text = absolute.read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
         raise VibeWikiError(
@@ -248,6 +317,7 @@ def _source_payload(
         ],
         "path": requested,
         "source": item,
+        "stale": (stale_by_path or {}).get(requested),
     }
 
 
@@ -259,8 +329,10 @@ def api_payload(
     params: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     facts = artifact["facts"]
-    nodes = _artifact_nodes(artifact)
-    edges = _artifact_edges(artifact)
+    stale = stale_files(root, artifact)
+    stale_by_path = {item["path"]: item for item in stale}
+    nodes = _artifact_nodes(artifact, stale_by_path)
+    edges = _artifact_edges(artifact, stale_by_path)
     params = params or {}
     intent = compare_product_intent(root, artifact)
     unknowns = artifact["unknowns"] + intent["gaps"]
@@ -283,6 +355,10 @@ def api_payload(
             + sum(len(edge["evidence"]) for edge in artifact["relations"]),
             "status": "ready",
             "graph_counts": {"nodes": len(nodes), "edges": len(edges)},
+            "staleness": {
+                "status": "stale" if stale else "current",
+                "files": len(stale),
+            },
             "intent": {
                 "configured": intent["configured"],
                 **intent["counts"],
@@ -292,10 +368,30 @@ def api_payload(
         return {"nodes": nodes, "unknowns": unknowns}
     if path == "/api/intent":
         return intent
+    if path == "/api/stale":
+        return {
+            "files": stale,
+            "status": "stale" if stale else "current",
+        }
+    if path == "/api/history":
+        return {**load_history(root), "current_staleness": stale}
+    if path == "/api/history/subject":
+        subject = params.get("subject", [""])[0]
+        return history_for_subject(root, subject)
     if path == "/api/edges":
         return {"edges": edges}
     if path == "/api/files":
-        return {"files": artifact.get("inventory", {}).get("files", [])}
+        return {
+            "files": [
+                {
+                    **item,
+                    "status": (
+                        "stale" if item.get("path") in stale_by_path else "current"
+                    ),
+                }
+                for item in artifact.get("inventory", {}).get("files", [])
+            ]
+        }
     if path == "/api/modules":
         return {
             "edges": artifact.get("module_edges", []),
@@ -312,7 +408,7 @@ def api_payload(
             "symbols": artifact.get("symbols", []),
         }
     if path == "/api/source":
-        return _source_payload(root, artifact, params)
+        return _source_payload(root, artifact, params, stale_by_path)
     if path == "/api/llm/status":
         return llm_status()
     if path == "/api/search":

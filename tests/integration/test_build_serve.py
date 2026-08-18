@@ -73,6 +73,10 @@ def test_serve_exposes_real_artifact_apis(
             summary = json.load(response)
         with urlopen(f"{base}/api/nodes") as response:
             nodes = json.load(response)
+        with urlopen(f"{base}/api/history") as response:
+            history = json.load(response)
+        with urlopen(f"{base}/api/stale") as response:
+            staleness = json.load(response)
         with urlopen(f"{base}/api/inspect/route:page:/signup") as response:
             inspected = json.load(response)
         with urlopen(
@@ -142,6 +146,8 @@ def test_serve_exposes_real_artifact_apis(
         exported_names = set(exported.namelist())
         assert "vibewiki-export/wiki/index.md" in exported_names
         assert "vibewiki-export/graph.json" in exported_names
+        assert "vibewiki-export/history.json" in exported_names
+        assert "vibewiki-export/staleness.json" in exported_names
         assert not any(name.endswith("page.tsx") for name in exported_names)
     assert configured["saved"] is True
     assert configured_status["provider"] == "ollama"
@@ -151,6 +157,50 @@ def test_serve_exposes_real_artifact_apis(
     assert answer["mode_label"] == "Flow explainer"
     assert answer["citations"]
     assert answer["schema_version"] == 1
+    assert summary["staleness"] == {"status": "current", "files": 0}
+    assert len(history["runs"]) == 1
+    assert staleness == {"files": [], "status": "current"}
+
+
+def test_serve_marks_source_evidence_stale_after_build(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    page = root / "app/signup/page.tsx"
+    page.write_text(
+        page.read_text(encoding="utf-8") + "\n// changed after build\n",
+        encoding="utf-8",
+    )
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        with urlopen(f"{base}/api/stale") as response:
+            staleness = json.load(response)
+        with urlopen(f"{base}/api/summary") as response:
+            summary = json.load(response)
+        with urlopen(f"{base}/api/inspect/route:page:/signup") as response:
+            inspected = json.load(response)
+        with urlopen(f"{base}/api/edges") as response:
+            edges = json.load(response)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert staleness["status"] == "stale"
+    assert staleness["files"] == [
+        {
+            "path": "app/signup/page.tsx",
+            "reason": "source file changed after the last build",
+            "status": "changed",
+        }
+    ]
+    assert summary["staleness"] == {"status": "stale", "files": 1}
+    assert inspected["node"]["status"] == "stale"
+    assert any(item["status"] == "stale" for item in inspected["node"]["evidence"])
+    assert any(edge["status"] == "stale" for edge in edges["edges"])
 
 
 def test_serve_exposes_product_intent_and_intent_gaps(tmp_path: Path) -> None:

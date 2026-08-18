@@ -38,6 +38,9 @@ REQUIRED_HTML_MARKERS = (
     'id="sidebar-product-count"',
     'id="graph-caption-meta"',
     'data-command-key="unknowns"',
+    'data-view="Scan history"',
+    'function renderHistoryInspector',
+    "/api/stale",
     'window.realWorkspace',
     "renderInspector",
 )
