@@ -15,6 +15,8 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
+**Latest verified preview:** [`v0.1.27-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.27-preview) · scan a repository locally, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
+
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
 ```text
@@ -26,7 +28,9 @@ The important design rule is **facts first, interpretation second**. Claims shou
 
 ## Current status
 
-This repository is a **local-first end-to-end preview**, not production-ready software. It currently contains:
+This repository is a **local-first end-to-end preview** for developers and teams
+who need a fast, inspectable map of an unfamiliar codebase. It currently
+contains:
 
 - A standalone dark developer-tool UI in [`viewer/index.html`](viewer/index.html).
 - A generated hero illustration in [`docs/assets/vibewiki-hero.png`](docs/assets/vibewiki-hero.png).
@@ -35,6 +39,10 @@ This repository is a **local-first end-to-end preview**, not production-ready so
 - An offline `scan → build → serve` pipeline that writes deterministic source
   facts, a content-addressed inventory of every non-ignored file, a SQLite
   graph, Markdown/Mermaid wiki, and a local viewer backed by the built artifact.
+
+The screenshot above is the real viewer produced by that local workflow: the
+selected concept, reverse graph, evidence lines, scan history, and runtime
+status are all rendered from the generated artifact rather than a mock API.
 
 The semantic analyzer is intentionally deterministic: it covers Next.js App
 Router, generic JavaScript/JSX/TypeScript/TSX repositories, common source
@@ -89,6 +97,11 @@ The local product provides:
 - Explicit confidence, unknowns, and local-runtime status.
 - Copy a local viewer link while the loopback server is running, plus source-free
   ZIP export for sharing the generated wiki artifact.
+- A safe local Browse flow with folder-picker and local-path fallbacks, bounded
+  import limits, ignored directories, secret-name filtering, package-scope
+  detection, and explicit scan/rescan status.
+- A project profile and source inventory that make package scope, language
+  coverage, stale files, and file-level evidence visible before interpretation.
 - A local-first visual language that does not require a hosted backend.
 
 Runtime observation is available as an explicit, safe baseline. Start a local
