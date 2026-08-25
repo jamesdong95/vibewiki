@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.15-preview] - 2026-08-25
+
+### Added
+
+- Large repository Browse preflight that detects supported-file and byte-limit
+  overflow before upload.
+- Monorepo package picker for scanning a bounded `apps/*`, `packages/*`, or
+  other nested source package while preserving the server-side safety limits.
+- Clear package size/file counts, cancel flow, and current-artifact preservation
+  when an oversized repository cannot be imported as a whole.
+
 ## [0.1.14-preview] - 2026-08-25
 
 ### Added

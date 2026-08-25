@@ -151,11 +151,13 @@ folder. Browse accepts common source, config, and documentation files
 (including JavaScript/JSX, TypeScript/TSX, Python, Go, Rust, Java/Kotlin,
 C-family, Swift/Dart, shell, SQL, markup, JSON/YAML/TOML and Markdown), plus
 Prisma. It detects a supported package inside common monorepos and shows
-skipped-file or size-limit errors before import. Selected supported files are
-sent only to this loopback process, scanned locally, and the temporary imported
-workspace is removed when the server exits. The CLI's default scan remains
-strict for the original direct Next.js App Router contract; Browse uses the
-generic local import profile.
+skipped-file or size-limit errors before import. If the whole repository is
+larger than the local safety limit, Browse offers bounded package candidates
+such as `apps/frontend` or `packages/web` instead of failing the entire scan.
+Selected supported files are sent only to this loopback process, scanned
+locally, and the temporary imported workspace is removed when the server exits.
+The CLI's default scan remains strict for the original direct Next.js App
+Router contract; Browse uses the generic local import profile.
 
 After a build, **Source files** in the Knowledge sidebar opens the indexed
 inventory. Filter by path or language, see stale files, and click a file to

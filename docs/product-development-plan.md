@@ -64,6 +64,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Generic adapter coverage có fixture Vite/React, Next.js Pages Router, Vue
   Router và SvelteKit; viewer có Source files inventory để đi từ indexed file
   đến bounded source preview.
+- Browse large-repo preflight nhóm package monorepo, hiển thị file/byte counts,
+  cho phép scan package nằm trong safety limit và giữ artifact cũ khi import
+  thất bại.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
@@ -72,8 +75,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 ### Thứ tự implementation tự động tiếp theo
 
 1. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
-2. **User workflow:** thêm project profile/scan selection và bounded large-repo
-   import khi nhu cầu người dùng thật chứng minh giới hạn hiện tại chưa đủ.
+2. **User workflow:** thêm project profile/scan selection và tiếp tục bounded
+   large-repo import khi nhu cầu người dùng thật chứng minh giới hạn hiện tại
+   chưa đủ.
 
 ### Giả định để triển khai
 

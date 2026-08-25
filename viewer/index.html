@@ -261,6 +261,14 @@
     .text-button.primary:hover { background: #e4ffa2; transform: translateY(-1px); }
     .text-button svg, .icon-button svg { width: 14px; height: 14px; }
     .source-picker { display: none; }
+    .browse-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; margin: 0 30px 12px; padding: 11px 12px; border: 1px solid rgba(166,233,239,0.28); border-radius: 7px; background: rgba(16,22,24,0.88); }
+    .browse-picker[hidden] { display: none; }
+    .browse-picker-copy { min-width: 0; }
+    .browse-picker-copy strong { display: block; color: var(--cyan); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+    .browse-picker-copy span { display: block; margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 9px; line-height: 1.35; }
+    .browse-picker select { min-width: 230px; max-width: 360px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 7px 8px; color: var(--text); background: var(--panel); font-family: var(--mono); font-size: 9px; }
+    .browse-picker .text-button { white-space: nowrap; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     .browse-wrap { display: inline-flex; align-items: center; gap: 8px; }
     .browse-hint { color: var(--muted-2); font-family: var(--mono); font-size: 8px; white-space: nowrap; }
 
@@ -483,6 +491,9 @@
       .graph-caption { display: block; line-height: 1.7; }
       .graph-caption span { display: block; }
       .node { width: 126px; }
+      .browse-picker { grid-template-columns: minmax(0, 1fr); margin-right: 15px; margin-left: 15px; }
+      .browse-picker select { width: 100%; max-width: none; }
+      .browse-picker .text-button { justify-self: start; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -579,6 +590,18 @@
       </header>
       <input class="source-picker" id="source-picker" type="file" webkitdirectory directory multiple aria-label="Choose source folder" />
       <div class="browse-status" id="browse-status" role="status" aria-live="polite"></div>
+      <div class="browse-picker" id="browse-picker" hidden>
+        <div class="browse-picker-copy">
+          <strong>Repo lớn — chọn package để scan</strong>
+          <span id="browse-picker-summary">Chọn một package nằm trong giới hạn import local.</span>
+        </div>
+        <label>
+          <span class="sr-only">Package source</span>
+          <select id="source-package" aria-label="Choose package to scan"></select>
+        </label>
+        <button class="text-button primary" type="button" id="source-package-scan">Scan package</button>
+        <button class="text-button" type="button" id="source-package-cancel">Cancel</button>
+      </div>
 
       <div class="main-scroll">
         <div class="section-heading">
@@ -1056,9 +1079,17 @@
     const browseButton = document.getElementById('browse-button');
     const scanButton = document.getElementById('scan-button');
     const browseStatus = document.getElementById('browse-status');
+    const browsePicker = document.getElementById('browse-picker');
+    const browsePickerSummary = document.getElementById('browse-picker-summary');
+    const sourcePackage = document.getElementById('source-package');
+    const sourcePackageScan = document.getElementById('source-package-scan');
+    const sourcePackageCancel = document.getElementById('source-package-cancel');
     const MAX_IMPORT_FILES = 10000;
     const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
     const GENERIC_SOURCE_PATTERN = /\.(ts|tsx|js|jsx|mjs|cjs|py|pyi|go|java|kt|kts|rs|rb|php|cs|c|h|cc|cpp|cxx|hpp|swift|dart|lua|ex|exs|scala|hs|sh|bash|zsh|fish|sql|css|scss|less|html|vue|svelte|md|mdx|json|jsonc|yaml|yml|toml|xml|ini|conf)$/;
+    const KNOWN_SOURCE_ROOTS = new Set(['app', 'prisma', 'src', 'tests']);
+    const MONOREPO_ROOTS = new Set(['apps', 'libs', 'modules', 'packages', 'services', 'workspaces']);
+    let pendingImport = null;
     function setBrowseStatus(message, kind = 'info') {
       browseStatus.textContent = message;
       browseStatus.className = `browse-status show ${kind}`;
@@ -1073,6 +1104,61 @@
       if (/(^|\/)(\.env|credentials?|secrets?|tokens?)([^/]*)(\/|$)/.test(path)) return false;
       return path.endsWith('prisma/schema.prisma') || GENERIC_SOURCE_PATTERN.test(path);
     }
+    function browserRelativePath(file) {
+      return (file.webkitRelativePath || file.name || '').replaceAll('\\', '/').split('/').filter(Boolean);
+    }
+    function projectRelativePath(file) {
+      const parts = browserRelativePath(file);
+      if (parts.length <= 1 || KNOWN_SOURCE_ROOTS.has(parts[0]) || MONOREPO_ROOTS.has(parts[0])) return parts.join('/');
+      return parts.slice(1).join('/');
+    }
+    function packagePrefixes(file) {
+      const parts = projectRelativePath(file).split('/').filter(Boolean);
+      const prefixes = new Set(['']);
+      parts.forEach((part, index) => {
+        if (MONOREPO_ROOTS.has(part) && index + 1 < parts.length) prefixes.add(parts.slice(0, index + 2).join('/'));
+        if (KNOWN_SOURCE_ROOTS.has(part)) prefixes.add(parts.slice(0, index).join('/'));
+      });
+      return prefixes;
+    }
+    function buildImportGroups(candidates) {
+      const prefixes = new Set(['']);
+      candidates.forEach(file => packagePrefixes(file).forEach(prefix => prefixes.add(prefix)));
+      return [...prefixes].map(prefix => {
+        const files = candidates.filter(file => {
+          const path = projectRelativePath(file);
+          return !prefix || path === prefix || path.startsWith(`${prefix}/`);
+        });
+        return {
+          prefix,
+          files,
+          bytes: files.reduce((sum, file) => sum + file.size, 0),
+        };
+      }).filter(group => group.files.length);
+    }
+    function formatImportGroup(group) {
+      const label = group.prefix || 'Root workspace';
+      return `${label} · ${group.files.length.toLocaleString()} files · ${(group.bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+    function hidePackagePicker() {
+      browsePicker.hidden = true;
+      pendingImport = null;
+      sourcePackage.replaceChildren();
+    }
+    function showPackagePicker(groups, candidates, skipped) {
+      pendingImport = { candidates, skipped, groups };
+      sourcePackage.replaceChildren();
+      groups.forEach((group, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = formatImportGroup(group);
+        sourcePackage.append(option);
+      });
+      const totalBytes = candidates.reduce((sum, file) => sum + file.size, 0);
+      browsePickerSummary.textContent = `Đã chọn ${candidates.length.toLocaleString()} file supported · ${(totalBytes / 1024 / 1024).toFixed(1)} MB; bỏ qua ${skipped.toLocaleString()} file khác. Các package bên dưới nằm trong giới hạn 10.000 file / 200 MB.`;
+      browsePicker.hidden = false;
+      sourcePicker.value = '';
+    }
     function importErrorMessage(result) {
       const messages = {
         unsupported_stack: 'Stack chưa được nhận diện hoặc không có source/config/docs được hỗ trợ.',
@@ -1081,34 +1167,13 @@
       };
       return messages[result.error] || result.message || 'Không thể scan source local.';
     }
-    async function importSourceFiles(files) {
-      if (!files.length) return;
-      const candidates = files.filter(isSupportedSourceFile);
-      const skipped = files.length - candidates.length;
-      if (!candidates.length) {
-        setBrowseStatus(`Không tìm thấy file được hỗ trợ. Đã chọn ${files.length} file, bỏ qua ${skipped}. Hỗ trợ source, config/docs phổ biến và Prisma.`, 'error');
-        showToast('Không tìm thấy source/config/docs được hỗ trợ.');
-        sourcePicker.value = '';
-        return;
-      }
-      const totalBytes = candidates.reduce((sum, file) => sum + file.size, 0);
-      if (candidates.length > MAX_IMPORT_FILES) {
-        setBrowseStatus(`Repo vượt giới hạn: ${candidates.length.toLocaleString()} file được hỗ trợ, tối đa ${MAX_IMPORT_FILES.toLocaleString()}. Đã bỏ qua ${skipped} file khác.`, 'error');
-        showToast('Source vượt giới hạn số file local.');
-        sourcePicker.value = '';
-        return;
-      }
-      if (totalBytes > MAX_IMPORT_BYTES) {
-        setBrowseStatus(`Repo vượt giới hạn: ${(totalBytes / 1024 / 1024).toFixed(1)} MB source, tối đa 200 MB. Đã bỏ qua ${skipped} file khác.`, 'error');
-        showToast('Source vượt giới hạn dung lượng local.');
-        sourcePicker.value = '';
-        return;
-      }
+    async function uploadSourceFiles(candidates, skipped, label = 'source đã chọn') {
       const form = new FormData();
       candidates.forEach(file => form.append('files', file, file.webkitRelativePath || file.name));
       browseButton.disabled = true;
       scanButton.disabled = true;
-      setBrowseStatus(`Đang scan ${candidates.length.toLocaleString()} file được hỗ trợ… Đã bỏ qua ${skipped.toLocaleString()} file.`, 'busy');
+      sourcePackageScan.disabled = true;
+      setBrowseStatus(`Đang scan ${candidates.length.toLocaleString()} file (${label})… Đã bỏ qua ${skipped.toLocaleString()} file.`, 'busy');
       showToast(`Đang scan ${candidates.length} file local…`);
       try {
         const response = await fetch('/api/import', { method: 'POST', body: form });
@@ -1123,10 +1188,53 @@
         showToast(message);
         browseButton.disabled = false;
         scanButton.disabled = false;
+        sourcePackageScan.disabled = false;
       } finally {
         sourcePicker.value = '';
       }
     }
+    async function importSourceFiles(files) {
+      if (!files.length) return;
+      hidePackagePicker();
+      const candidates = files.filter(isSupportedSourceFile);
+      const skipped = files.length - candidates.length;
+      if (!candidates.length) {
+        setBrowseStatus(`Không tìm thấy file được hỗ trợ. Đã chọn ${files.length} file, bỏ qua ${skipped}. Hỗ trợ source, config/docs phổ biến và Prisma.`, 'error');
+        showToast('Không tìm thấy source/config/docs được hỗ trợ.');
+        sourcePicker.value = '';
+        return;
+      }
+      const totalBytes = candidates.reduce((sum, file) => sum + file.size, 0);
+      if (candidates.length > MAX_IMPORT_FILES || totalBytes > MAX_IMPORT_BYTES) {
+        const viableGroups = buildImportGroups(candidates).filter(group => (
+          group.files.length <= MAX_IMPORT_FILES && group.bytes <= MAX_IMPORT_BYTES
+        ));
+        if (viableGroups.length) {
+          showPackagePicker(viableGroups, candidates, skipped);
+          setBrowseStatus(`Repo vượt giới hạn tổng thể: ${candidates.length.toLocaleString()} file / ${(totalBytes / 1024 / 1024).toFixed(1)} MB. Chọn package nhỏ hơn để tiếp tục scan; artifact hiện tại vẫn được giữ nguyên.`, 'error');
+          showToast('Hãy chọn package để scan repository lớn.');
+          return;
+        }
+        setBrowseStatus(`Repo vượt giới hạn: ${candidates.length.toLocaleString()} file / ${(totalBytes / 1024 / 1024).toFixed(1)} MB; không có package nào dưới giới hạn 10.000 file / 200 MB. Hãy Browse đúng package nhỏ hơn.`, 'error');
+        showToast('Không có package nào phù hợp giới hạn import local.');
+        sourcePicker.value = '';
+        return;
+      }
+      await uploadSourceFiles(candidates, skipped);
+    }
+    sourcePackageScan.addEventListener('click', async () => {
+      if (!pendingImport) return;
+      const group = pendingImport.groups[Number(sourcePackage.value)];
+      if (!group) return;
+      const skipped = pendingImport.skipped + pendingImport.candidates.length - group.files.length;
+      hidePackagePicker();
+      await uploadSourceFiles(group.files, skipped, group.prefix || 'root workspace');
+    });
+    sourcePackageCancel.addEventListener('click', () => {
+      hidePackagePicker();
+      sourcePicker.value = '';
+      setBrowseStatus('Đã hủy chọn package. Bạn có thể Browse lại một thư mục hoặc package khác.', 'info');
+    });
     browseButton.addEventListener('click', chooseSourceFolder);
     sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
     document.getElementById('scan-button').addEventListener('click', chooseSourceFolder);

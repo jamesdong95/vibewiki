@@ -277,6 +277,9 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
 
     assert "VibeWiki" in html
     assert "Browse source" in html
+    assert 'id="browse-picker"' in html
+    assert 'id="source-package"' in html
+    assert "function buildImportGroups" in html
 
 
 def test_serve_marks_source_evidence_stale_after_build(tmp_path: Path) -> None:
