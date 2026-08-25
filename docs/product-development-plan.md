@@ -85,6 +85,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   hoặc build thất bại.
 - `vibewiki serve REPOSITORY` tự bootstrap scan + build khi chưa có artifact,
   để người dùng mới có thể chạy một lệnh và mở được viewer.
+- Viewer tự phát hiện stale source trong lúc đang mở, hiển thị path bị đổi và
+  chỉ rescan khi người dùng bấm xác nhận.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

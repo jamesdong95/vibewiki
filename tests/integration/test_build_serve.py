@@ -328,6 +328,9 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "function rescanCurrentWorkspace" in html
     assert "/api/rescan" in html
     assert "Artifact hiện tại vẫn được giữ nguyên" in html
+    assert 'id="stale-banner"' in html
+    assert "function renderStaleBanner" in html
+    assert "fetch('/api/stale'" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:

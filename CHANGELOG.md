@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.23-preview] - 2026-08-25
+
+### Added
+
+- Viewer stale-awareness monitor polls the local artifact state and surfaces a
+  clear **Evidence is stale** banner when source files change after build.
+- Banner includes changed paths and a one-click **Rescan now** action; it never
+  mutates the graph until the user confirms the rescan.
+- Regression coverage and live browser smoke for stale detection, rescan, and
+  recovery to a current artifact.
+
 ## [0.1.22-preview] - 2026-08-25
 
 ### Added

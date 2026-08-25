@@ -297,6 +297,11 @@
     .stat-value { font-family: var(--mono); font-size: 21px; letter-spacing: -0.06em; }
     .stat-trend { color: var(--lime); font-family: var(--mono); font-size: 9px; }
     .stat-trend.warn { color: var(--orange); }
+    .stale-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -11px 0 18px; padding: 10px 12px; border: 1px solid rgba(255,170,91,0.34); border-radius: 9px; color: #ffd1a1; background: rgba(104,61,24,0.2); font-size: 10px; }
+    .stale-banner strong { display: block; margin-bottom: 3px; color: var(--orange); font-size: 11px; }
+    .stale-banner-copy { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .stale-banner .text-button { flex: 0 0 auto; color: var(--orange); border-color: rgba(255,170,91,0.34); }
+    .stale-banner[hidden] { display: none; }
 
     .workspace-tabs { display: flex; align-items: center; gap: 18px; height: 39px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
     .workspace-tab { position: relative; height: 39px; padding: 0 2px; border: 0; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
@@ -662,6 +667,11 @@
           <div class="stat"><div class="stat-label">Evidence links</div><div class="stat-bottom"><span class="stat-value" id="stat-evidence">78</span><span class="stat-trend" id="stat-evidence-trend">92% verified</span></div></div>
           <div class="stat"><div class="stat-label">Graph relations</div><div class="stat-bottom"><span class="stat-value" id="stat-relations">08</span><span class="stat-trend" id="stat-relations-trend">mapped</span></div></div>
           <div class="stat"><div class="stat-label">Needs human review</div><div class="stat-bottom"><span class="stat-value" id="stat-unknowns">06</span><span class="stat-trend warn" id="stat-unknowns-trend">2 new</span></div></div>
+        </div>
+
+        <div class="stale-banner" id="stale-banner" role="status" aria-live="polite" hidden>
+          <div><strong>Evidence is stale</strong><span class="stale-banner-copy" id="stale-banner-copy"></span></div>
+          <button class="text-button" type="button" id="stale-rescan">Rescan now</button>
         </div>
 
         <div class="workspace-tabs" role="tablist" aria-label="Product map views">
@@ -1141,6 +1151,9 @@
     const localPathStatus = document.getElementById('local-path-status');
     const scanButton = document.getElementById('scan-button');
     const browseStatus = document.getElementById('browse-status');
+    const staleBanner = document.getElementById('stale-banner');
+    const staleBannerCopy = document.getElementById('stale-banner-copy');
+    const staleRescan = document.getElementById('stale-rescan');
     const browsePicker = document.getElementById('browse-picker');
     const browsePickerSummary = document.getElementById('browse-picker-summary');
     const sourcePackage = document.getElementById('source-package');
@@ -1162,6 +1175,17 @@
     function setBrowseStatus(message, kind = 'info') {
       browseStatus.textContent = message;
       browseStatus.className = `browse-status show ${kind}`;
+    }
+    function renderStaleBanner(files = []) {
+      if (!staleBanner || !staleBannerCopy) return;
+      if (!files.length) {
+        staleBanner.hidden = true;
+        return;
+      }
+      const paths = files.slice(0, 3).map(item => item.path).join(', ');
+      const suffix = files.length > 3 ? ` +${files.length - 3} more` : '';
+      staleBannerCopy.textContent = `${files.length} source file${files.length === 1 ? '' : 's'} changed: ${paths}${suffix}`;
+      staleBanner.hidden = false;
     }
     function chooseSourceFolder() {
       setBrowseStatus('Đang chờ chọn một thư mục source local…', 'busy');
@@ -1458,6 +1482,7 @@
     browseButton.addEventListener('click', chooseSourceFolder);
     sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
     scanButton.addEventListener('click', rescanCurrentWorkspace);
+    staleRescan?.addEventListener('click', rescanCurrentWorkspace);
     document.getElementById('ask-button').addEventListener('click', () => {
       document.getElementById('mini-question').focus();
       showToast('Ask a question about this product or selected concept.');
@@ -1890,7 +1915,7 @@
         const stalePayload = staleResponse.ok ? await staleResponse.json() : { files: [] };
         const runtimePayload = runtimeResponse.ok ? await runtimeResponse.json() : { routes: [], network: [], unknowns: [] };
         const historyRuns = historyPayload.runs || [];
-        const staleSources = stalePayload.files || [];
+        let staleSources = stalePayload.files || [];
         const nodeById = new Map(nodes.map(node => [node.id, node]));
         const realData = new Map(nodes.map(node => [node.id, {
           title: node.title,
@@ -1929,6 +1954,7 @@
         setText('stat-unknowns-trend', staleSources.length
           ? `${staleSources.length} stale sources`
           : (intent.configured ? `${intent.gaps} intent gaps` : 'review queue'));
+        renderStaleBanner(staleSources);
         setText('sidebar-product-count', summary.counts.facts);
         setText('sidebar-flow-count', pad(routeCount));
         setText('sidebar-architecture-count', pad(architectureCount));
@@ -2231,6 +2257,24 @@
           };
         });
         els.search.oninput = event => { state.query = event.target.value.trim().toLowerCase(); renderState(); };
+        window.setInterval(async () => {
+          try {
+            const response = await fetch('/api/stale', { cache: 'no-store' });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const next = Array.isArray(payload.files) ? payload.files : [];
+            const changed = JSON.stringify(next) !== JSON.stringify(staleSources);
+            if (!changed) return;
+            staleSources = next;
+            renderStaleBanner(staleSources);
+            setText('stat-unknowns-trend', staleSources.length
+              ? `${staleSources.length} stale sources`
+              : (intent.configured ? `${intent.gaps} intent gaps` : 'review queue'));
+            renderState();
+          } catch (error) {
+            // Staleness polling is advisory; keep the last rendered artifact.
+          }
+        }, 2500);
         renderState();
         document.documentElement.classList.remove('workspace-loading');
         showToast(`Loaded ${summary.counts.facts} facts from the local build.`);
