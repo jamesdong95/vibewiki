@@ -252,6 +252,9 @@ def test_serve_exposes_real_artifact_apis(
     assert answer["mode"] == "flow"
     assert answer["mode_label"] == "Flow explainer"
     assert answer["citations"]
+    assert answer["confidence"] == "medium"
+    assert answer["grounded"] is True
+    assert isinstance(answer["unknowns"], list)
     assert answer["schema_version"] == 1
     assert summary["staleness"] == {"status": "current", "files": 0}
     assert len(history["runs"]) == 1
@@ -331,6 +334,10 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="stale-banner"' in html
     assert "function renderStaleBanner" in html
     assert "fetch('/api/stale'" in html
+    assert 'class="ask-section-label">Answer' in html
+    assert 'class="ask-section-label">Evidence' in html
+    assert 'class="ask-section-label">Confidence' in html
+    assert 'class="ask-section-label">Unknowns' in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.24-preview] - 2026-08-25
+
+### Changed
+
+- Grounded Q&A results now render four explicit sections: **Answer**,
+  **Evidence**, **Confidence**, and **Unknowns**.
+- Markdown answer content remains formatted while citations and uncertainty are
+  separated into readable, evidence-first panels.
+- Added regression and browser coverage for evidence-only Q&A formatting.
+
 ## [0.1.23-preview] - 2026-08-25
 
 ### Added

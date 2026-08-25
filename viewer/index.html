@@ -412,6 +412,14 @@
     .ask-result.busy { color: var(--cyan); border-color: rgba(166,233,239,0.28); }
     .ask-result.error { color: #ffb4a8; border-color: rgba(255,129,111,0.35); }
     .ask-result strong { color: var(--ink); font-weight: 650; }
+    .ask-provider { display: block; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+    .ask-section { margin-top: 10px; }
+    .ask-section-label { display: block; margin-bottom: 4px; color: var(--muted-2); font-family: var(--mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+    .ask-section-value { color: var(--ink-soft); font-family: var(--mono); font-size: 9px; line-height: 1.55; }
+    .ask-confidence { display: inline-flex; align-items: center; gap: 5px; color: var(--lime); }
+    .ask-confidence.low { color: var(--orange); }
+    .ask-unknowns { color: var(--orange); }
+    .ask-citation-list { color: var(--cyan); word-break: break-word; }
     .ask-markdown { margin-top: 8px; color: var(--ink-soft); }
     .ask-markdown h1, .ask-markdown h2, .ask-markdown h3, .ask-markdown h4 { margin: 13px 0 6px; color: var(--ink); font-size: 12px; line-height: 1.3; }
     .ask-markdown h1 { font-size: 15px; }
@@ -1609,7 +1617,15 @@
       const citations = (result.citations || []).map(item => `${item.path}:${item.line_start}`).join(' · ');
       const modeLabel = escapeHtml(result.mode_label || 'Grounded discussion');
       const providerLabel = `${modeLabel} · ${result.provider === 'none' ? 'Evidence-only' : `${escapeHtml(result.provider)} · ${escapeHtml(result.model || '')}`}`;
-      askResult.innerHTML = `<strong>${providerLabel}</strong><div class="ask-markdown">${renderMarkdown(result.answer || '')}</div>${result.unknowns?.length ? `<div style="margin-top:8px;color:var(--orange);">Unknown: ${escapeHtml(result.unknowns.join(' '))}</div>` : ''}${citations ? `<div class="ask-citations">Evidence: ${escapeHtml(citations)}</div>` : ''}`;
+      const confidence = String(result.confidence || 'unknown').toLowerCase();
+      const unknowns = Array.isArray(result.unknowns) && result.unknowns.length
+        ? result.unknowns.join(' ')
+        : 'None recorded in the current evidence scope.';
+      askResult.innerHTML = `<strong class="ask-provider">${providerLabel}</strong>`
+        + `<section class="ask-section"><span class="ask-section-label">Answer</span><div class="ask-markdown">${renderMarkdown(result.answer || '')}</div></section>`
+        + `<section class="ask-section"><span class="ask-section-label">Evidence</span><div class="ask-section-value ask-citation-list">${escapeHtml(citations || 'No direct citation returned.')}</div></section>`
+        + `<section class="ask-section"><span class="ask-section-label">Confidence</span><div class="ask-section-value ask-confidence ${confidence === 'low' ? 'low' : ''}"><i class="legend-dot ${confidence === 'low' ? 'inferred' : 'verified'}"></i>${escapeHtml(confidence)}</div></section>`
+        + `<section class="ask-section"><span class="ask-section-label">Unknowns</span><div class="ask-section-value ask-unknowns">${escapeHtml(unknowns)}</div></section>`;
     }
     async function submitQuestion(input) {
       const question = input.value.trim();
