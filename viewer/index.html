@@ -410,8 +410,11 @@
     .settings-field label { color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
     .settings-field input, .settings-field select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--panel-2); font-size: 11px; }
     .settings-field input:focus, .settings-field select:focus { border-color: var(--lime); }
+    .settings-check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .settings-check input { accent-color: var(--lime); }
     .settings-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
     .settings-status { min-height: 16px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .settings-status.success { color: var(--lime); }
     .settings-status.error { color: #ffb4a8; }
     .command-input { display: flex; align-items: center; gap: 10px; padding: 15px 16px; border-bottom: 1px solid var(--line); }
     .command-input span { color: var(--lime); font-family: var(--mono); }
@@ -747,6 +750,32 @@
         <div class="settings-actions">
           <button class="text-button" type="button" id="llm-cancel">Cancel</button>
           <button class="text-button primary" type="submit">Save setup</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="observe-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Observe runtime">
+      <div class="command-input"><span>◎</span><strong>Observe runtime</strong></div>
+      <form class="settings-form" id="observe-form">
+        <p class="settings-copy">Runtime evidence is local. HTTP mode performs safe same-origin GET requests; Browser mode also executes JavaScript while blocking non-GET and cross-origin requests.</p>
+        <div class="settings-field">
+          <label for="observe-target">Local app URL</label>
+          <input id="observe-target" type="url" placeholder="http://127.0.0.1:3000" required autocomplete="url" />
+        </div>
+        <div class="settings-field">
+          <label for="observe-mode">Observation mode</label>
+          <select id="observe-mode">
+            <option value="http">HTTP routes · safest</option>
+            <option value="browser">Browser JS · optional Playwright</option>
+          </select>
+        </div>
+        <label class="settings-check"><input id="observe-screenshots" type="checkbox" /> Save local route screenshots</label>
+        <div class="settings-status" id="observe-settings-status" role="status"></div>
+        <div class="settings-actions">
+          <button class="text-button" type="button" id="observe-cancel">Cancel</button>
+          <button class="text-button primary" type="submit">Start observation</button>
         </div>
       </form>
     </div>
@@ -1188,30 +1217,61 @@
         showToast(error.message || 'Không thể export wiki hiện tại.');
       }
     }
-    async function observeRuntime() {
-      const fallback = window.location.origin;
-      const target = window.prompt('Local app URL to observe (GET only):', fallback);
-      if (!target) return;
-      showToast('Runtime observation started…');
+    const observeModal = document.getElementById('observe-modal');
+    const observeForm = document.getElementById('observe-form');
+    const observeTarget = document.getElementById('observe-target');
+    const observeMode = document.getElementById('observe-mode');
+    const observeScreenshots = document.getElementById('observe-screenshots');
+    const observeSettingsStatus = document.getElementById('observe-settings-status');
+    function openObserveSettings() {
+      observeModal.classList.add('open');
+      observeModal.setAttribute('aria-hidden', 'false');
+      observeTarget.value = window.location.origin;
+      observeMode.value = 'http';
+      observeScreenshots.checked = false;
+      observeSettingsStatus.className = 'settings-status';
+      observeSettingsStatus.textContent = 'Loopback-only by default. No form submission.';
+      observeTarget.focus();
+    }
+    function closeObserveSettings() {
+      observeModal.classList.remove('open');
+      observeModal.setAttribute('aria-hidden', 'true');
+    }
+    async function observeRuntime(event) {
+      event.preventDefault();
+      const target = observeTarget.value.trim();
+      if (!target) return observeTarget.focus();
+      const mode = observeMode.value;
+      const screenshots = observeScreenshots.checked;
+      observeSettingsStatus.className = 'settings-status';
+      observeSettingsStatus.textContent = `Đang observe ${mode}…`;
+      showToast(`Runtime observation started (${mode})…`);
       try {
         const response = await fetch('/api/observe', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({target: target.trim()})
+          body: JSON.stringify({target, mode, screenshots})
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.message || 'Runtime observation failed.');
         const counts = result.counts || {};
-        showToast(`Runtime observed: ${counts.routes || 0} routes · ${counts.network || 0} GET requests.`);
+        observeSettingsStatus.className = 'settings-status success';
+        observeSettingsStatus.textContent = `Xong: ${counts.routes || 0} routes · ${counts.network || 0} requests · ${counts.console_errors || 0} console errors.`;
+        showToast(`Runtime observed: ${counts.routes || 0} routes · ${counts.network || 0} requests.`);
         setTimeout(() => window.location.reload(), 1400);
       } catch (error) {
+        observeSettingsStatus.className = 'settings-status error';
+        observeSettingsStatus.textContent = error.message || 'Không thể observe runtime local.';
         showToast(error.message || 'Không thể observe runtime local.');
       }
     }
     document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
     document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
     document.getElementById('export-button').addEventListener('click', exportWiki);
-    document.getElementById('observe-button').addEventListener('click', observeRuntime);
+    document.getElementById('observe-button').addEventListener('click', openObserveSettings);
+    observeForm.addEventListener('submit', observeRuntime);
+    document.getElementById('observe-cancel').addEventListener('click', closeObserveSettings);
+    observeModal.addEventListener('click', event => { if (event.target === observeModal) closeObserveSettings(); });
 
     const llmModal = document.getElementById('llm-modal');
     const llmForm = document.getElementById('llm-form');

@@ -40,7 +40,7 @@ def test_version_is_stable_and_reports_metadata(
 
     assert code == 0
     assert stdout == (
-        "vibewiki 0.1.4-preview "
+        "vibewiki 0.1.5-preview "
         "(analyzer 0.1.0-preview, schema 1)\n"
     )
     assert stderr == ""
@@ -63,6 +63,23 @@ def test_serve_accepts_optional_llm_runtime_flags() -> None:
     assert arguments.llm_provider == "ollama"
     assert arguments.llm_model == "qwen2.5:7b"
     assert arguments.llm_base_url == "http://127.0.0.1:11434"
+
+
+def test_observe_accepts_browser_runtime_flags() -> None:
+    arguments = build_parser().parse_args(
+        [
+            "observe",
+            "http://127.0.0.1:3000",
+            "--repository",
+            "repo",
+            "--mode",
+            "browser",
+            "--screenshots",
+        ]
+    )
+
+    assert arguments.mode == "browser"
+    assert arguments.screenshots is True
 
 
 @pytest.mark.parametrize("error_code", list(ErrorCode))

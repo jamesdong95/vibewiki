@@ -425,8 +425,10 @@ Scan history inspector; export kèm history và staleness snapshot.
 và `/api/observe` chỉ thực hiện bounded same-origin `GET` trên loopback mặc
 định; `/api/runtime` và `runtime.json` lưu route/network metadata, timestamp,
 và unknown rõ ràng cho JavaScript/console/side effects chưa được chạy. Viewer
-có nút Observe runtime và export chứa runtime artifact. Browser adapter có
-thể được bổ sung sau khi có approval/flow contract riêng.
+có nút Observe runtime và export chứa runtime artifact. Browser mode đã triển
+khai trong 0.1.5-preview qua `vibewiki[runtime]`, chạy headless Chromium với
+same-origin `GET`, chặn request khác origin/non-GET, thu console error, network
+status và screenshot metadata; side effects/auth vẫn là unknown.
 
 ### Phase 9 — Runtime explorer bằng Playwright
 
@@ -444,7 +446,7 @@ thể được bổ sung sau khi có approval/flow contract riêng.
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.4-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.5-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
@@ -456,6 +458,10 @@ thể được bổ sung sau khi có approval/flow contract riêng.
 - Viewer có export ZIP thật cho wiki/graph/evidence mà không đóng gói source.
 - Build/serve error messages có exit code ổn định.
 - Kiểm tra localhost binding và network-offline behavior.
+
+**Đã bổ sung trong 0.1.5-preview:** workflow Verify chạy locked dependency,
+Ruff, tests, viewer JavaScript syntax và preview checks trên Ubuntu/macOS với
+Python 3.11–3.13.
 
 **Gate release:** người dùng mới có thể cài, scan fixture, mở viewer, đọc wiki và xóa `.vibewiki/` mà không cần tài khoản/provider.
 

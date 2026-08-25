@@ -100,6 +100,9 @@ def test_serve_exposes_real_artifact_apis(
             runtime = json.load(response)
         with urlopen(f"{base}/api/summary") as response:
             observed_summary = json.load(response)
+        screenshot_dir = root / ".vibewiki/runtime-screenshots"
+        screenshot_dir.mkdir(parents=True)
+        (screenshot_dir / "route-01.png").write_bytes(b"fake-png")
         with urlopen(f"{base}/api/export") as response:
             export_bytes_with_runtime = response.read()
         config_request = Request(
@@ -184,13 +187,16 @@ def test_serve_exposes_real_artifact_apis(
     assert runtime["unknowns"][0]["subject"] == "runtime:javascript-and-side-effects"
     assert observed_summary["runtime"] == {
         "configured": True,
+        "mode": "http",
         "routes": 1,
         "network": 1,
         "console_errors": 0,
         "observed_at": runtime["observed_at"],
     }
     with zipfile.ZipFile(BytesIO(export_bytes_with_runtime)) as exported:
-        assert "vibewiki-export/runtime.json" in set(exported.namelist())
+        exported_names = set(exported.namelist())
+        assert "vibewiki-export/runtime.json" in exported_names
+        assert "vibewiki-export/runtime-screenshots/route-01.png" in exported_names
 
 
 def test_serve_marks_source_evidence_stale_after_build(tmp_path: Path) -> None:

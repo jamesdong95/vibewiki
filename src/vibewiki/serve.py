@@ -57,6 +57,7 @@ def _runtime(root: Path) -> dict[str, Any]:
             "configured": False,
             "console": [],
             "network": [],
+            "observer_mode": None,
             "routes": [],
             "screenshots": [],
             "unknowns": [],
@@ -92,8 +93,8 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
             "vibewiki-export/README.md",
             "# VibeWiki export\n\n"
             "Generated from the local deterministic scan. This archive contains "
-            "graph, evidence, wiki, unknowns, scan history, and staleness "
-            "artifacts; source files are not included.\n",
+            "graph, evidence, wiki, unknowns, scan history, staleness, and "
+            "runtime observation artifacts; source files are not included.\n",
         )
         for name in files:
             path = output / name
@@ -102,6 +103,12 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
         wiki = output / "wiki"
         if wiki.is_dir():
             for path in sorted(wiki.rglob("*")):
+                if path.is_file():
+                    relative = path.relative_to(output).as_posix()
+                    archive.write(path, f"vibewiki-export/{relative}")
+        screenshots = output / "runtime-screenshots"
+        if screenshots.is_dir():
+            for path in sorted(screenshots.rglob("*")):
                 if path.is_file():
                     relative = path.relative_to(output).as_posix()
                     archive.write(path, f"vibewiki-export/{relative}")
@@ -390,6 +397,7 @@ def api_payload(
             },
             "runtime": {
                 "configured": runtime["configured"],
+                "mode": runtime.get("observer_mode"),
                 "routes": len(runtime.get("routes", [])),
                 "network": len(runtime.get("network", [])),
                 "console_errors": len(runtime.get("console", [])),
@@ -561,9 +569,17 @@ def create_server(
                             ErrorCode.INVALID_OUTPUT,
                             "runtime observation target is required",
                         )
+                    mode = payload.get("mode", "http")
+                    if mode not in {"http", "browser"}:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "runtime observation mode must be http or browser",
+                        )
                     result = observe_repository(
                         self.server.workspace_root,
                         target.strip(),
+                        mode=mode,
+                        screenshots=bool(payload.get("screenshots", False)),
                     )
                     self._write_json(200, result)
                 except VibeWikiError as error:

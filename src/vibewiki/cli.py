@@ -50,9 +50,15 @@ def build_parser() -> argparse.ArgumentParser:
     history_parser.add_argument("subject", help="relative path or graph subject")
     observe_parser = commands.add_parser(
         "observe",
-        help="observe local HTTP routes with read-only GET requests",
+        help="observe local routes with read-only GET requests",
     )
     observe_parser.add_argument("target", help="http(s) application URL")
+    observe_parser.add_argument(
+        "--mode",
+        choices=("http", "browser"),
+        default="http",
+        help="observation mode; browser executes JavaScript in a safe context",
+    )
     observe_parser.add_argument(
         "--repository",
         default=".",
@@ -68,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=24,
         type=int,
         help="maximum same-origin document routes to GET",
+    )
+    observe_parser.add_argument(
+        "--screenshots",
+        action="store_true",
+        help="save local PNG screenshots in browser mode",
     )
     serve_parser = commands.add_parser(
         "serve",
@@ -118,6 +129,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                     arguments.target,
                     allow_network=arguments.allow_network,
                     max_routes=arguments.max_routes,
+                    mode=arguments.mode,
+                    screenshots=arguments.screenshots,
                 )
             ),
             end="",

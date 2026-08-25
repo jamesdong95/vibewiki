@@ -5,13 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.1.3-preview] - 2026-08-18
+## [0.1.5-preview] - 2026-08-25
 
 ### Added
 
-- Local scan history with Git commit metadata and deterministic added/changed/removed paths.
-- `vibewiki history`, `/api/history`, and a real Scan history viewer inspector.
-- Post-build hash checks through `/api/stale`, stale node/edge/source evidence, and export snapshots.
+- Optional Playwright browser observation mode with JavaScript execution,
+  console error capture, network metadata, and local screenshots.
+- Browser observation modal in the viewer with HTTP/Browser mode selection and
+  explicit screenshot opt-in.
+- Same-origin and GET-only browser request policy; authentication and side
+  effects remain explicit unknowns.
+- Runtime screenshots are included in source-free ZIP exports when captured.
+- Optional `vibewiki[runtime]` packaging extra and synchronized `uv.lock`.
 
 ## [0.1.4-preview] - 2026-08-18
 
@@ -23,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `runtime.json` in `.vibewiki` and export archives, including route/network
   metadata and explicit unknowns for JavaScript side effects not executed.
 - Release screenshot showing the live evidence graph and Scan history workspace.
+
+## [0.1.3-preview] - 2026-08-18
+
+### Added
+
+- Local scan history with Git commit metadata and deterministic added/changed/removed paths.
+- `vibewiki history`, `/api/history`, and a real Scan history viewer inspector.
+- Post-build hash checks through `/api/stale`, stale node/edge/source evidence, and export snapshots.
 
 ## [0.1.2-preview] - 2026-08-17
 

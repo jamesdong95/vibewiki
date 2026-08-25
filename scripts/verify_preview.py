@@ -27,6 +27,8 @@ REQUIRED_HTML_MARKERS = (
     'id="graph-canvas"',
     'id="browse-button"',
     'id="observe-button"',
+    'id="observe-modal"',
+    'id="observe-mode"',
     'id="browse-status"',
     'id="llm-settings-button"',
     'id="llm-form"',
@@ -42,6 +44,7 @@ REQUIRED_HTML_MARKERS = (
     'data-view="Scan history"',
     'function renderHistoryInspector',
     'function observeRuntime',
+    'Browser JS · optional Playwright',
     '/api/runtime',
     "/api/stale",
     'window.realWorkspace',
@@ -80,7 +83,7 @@ def main() -> int:
         path.read_text(encoding="utf-8", errors="ignore")
         for path in ROOT.rglob("*")
         if path.is_file()
-        and ".git" not in path.parts
+        and not {".git", ".hermes", ".venv", ".vibewiki"}.intersection(path.parts)
         and path.suffix.lower()
         in {".md", ".html", ".py", ".yml", ".yaml", ".json", ".txt"}
     )
