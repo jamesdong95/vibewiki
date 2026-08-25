@@ -47,6 +47,46 @@ def test_build_emits_repository_inventory_and_reverse_module_edges(
     } == {("symbol:src/main.js:main", "symbol:src/helper.js:helper")}
 
 
+def test_build_resolves_typescript_path_aliases_in_nested_package(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "packages/web"
+    (package / "src/shared").mkdir(parents=True)
+    (package / "tsconfig.json").write_text(
+        '{"compilerOptions":{"baseUrl":".","paths":{"@web/*":["src/*"],"@shared/*":["src/shared/*"]}}}\n'
+    )
+    (package / "src/main.ts").write_text(
+        "import { helper } from '@shared/helper';\n"
+        "export function main() { return helper(); }\n"
+    )
+    (package / "src/shared/helper.ts").write_text(
+        "export function helper() { return true; }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    module_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+        if edge["relation"] == "imports"
+    }
+    symbol_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["symbol_edges"]
+        if edge["relation"] == "calls"
+    }
+    assert (
+        "module:packages/web/src/main.ts",
+        "module:packages/web/src/shared/helper.ts",
+    ) in module_edges
+    assert (
+        "symbol:packages/web/src/main.ts:main",
+        "symbol:packages/web/src/shared/helper.ts:helper",
+    ) in symbol_edges
+
+
 def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
     (tmp_path / "src/internal").mkdir(parents=True)
     (tmp_path / "src/main/java/com/demo").mkdir(parents=True)

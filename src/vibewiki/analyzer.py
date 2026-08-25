@@ -107,6 +107,8 @@ _SCRIPT_SUFFIXES = tuple(SUPPORTED_SUFFIXES)
 _ANALYZABLE_SUFFIXES = tuple({*SUPPORTED_SUFFIXES, *GENERIC_SUFFIXES})
 _PAGE_SUFFIXES = tuple(f"/page{suffix}" for suffix in _SCRIPT_SUFFIXES)
 _ROUTE_SUFFIXES = tuple(f"/route{suffix}" for suffix in _SCRIPT_SUFFIXES)
+_MODULE_SUFFIXES = tuple(SUPPORTED_SUFFIXES)
+PathAlias = tuple[str, tuple[str, ...], str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,28 +295,92 @@ def _sveltekit_route_matches(source: Source) -> list[dict[str, Any]]:
     ]
 
 
-def _resolve_import(source_path: str, imported: str, sources: set[str]) -> str | None:
-    if not imported.startswith("."):
+def _load_path_aliases(
+    root: Path,
+    manifest: dict[str, Any],
+    inventory: dict[str, Any] | None = None,
+) -> tuple[PathAlias, ...]:
+    """Read safe TypeScript/JavaScript path aliases without executing config."""
+
+    config_paths = {"tsconfig.json", "jsconfig.json"}
+    for collection in (manifest.get("files", []), (inventory or {}).get("files", [])):
+        for item in collection:
+            path = str(item.get("path", ""))
+            if posixpath.basename(path) in {"tsconfig.json", "jsconfig.json"}:
+                config_paths.add(path)
+
+    aliases: list[PathAlias] = []
+    for config_path in sorted(config_paths):
+        absolute = root / Path(config_path)
+        if not absolute.is_file() or absolute.is_symlink():
+            continue
+        try:
+            text = absolute.read_text(encoding="utf-8")
+            try:
+                config = json.loads(text)
+            except json.JSONDecodeError:
+                # tsconfig/jsconfig commonly use JSONC comments/trailing commas.
+                without_comments = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+                without_comments = re.sub(r"(?m)//[^\n]*$", "", without_comments)
+                config = json.loads(
+                    re.sub(r",\s*([}\]])", r"\1", without_comments)
+                )
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        if not isinstance(config, dict):
+            continue
+        compiler = config.get("compilerOptions")
+        if not isinstance(compiler, dict):
+            continue
+        paths = compiler.get("paths")
+        if not isinstance(paths, dict):
+            continue
+        base_url = compiler.get("baseUrl", ".")
+        if not isinstance(base_url, str):
+            continue
+        config_dir = posixpath.dirname(config_path)
+        alias_base = posixpath.normpath(posixpath.join(config_dir, base_url))
+        for pattern, targets in paths.items():
+            if not isinstance(pattern, str) or pattern.count("*") > 1:
+                continue
+            if isinstance(targets, str):
+                targets = [targets]
+            if not isinstance(targets, list) or not all(
+                isinstance(target, str) for target in targets
+            ):
+                continue
+            aliases.append((pattern, tuple(targets), alias_base))
+    return tuple(sorted(aliases, key=lambda item: (-len(item[0]), item[0])))
+
+
+def _resolve_import(
+    source_path: str,
+    imported: str,
+    sources: set[str],
+    aliases: tuple[PathAlias, ...] = (),
+) -> str | None:
+    bases: list[str] = []
+    if imported.startswith("."):
+        bases.append(
+            posixpath.normpath(
+                posixpath.join(posixpath.dirname(source_path), imported)
+            )
+        )
+    for pattern, targets, alias_base in aliases:
+        wildcard: str | None = None
+        if pattern.endswith("/*") and imported.startswith(pattern[:-1]):
+            wildcard = imported[len(pattern) - 1 :]
+        elif "*" not in pattern and imported == pattern:
+            wildcard = ""
+        if wildcard is None:
+            continue
+        bases.extend(
+            posixpath.join(alias_base, target.replace("*", wildcard))
+            for target in targets
+        )
+    if not bases:
         return None
-    base = posixpath.normpath(posixpath.join(posixpath.dirname(source_path), imported))
-    for candidate in (
-        base,
-        f"{base}.ts",
-        f"{base}.tsx",
-        f"{base}.js",
-        f"{base}.jsx",
-        f"{base}.mjs",
-        f"{base}.cjs",
-        f"{base}/index.ts",
-        f"{base}/index.tsx",
-        f"{base}/index.js",
-        f"{base}/index.jsx",
-        f"{base}/index.mjs",
-        f"{base}/index.cjs",
-    ):
-        if candidate in sources:
-            return candidate
-    return None
+    return _resolve_candidates(bases, sources, _MODULE_SUFFIXES)
 
 
 def _resolve_candidates(
@@ -662,6 +728,7 @@ def _generic_route_matches(source: Source) -> list[dict[str, Any]]:
 def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     sources = _load_sources(root, manifest)
     source_paths = set(sources)
+    aliases = _load_path_aliases(root, manifest)
     facts: list[dict[str, Any]] = []
     relations: list[dict[str, Any]] = []
     page_keys: dict[str, str] = {}
@@ -776,7 +843,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             key = f"test:{path}"
             imports = []
             for match in _IMPORT.finditer(source.text):
-                resolved = _resolve_import(path, match.group(2), source_paths)
+                resolved = _resolve_import(path, match.group(2), source_paths, aliases)
                 if resolved:
                     imports.append(
                         _evidence(
@@ -956,7 +1023,9 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             active_start = post.start() if post else 0
             active_source = source.text[active_start:]
             for match in _IMPORT.finditer(source.text):
-                imported_path = _resolve_import(path, match.group(2), source_paths)
+                imported_path = _resolve_import(
+                    path, match.group(2), source_paths, aliases
+                )
                 if not imported_path:
                     continue
                 for name in re.findall(r"\b\w+\b", match.group(1)):
@@ -1013,7 +1082,9 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     for test_path, evidence in sorted(test_imports.items()):
         source = sources[test_path]
         for match in _IMPORT.finditer(source.text):
-            resolved = _resolve_import(test_path, match.group(2), source_paths)
+            resolved = _resolve_import(
+                test_path, match.group(2), source_paths, aliases
+            )
             if resolved in page_keys:
                 relations.append(
                     _relation(
@@ -1217,7 +1288,9 @@ def _package_graph(
 
 
 def _symbol_graph(
-    sources: dict[str, Source], module_paths: set[str]
+    sources: dict[str, Source],
+    module_paths: set[str],
+    aliases: tuple[PathAlias, ...] = (),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     definitions: dict[str, list[dict[str, Any]]] = {}
     symbols: list[dict[str, Any]] = []
@@ -1269,7 +1342,9 @@ def _symbol_graph(
             )
         imports: dict[str, tuple[str, str, int]] = {}
         for binding in _import_bindings(source):
-            resolved = _resolve_import(path, binding["specifier"], module_paths)
+            resolved = _resolve_import(
+                path, binding["specifier"], module_paths, aliases
+            )
             if resolved:
                 imports[binding["local"]] = (
                     resolved,
@@ -1335,6 +1410,7 @@ def build_module_graph(
 
     sources = _load_sources(root, manifest)
     source_paths = set(sources)
+    aliases = _load_path_aliases(root, manifest, inventory)
     modules = []
     module_edges = []
     seen_edges: set[tuple[str, str, str]] = set()
@@ -1374,7 +1450,7 @@ def build_module_graph(
         )
         references = _module_references(source)
         for specifier, offset in references:
-            resolved = _resolve_import(path, specifier, source_paths)
+            resolved = _resolve_import(path, specifier, source_paths, aliases)
             if resolved is None:
                 resolved = _resolve_language_import(path, specifier, source_paths)
             target = f"module:{resolved}" if resolved else f"external:{specifier}"
@@ -1400,7 +1476,7 @@ def build_module_graph(
         )
 
     packages, package_edges = _package_graph(root, inventory)
-    symbols, symbol_edges = _symbol_graph(sources, source_paths)
+    symbols, symbol_edges = _symbol_graph(sources, source_paths, aliases)
     modules.sort(key=lambda item: item["id"])
     module_edges.sort(key=lambda item: (item["source"], item["target"]))
     return {

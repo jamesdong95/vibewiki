@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.29-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.29-preview) · scan a repository locally or import a public GitHub URL, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
+**Latest verified preview:** [`v0.1.30-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.30-preview) · scan a repository locally or import a public GitHub URL, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -49,7 +49,8 @@ Router, generic JavaScript/JSX/TypeScript/TSX repositories, common source
 languages such as Python, Go, Rust, Java/Kotlin, Ruby/PHP, C/C++/C#, Swift,
 Dart, shell and SQL, plus Prisma models, markup, configuration, documentation,
 CommonJS/ESM module references, Python/Go/Rust/Java-family/C-family local module
-references, and test links. The extra language adapters are conservative
+references, TypeScript/JavaScript `paths` aliases from `tsconfig.json` or
+`jsconfig.json`, and test links. The extra language adapters are conservative
 regex-based facts rather than full compiler ASTs; files whose semantics are not
 recognized still remain visible as inventory evidence. LLM
 reasoning, runtime exploration, and network access are not required.

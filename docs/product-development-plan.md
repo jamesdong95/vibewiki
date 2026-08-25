@@ -98,6 +98,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Workspace summary giữ provenance an toàn sau import/reload (`GitHub ·
   owner/repo@ref`, `local-path · folder`, hoặc `browser-folder`) để người dùng
   luôn biết graph hiện tại đến từ đâu mà không lộ absolute path.
+- Reverse module/symbol graph resolve `paths` aliases từ `tsconfig.json` và
+  `jsconfig.json`, kể cả config nằm trong package lồng nhau (`@/*`,
+  `@shared/*`), với evidence line/path deterministic.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

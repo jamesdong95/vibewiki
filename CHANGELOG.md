@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.30-preview] - 2026-08-25
+
+### Added
+
+- TypeScript/JavaScript path-alias resolution from `tsconfig.json` and
+  `jsconfig.json` for reverse module and symbol graphs.
+- Nested package config support for aliases such as `@/*`, `@web/*`, and
+  `@shared/*`, with deterministic evidence path/line metadata.
+- Regression coverage for a monorepo-style `packages/web` alias and existing
+  multilanguage reverse edges.
+
+### Changed
+
+- Generic repository analysis now links alias imports to local modules instead
+  of leaving them as inferred external modules when the config provides a safe
+  mapping.
+
 ## [0.1.29-preview] - 2026-08-25
 
 ### Added
