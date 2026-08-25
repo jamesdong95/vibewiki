@@ -375,6 +375,14 @@
     .inspector-section { padding: 19px 0; border-bottom: 1px solid var(--line); }
     .inspector-label { margin-bottom: 10px; color: var(--muted-2); font-family: var(--mono); font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; }
     .inspector-copy { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+    .review-status-copy { margin: 0 0 10px; color: var(--ink-soft); font-size: 11px; line-height: 1.5; }
+    .review-note { width: 100%; min-height: 70px; resize: vertical; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink-soft); background: rgba(3,7,8,0.55); font: 10px/1.45 var(--mono); box-sizing: border-box; }
+    .review-note:focus { border-color: rgba(216,249,139,0.52); }
+    .review-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .review-action { padding: 7px 9px; border: 1px solid var(--lime); border-radius: 6px; color: var(--lime); background: var(--lime-soft); cursor: pointer; font: 9px var(--mono); }
+    .review-action.secondary { border-color: var(--line-strong); color: var(--muted); background: rgba(255,255,255,0.025); }
+    .review-action:hover { filter: brightness(1.12); }
+    .review-action:disabled { cursor: wait; opacity: 0.55; }
     .evidence-list { display: grid; gap: 8px; }
     .evidence-row { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); cursor: pointer; }
     .evidence-row:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.04); }
@@ -828,6 +836,16 @@
         <div class="evidence-list" id="runtime-inspector-list"></div>
       </div>
 
+      <div class="inspector-section" id="review-section" hidden>
+        <div class="inspector-label">Human review</div>
+        <p class="review-status-copy" id="review-status-copy"></p>
+        <textarea class="review-note" id="review-note" maxlength="2000" placeholder="Add a local note for the next review pass…" aria-label="Review note"></textarea>
+        <div class="review-actions">
+          <button class="review-action" type="button" id="review-action">Mark reviewed</button>
+          <button class="review-action secondary" type="button" id="review-reopen" hidden>Reopen</button>
+        </div>
+      </div>
+
       <div class="inspector-section">
         <div class="inspector-label">Connected to</div>
         <div class="impact-list" id="impact-list">
@@ -1076,6 +1094,11 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       sourceViewer: document.getElementById('source-viewer'),
       runtimeSection: document.getElementById('runtime-inspector-section'),
       runtimeList: document.getElementById('runtime-inspector-list'),
+      reviewSection: document.getElementById('review-section'),
+      reviewStatusCopy: document.getElementById('review-status-copy'),
+      reviewNote: document.getElementById('review-note'),
+      reviewAction: document.getElementById('review-action'),
+      reviewReopen: document.getElementById('review-reopen'),
       reverseGraphSection: document.getElementById('reverse-graph-section'),
       reverseGraphStatus: document.getElementById('reverse-graph-status'),
       reverseGraphList: document.getElementById('reverse-graph-list'),
@@ -2172,13 +2195,14 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           return;
         }
         const summary = await response.json();
-        const [nodeResponse, edgeResponse, historyResponse, changesResponse, staleResponse, runtimeResponse] = await Promise.all([
+        const [nodeResponse, edgeResponse, historyResponse, changesResponse, staleResponse, runtimeResponse, reviewsResponse] = await Promise.all([
           fetch('/api/nodes', { cache: 'no-store' }),
           fetch('/api/edges', { cache: 'no-store' }),
           fetch('/api/history', { cache: 'no-store' }),
           fetch('/api/changes', { cache: 'no-store' }),
           fetch('/api/stale', { cache: 'no-store' }),
-          fetch('/api/runtime', { cache: 'no-store' })
+          fetch('/api/runtime', { cache: 'no-store' }),
+          fetch('/api/reviews', { cache: 'no-store' })
         ]);
         if (!nodeResponse.ok || !edgeResponse.ok) return;
         const nodePayload = await nodeResponse.json();
@@ -2190,6 +2214,8 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const historyPayload = historyResponse.ok ? await historyResponse.json() : { runs: [] };
         const changesPayload = changesResponse.ok ? await changesResponse.json() : {status: 'unavailable'};
         const latestChanges = changesPayload.graph || {};
+        const reviewsPayload = reviewsResponse.ok ? await reviewsResponse.json() : (changesPayload.reviews || {items: {}});
+        let reviewItems = reviewsPayload.items || {};
         const stalePayload = staleResponse.ok ? await staleResponse.json() : { files: [] };
         const runtimePayload = runtimeResponse.ok ? await runtimeResponse.json() : { routes: [], network: [], unknowns: [] };
         const historyRuns = historyPayload.runs || [];
@@ -2262,6 +2288,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const canvas = document.getElementById('graph-canvas');
         const nodeList = () => [...canvas.querySelectorAll('.node[data-real-node]')];
         const state = { view: 'Product map', tab: 'Overview', query: '', scope: '', selected: nodes[0]?.id };
+        let currentReviewSubject = '';
         const viewFilters = {
           'Product map': node => true,
           'User flows': node => ['route', 'api_call', 'test'].includes(node.kind),
@@ -2295,6 +2322,61 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
             || value.includes(`:${scope}/`)
           ));
         }
+
+        function reviewFor(subject) {
+          return subject ? reviewItems[subject] || null : null;
+        }
+
+        function reviewMarker(subject) {
+          const review = reviewFor(subject);
+          return review?.status === 'reviewed' ? ' · reviewed' : '';
+        }
+
+        function renderReviewControls(subject, fallbackStatus = 'open') {
+          currentReviewSubject = subject || '';
+          if (!currentReviewSubject) {
+            els.reviewSection.hidden = true;
+            els.reviewNote.value = '';
+            return;
+          }
+          const review = reviewFor(currentReviewSubject);
+          const status = review?.status || fallbackStatus;
+          els.reviewSection.hidden = false;
+          els.reviewStatusCopy.textContent = review
+            ? `${status === 'reviewed' ? 'Reviewed locally' : 'Open for review'} · ${review.updated_at}${review.note ? ` · ${review.note}` : ''}`
+            : 'This item has not been reviewed locally yet.';
+          els.reviewNote.value = review?.note || '';
+          els.reviewAction.textContent = status === 'reviewed' ? 'Save review note' : 'Mark reviewed';
+          els.reviewReopen.hidden = status !== 'reviewed';
+        }
+
+        async function saveReview(status) {
+          if (!currentReviewSubject) return;
+          const subject = currentReviewSubject;
+          els.reviewAction.disabled = true;
+          els.reviewReopen.disabled = true;
+          try {
+            const response = await fetch('/api/reviews', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({subject, status, note: els.reviewNote.value})
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.message || 'Could not save local review state.');
+            reviewItems = payload.reviews?.items || reviewItems;
+            renderReviewControls(subject, status);
+            if (state.view === 'Scan history') renderHistoryInspector();
+            showToast(status === 'reviewed' ? 'Marked reviewed locally.' : 'Review reopened locally.');
+          } catch (error) {
+            showToast(error.message || 'Could not save local review state.');
+          } finally {
+            els.reviewAction.disabled = false;
+            els.reviewReopen.disabled = false;
+          }
+        }
+
+        els.reviewAction.onclick = () => saveReview('reviewed');
+        els.reviewReopen.onclick = () => saveReview('open');
 
         function renderRuntimeInspector(runtime = {}) {
           const entries = [];
@@ -2385,6 +2467,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           els.badge.classList.toggle('inferred', data.confidence === 'inferred');
           els.badge.querySelector('.legend-dot').className = `legend-dot ${data.confidence}`;
           renderRuntimeInspector(data.runtime);
+          renderReviewControls(id, 'open');
           els.evidence.innerHTML = data.evidence.length ? data.evidence.map(item => `<div class="evidence-row" data-source-path="${escapeHtml(item.path)}" data-source-start="${item.line_start}" data-source-end="${item.line_end}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">lines ${item.line_start}–${item.line_end} · ${escapeHtml(item.status)}</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No direct evidence was emitted.</div>';
           els.connected.innerHTML = data.connected.length ? data.connected.map(([name, relation]) => `<div class="impact-row"><span>${name}</span><span>${relation}</span></div>`).join('') : '<div class="empty-state">No connected evidence yet.</div>';
           bindToastTargets();
@@ -2408,6 +2491,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           els.confidenceText.textContent = 'unknown';
           els.badge.classList.remove('inferred');
           els.badge.querySelector('.legend-dot').className = 'legend-dot unknown';
+          renderReviewControls(unknown?.subject || '', 'open');
           els.evidence.innerHTML = unknown?.evidence?.length ? unknown.evidence.map(item => `<div class="evidence-row" data-toast="Evidence from ${item.path}."><span class="file-icon">${item.kind.toUpperCase()}</span><span class="evidence-info"><span class="evidence-path">${item.path}</span><span class="evidence-line">line ${item.line_start} · finding</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No unresolved findings in this build.</div>';
           els.connected.innerHTML = intentGap
             ? `<div class="impact-row"><span>Expected outcome</span><span>${escapeHtml(expected.value)}</span></div>`
@@ -2439,6 +2523,9 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
               label,
               path: (record.paths || []).join(', ') || target,
               node: isEdge ? '' : record.id,
+              reviewSubject: isEdge
+                ? `edge:${record.source}:${record.relation}:${record.target}`
+                : record.id,
               target
             };
           }));
@@ -2456,8 +2543,10 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           els.confidenceText.textContent = graph.status || (staleSources.length ? 'stale' : 'current');
           els.badge.classList.remove('inferred');
           els.badge.querySelector('.legend-dot').className = `legend-dot ${graph.status === 'changed' || staleSources.length ? 'stale' : 'verified'}`;
-          const fileRows = fileChanges.map(item => `<div class="evidence-row" data-toast="${escapeHtml(item.kind)}: ${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">file change · latest scan</span></span><span class="external-arrow">↗</span></div>`);
-          const graphRows = graphChanges.map(item => `<div class="evidence-row" data-change-node="${escapeHtml(item.node)}" data-toast="${escapeHtml(item.label)}: ${escapeHtml(item.target)}"><span class="file-icon">${item.label.startsWith('edge') ? '↝' : '◇'}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.target)}</span><span class="evidence-line">${escapeHtml(item.label)} · ${escapeHtml(item.path)}</span></span><span class="external-arrow">↗</span></div>`);
+          const historyReviewSubject = graphChanges[0]?.reviewSubject || (fileChanges[0] ? `file:${fileChanges[0].path}` : '');
+          renderReviewControls(historyReviewSubject, 'open');
+          const fileRows = fileChanges.map(item => `<div class="evidence-row" data-review-subject="file:${escapeHtml(item.path)}" data-toast="${escapeHtml(item.kind)}: ${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">file change · latest scan${reviewMarker(`file:${item.path}`)}</span></span><span class="external-arrow">↗</span></div>`);
+          const graphRows = graphChanges.map(item => `<div class="evidence-row" data-change-node="${escapeHtml(item.node)}" data-review-subject="${escapeHtml(item.reviewSubject)}" data-toast="${escapeHtml(item.label)}: ${escapeHtml(item.target)}"><span class="file-icon">${item.label.startsWith('edge') ? '↝' : '◇'}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.target)}</span><span class="evidence-line">${escapeHtml(item.label)} · ${escapeHtml(item.path)}${reviewMarker(item.reviewSubject)}</span></span><span class="external-arrow">↗</span></div>`);
           const rows = [...fileRows, ...graphRows];
           els.evidence.innerHTML = rows.length ? rows.slice(0, 80).join('') : '<div class="empty-state">No file or graph changes in the latest scan.</div>';
           const summaryRows = graphGroups.map(([group, label]) => `<div class="impact-row"><span>${escapeHtml(label)}</span><span>${Number(graphCounts[group] || 0)}</span></div>`).join('');
@@ -2469,6 +2558,12 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
               if (nodeId && nodeById.has(nodeId)) renderRealInspector(nodeId);
               else showToast('This changed node is no longer present in the current graph.');
             };
+          });
+          els.evidence.querySelectorAll('[data-review-subject]').forEach(item => {
+            item.addEventListener('contextmenu', event => event.preventDefault());
+            if (!item.dataset.changeNode) {
+              item.onclick = () => renderReviewControls(item.dataset.reviewSubject, 'open');
+            }
           });
         }
 

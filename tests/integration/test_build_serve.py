@@ -112,6 +112,8 @@ def test_serve_exposes_real_artifact_apis(
             history = json.load(response)
         with urlopen(f"{base}/api/changes") as response:
             changes = json.load(response)
+        with urlopen(f"{base}/api/reviews") as response:
+            reviews = json.load(response)
         with urlopen(f"{base}/api/stale") as response:
             staleness = json.load(response)
         with urlopen(f"{base}/api/files") as response:
@@ -128,6 +130,22 @@ def test_serve_exposes_real_artifact_apis(
             source = json.load(response)
         with urlopen(f"{base}/api/llm/status") as response:
             llm = json.load(response)
+        review_request = Request(
+            f"{base}/api/reviews",
+            data=json.dumps(
+                {
+                    "subject": "unknown:missing-test",
+                    "status": "reviewed",
+                    "note": "Confirmed during the local review pass.",
+                }
+            ).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(review_request) as response:
+            saved_review = json.load(response)
+        with urlopen(f"{base}/api/reviews") as response:
+            persisted_reviews = json.load(response)
         with urlopen(f"{base}/api/export") as response:
             export_headers = dict(response.headers)
             export_bytes = response.read()
@@ -255,6 +273,7 @@ def test_serve_exposes_real_artifact_apis(
         assert "vibewiki-export/wiki/index.md" in exported_names
         assert "vibewiki-export/graph.json" in exported_names
         assert "vibewiki-export/history.json" in exported_names
+        assert "vibewiki-export/reviews.json" in exported_names
         assert "vibewiki-export/staleness.json" in exported_names
         assert not any(name.endswith("page.tsx") for name in exported_names)
     assert configured["saved"] is True
@@ -273,6 +292,12 @@ def test_serve_exposes_real_artifact_apis(
     assert staleness == {"files": [], "status": "current"}
     assert changes["status"] == "baseline"
     assert changes["graph"]["counts"]["nodes_added"] > 0
+    assert reviews["counts"] == {"open": 0, "reviewed": 0, "total": 0}
+    assert saved_review["saved"] is True
+    assert saved_review["review"]["status"] == "reviewed"
+    assert persisted_reviews["items"]["unknown:missing-test"]["note"] == (
+        "Confirmed during the local review pass."
+    )
     assert {item["path"] for item in files["files"]} >= {
         "app/page.tsx",
         "app/api/users/route.ts",
@@ -485,6 +510,11 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'data-command-key="copy-link"' in html
     assert "fetch('/api/changes'" in html
     assert "Change review" in html
+    assert 'id="review-section"' in html
+    assert 'id="review-action"' in html
+    assert 'id="review-reopen"' in html
+    assert "fetch('/api/reviews'" in html
+    assert "function saveReview" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
@@ -527,6 +557,34 @@ def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
     assert summary["staleness"]["status"] == "current"
     assert changes["status"] == "changed"
     assert changes["graph"]["counts"]["nodes_added"] >= 1
+
+
+def test_review_api_returns_clear_validation_errors(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    request = Request(
+        f"{base}/api/reviews",
+        data=json.dumps({"subject": "unknown:item", "status": "pending"}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with pytest.raises(HTTPError) as raised:
+            urlopen(request)
+        payload = json.load(raised.value)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert raised.value.code == 422
+    assert payload["error"] == "invalid_output"
+    assert "open or reviewed" in payload["message"]
 
 
 def test_rescan_restores_previous_artifact_when_scan_fails(

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.40-preview] - 2026-08-25
+
+### Added
+
+- Local `.vibewiki/reviews.json` overlay for human review status and bounded
+  notes without changing deterministic graph or source evidence artifacts.
+- Loopback `GET/POST /api/reviews` with atomic writes, `open`/`reviewed`
+  transitions, validation limits, and review counts.
+- Inspector actions to mark an Unknown or graph subject reviewed, save a note,
+  and reopen it without reloading the viewer.
+- Review state is included in source-free exports and covered by API, UI marker,
+  and real browser smoke tests.
+
 ## [0.1.39-preview] - 2026-08-25
 
 ### Added

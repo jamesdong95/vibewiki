@@ -130,12 +130,17 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Scan history now persists a bounded, source-free graph index and exposes
   `/api/changes`; the viewer separates file changes from added/changed/removed
   nodes and edges so a rescan becomes a reviewable change set.
+- Human review workflow now persists a bounded local overlay in
+  `.vibewiki/reviews.json`; Unknowns and change subjects can be marked
+  `reviewed`, annotated, and reopened from the inspector without mutating the
+  deterministic graph.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
 - Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
-- Flow authoring beyond the compact intent form (rich step editing, reusable
-  templates, and review/resolve history) is not yet included.
+- Flow authoring beyond the compact intent form (rich step editing and reusable
+  templates) is not yet included; review state is currently local to one
+  workspace and does not provide multi-user audit history.
 - Change review currently compares consecutive local builds only; it does not
   yet provide a GitHub PR-style multi-commit comparison or inline source diff.
 - GitHub private-repository OAuth, webhook sync và hosted multi-user workspace

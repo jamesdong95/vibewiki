@@ -37,6 +37,7 @@ from .llm import (
 )
 from .observe import observe_repository
 from .rescan import rescan_repository
+from .reviews import REVIEWS_FILENAME, load_reviews, review_counts, set_review
 from .runtime_links import attach_runtime_links
 
 
@@ -121,6 +122,7 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
         "graph-index.json",
         "intent.json",
         "history.json",
+        REVIEWS_FILENAME,
         "runtime.json",
     )
     buffer = io.BytesIO()
@@ -129,7 +131,8 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
             "vibewiki-export/README.md",
             "# VibeWiki export\n\n"
             "Generated from the local deterministic scan. This archive contains "
-            "graph, evidence, wiki, unknowns, scan history, staleness, and "
+            "graph, evidence, wiki, unknowns, scan history, review state, "
+            "staleness, and "
             "runtime observation artifacts; source files are not included.\n",
         )
         for name in files:
@@ -584,6 +587,9 @@ def api_payload(
         return runtime
     if path == "/api/history":
         return {**load_history(root), "current_staleness": stale}
+    if path == "/api/reviews":
+        reviews = load_reviews(root)
+        return {**reviews, "counts": review_counts(reviews)}
     if path == "/api/changes":
         history = load_history(root)
         latest = history.get("runs", [None])[0]
@@ -606,6 +612,7 @@ def api_payload(
         return {
             "files": latest.get("changes", {}) if isinstance(latest, dict) else {},
             "graph": graph_changes,
+            "reviews": load_reviews(root),
             "run": latest,
             "status": graph_changes.get("status", "unavailable"),
         }
@@ -759,6 +766,54 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/reviews":
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "review state is available only on a loopback server",
+                        )
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "review payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "review payload is invalid",
+                        )
+                    with self.server.workspace_lock:
+                        review, reviews = set_review(
+                            self.server.workspace_root,
+                            payload.get("subject"),
+                            payload.get("status"),
+                            payload.get("note"),
+                        )
+                    self._write_json(
+                        200,
+                        {
+                            "counts": review_counts(reviews),
+                            "review": review,
+                            "reviews": reviews,
+                            "saved": True,
+                        },
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError, TypeError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/intent":
                 try:
                     if not self.server.local_path_import_allowed:
