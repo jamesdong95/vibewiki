@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.31-preview] - 2026-08-25
+
+### Added
+
+- Workspace package-name resolution for local JavaScript/TypeScript monorepo
+  imports such as `@demo/ui` and `@demo/ui/button`.
+- Safe `package.json` entry-point and `exports` resolution with deterministic
+  module/symbol evidence; package scripts are never executed.
+- Regression coverage for package-name imports, subpath exports, and the
+  existing path-alias and generic reverse graph behavior.
+
+### Changed
+
+- Reverse graph edges now connect local workspace package dependencies instead
+  of labeling them as inferred external modules.
+
 ## [0.1.30-preview] - 2026-08-25
 
 ### Added

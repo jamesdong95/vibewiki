@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.30-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.30-preview) · scan a repository locally or import a public GitHub URL, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
+**Latest verified preview:** [`v0.1.31-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.31-preview) · scan a repository locally or import a public GitHub URL, resolve workspace package imports, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -167,6 +167,11 @@ Matching API calls are linked to generic route nodes when the method and path
 are literal.
 Unrecognized constructs remain source/module evidence rather than being
 presented as verified behavior.
+
+For JavaScript/TypeScript monorepos, reverse edges also resolve local package
+names such as `@acme/ui` and subpaths such as `@acme/ui/button` from package
+manifest entry points and safe `exports` conditions. Package configuration is
+read as data only; scripts are never executed.
 
 Open `http://127.0.0.1:4173/` to inspect the generated graph, evidence and
 unknowns. By default the server binds to loopback and does not contact

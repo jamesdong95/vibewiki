@@ -87,6 +87,72 @@ def test_build_resolves_typescript_path_aliases_in_nested_package(
     ) in symbol_edges
 
 
+def test_build_resolves_workspace_package_names_and_exports(
+    tmp_path: Path,
+) -> None:
+    app = tmp_path / "packages/app"
+    ui = tmp_path / "packages/ui"
+    api = tmp_path / "packages/api"
+    (app / "src").mkdir(parents=True)
+    (ui / "src").mkdir(parents=True)
+    (api / "src").mkdir(parents=True)
+    (tmp_path / "package.json").write_text(
+        '{"private":true,"workspaces":["packages/*"]}\n'
+    )
+    (app / "package.json").write_text('{"name":"@demo/app"}\n')
+    (ui / "package.json").write_text(
+        '{"name":"@demo/ui","exports":{".":{"import":"./src/index.ts"},'
+        '"./button":{"import":"./src/button.ts"}}}\n'
+    )
+    (api / "package.json").write_text(
+        '{"name":"@demo/api","exports":{"import":"./src/index.ts",'
+        '"default":"./src/index.ts"}}\n'
+    )
+    (app / "src/main.ts").write_text(
+        "import { Button } from '@demo/ui/button';\n"
+        "import { request } from '@demo/api';\n"
+        "export function start() { return Button() + request(); }\n"
+    )
+    (ui / "src/index.ts").write_text("export function Ui() { return 'ui'; }\n")
+    (ui / "src/button.ts").write_text(
+        "export function Button() { return 'button'; }\n"
+    )
+    (api / "src/index.ts").write_text(
+        "export function request() { return 'ok'; }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    module_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+        if edge["relation"] == "imports"
+    }
+    symbol_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["symbol_edges"]
+        if edge["relation"] == "calls"
+    }
+    assert (
+        "module:packages/app/src/main.ts",
+        "module:packages/ui/src/button.ts",
+    ) in module_edges
+    assert (
+        "module:packages/app/src/main.ts",
+        "module:packages/api/src/index.ts",
+    ) in module_edges
+    assert (
+        "symbol:packages/app/src/main.ts:start",
+        "symbol:packages/ui/src/button.ts:Button",
+    ) in symbol_edges
+    assert not any(
+        edge["target"] in {"external:@demo/ui/button", "external:@demo/api"}
+        for edge in graph["module_edges"]
+    )
+
+
 def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
     (tmp_path / "src/internal").mkdir(parents=True)
     (tmp_path / "src/main/java/com/demo").mkdir(parents=True)

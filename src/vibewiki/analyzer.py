@@ -112,6 +112,14 @@ PathAlias = tuple[str, tuple[str, ...], str]
 
 
 @dataclass(frozen=True, slots=True)
+class PackageAlias:
+    name: str
+    root: str
+    entries: tuple[str, ...]
+    exports: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Source:
     path: str
     text: str
@@ -353,11 +361,126 @@ def _load_path_aliases(
     return tuple(sorted(aliases, key=lambda item: (-len(item[0]), item[0])))
 
 
+def _read_json_object(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _package_export_targets(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list):
+        return tuple(
+            target
+            for item in value
+            for target in _package_export_targets(item)
+        )
+    if not isinstance(value, dict):
+        return ()
+    # Conditions are ordered by meaning rather than object insertion order so
+    # artifacts stay deterministic across package managers and JSON writers.
+    preferred = ("types", "typings", "import", "require", "default")
+    keys = [key for key in preferred if key in value]
+    keys.extend(sorted(key for key in value if key not in keys))
+    return tuple(
+        target
+        for key in keys
+        for target in _package_export_targets(value[key])
+    )
+
+
+def _package_target(root: str, target: str) -> str | None:
+    if not target or target.startswith("/"):
+        return None
+    normalized = posixpath.normpath(posixpath.join(root, target))
+    if normalized == ".." or normalized.startswith("../"):
+        return None
+    return normalized
+
+
+def _load_package_aliases(
+    root: Path,
+    manifest: dict[str, Any],
+    inventory: dict[str, Any] | None = None,
+) -> tuple[PackageAlias, ...]:
+    """Read local workspace package names without executing package config."""
+
+    package_paths = {"package.json"}
+    for collection in (manifest.get("files", []), (inventory or {}).get("files", [])):
+        for item in collection:
+            path = str(item.get("path", ""))
+            if posixpath.basename(path) == "package.json":
+                package_paths.add(path)
+
+    aliases: list[PackageAlias] = []
+    for package_path in sorted(package_paths):
+        metadata = _read_json_object(root / Path(package_path))
+        if not metadata or not isinstance(metadata.get("name"), str):
+            continue
+        name = metadata["name"].strip()
+        if not name or name.startswith(".") or name.endswith("/"):
+            continue
+        package_root = posixpath.dirname(package_path) or "."
+        raw_exports = metadata.get("exports")
+        subpath_exports = isinstance(raw_exports, dict) and any(
+            str(key).startswith(".") for key in raw_exports
+        )
+        export_map: dict[str, tuple[str, ...]] = {}
+        if subpath_exports:
+            for key, value in raw_exports.items():
+                if not isinstance(key, str) or not key.startswith("."):
+                    continue
+                targets = tuple(
+                    target
+                    for raw_target in _package_export_targets(value)
+                    if (target := _package_target(package_root, raw_target))
+                )
+                if targets:
+                    export_map[key] = targets
+
+        entry_targets: list[str] = []
+        for field in ("types", "typings", "module", "main"):
+            value = metadata.get(field)
+            if isinstance(value, str):
+                target = _package_target(package_root, value)
+                if target:
+                    entry_targets.append(target)
+        if raw_exports is not None:
+            raw_entry = (
+                raw_exports.get(".")
+                if subpath_exports
+                else raw_exports
+            )
+            entry_targets.extend(
+                target
+                for raw_target in _package_export_targets(raw_entry)
+                if (target := _package_target(package_root, raw_target))
+            )
+        entry_targets.extend(
+            target
+            for fallback in ("src/index", "index")
+            if (target := _package_target(package_root, fallback))
+        )
+        aliases.append(
+            PackageAlias(
+                name=name,
+                root=package_root,
+                entries=tuple(dict.fromkeys(entry_targets)),
+                exports=tuple(sorted(export_map.items())),
+            )
+        )
+    return tuple(sorted(aliases, key=lambda item: (-len(item.name), item.name)))
+
+
 def _resolve_import(
     source_path: str,
     imported: str,
     sources: set[str],
     aliases: tuple[PathAlias, ...] = (),
+    packages: tuple[PackageAlias, ...] = (),
 ) -> str | None:
     bases: list[str] = []
     if imported.startswith("."):
@@ -378,6 +501,36 @@ def _resolve_import(
             posixpath.join(alias_base, target.replace("*", wildcard))
             for target in targets
         )
+    for package in packages:
+        remainder: str | None = None
+        if imported == package.name:
+            remainder = "."
+        elif imported.startswith(package.name + "/"):
+            remainder = "." + imported[len(package.name) :]
+        if remainder is None:
+            continue
+        export_targets = dict(package.exports).get(remainder)
+        if export_targets:
+            bases.extend(export_targets)
+        elif remainder == ".":
+            bases.extend(package.entries)
+        else:
+            matched = False
+            for export_key, targets in package.exports:
+                if export_key.endswith("/*") and remainder.startswith(
+                    export_key[:-1]
+                ):
+                    wildcard = remainder[len(export_key) - 1 :]
+                    bases.extend(
+                        target.replace("*", wildcard) for target in targets
+                    )
+                    matched = True
+                    break
+            if not matched:
+                subpath = posixpath.join(package.root, remainder[2:])
+                bases.extend(
+                    (subpath, posixpath.join(package.root, "src", remainder[2:]))
+                )
     if not bases:
         return None
     return _resolve_candidates(bases, sources, _MODULE_SUFFIXES)
@@ -729,6 +882,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     sources = _load_sources(root, manifest)
     source_paths = set(sources)
     aliases = _load_path_aliases(root, manifest)
+    packages = _load_package_aliases(root, manifest)
     facts: list[dict[str, Any]] = []
     relations: list[dict[str, Any]] = []
     page_keys: dict[str, str] = {}
@@ -843,7 +997,9 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             key = f"test:{path}"
             imports = []
             for match in _IMPORT.finditer(source.text):
-                resolved = _resolve_import(path, match.group(2), source_paths, aliases)
+                resolved = _resolve_import(
+                    path, match.group(2), source_paths, aliases, packages
+                )
                 if resolved:
                     imports.append(
                         _evidence(
@@ -1024,7 +1180,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             active_source = source.text[active_start:]
             for match in _IMPORT.finditer(source.text):
                 imported_path = _resolve_import(
-                    path, match.group(2), source_paths, aliases
+                    path, match.group(2), source_paths, aliases, packages
                 )
                 if not imported_path:
                     continue
@@ -1083,7 +1239,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         source = sources[test_path]
         for match in _IMPORT.finditer(source.text):
             resolved = _resolve_import(
-                test_path, match.group(2), source_paths, aliases
+                test_path, match.group(2), source_paths, aliases, packages
             )
             if resolved in page_keys:
                 relations.append(
@@ -1291,6 +1447,7 @@ def _symbol_graph(
     sources: dict[str, Source],
     module_paths: set[str],
     aliases: tuple[PathAlias, ...] = (),
+    packages: tuple[PackageAlias, ...] = (),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     definitions: dict[str, list[dict[str, Any]]] = {}
     symbols: list[dict[str, Any]] = []
@@ -1343,7 +1500,7 @@ def _symbol_graph(
         imports: dict[str, tuple[str, str, int]] = {}
         for binding in _import_bindings(source):
             resolved = _resolve_import(
-                path, binding["specifier"], module_paths, aliases
+                path, binding["specifier"], module_paths, aliases, packages
             )
             if resolved:
                 imports[binding["local"]] = (
@@ -1411,6 +1568,7 @@ def build_module_graph(
     sources = _load_sources(root, manifest)
     source_paths = set(sources)
     aliases = _load_path_aliases(root, manifest, inventory)
+    package_aliases = _load_package_aliases(root, manifest, inventory)
     modules = []
     module_edges = []
     seen_edges: set[tuple[str, str, str]] = set()
@@ -1450,7 +1608,9 @@ def build_module_graph(
         )
         references = _module_references(source)
         for specifier, offset in references:
-            resolved = _resolve_import(path, specifier, source_paths, aliases)
+            resolved = _resolve_import(
+                path, specifier, source_paths, aliases, package_aliases
+            )
             if resolved is None:
                 resolved = _resolve_language_import(path, specifier, source_paths)
             target = f"module:{resolved}" if resolved else f"external:{specifier}"
@@ -1476,7 +1636,9 @@ def build_module_graph(
         )
 
     packages, package_edges = _package_graph(root, inventory)
-    symbols, symbol_edges = _symbol_graph(sources, source_paths, aliases)
+    symbols, symbol_edges = _symbol_graph(
+        sources, source_paths, aliases, package_aliases
+    )
     modules.sort(key=lambda item: item["id"])
     module_edges.sort(key=lambda item: (item["source"], item["target"]))
     return {

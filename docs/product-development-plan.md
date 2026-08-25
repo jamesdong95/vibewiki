@@ -101,6 +101,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Reverse module/symbol graph resolve `paths` aliases từ `tsconfig.json` và
   `jsconfig.json`, kể cả config nằm trong package lồng nhau (`@/*`,
   `@shared/*`), với evidence line/path deterministic.
+- Reverse module/symbol graph resolve local workspace package names và
+  subpaths (`@demo/ui`, `@demo/ui/button`) qua `types`/`module`/`main` và
+  `exports` an toàn, không thực thi package scripts.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
