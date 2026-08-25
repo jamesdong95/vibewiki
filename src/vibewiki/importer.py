@@ -24,6 +24,7 @@ from .config import (
     PRISMA_SCHEMA_RELATIVE_PATH,
     SUPPORTED_SUFFIXES,
 )
+from .discovery.files import DiscoveredFile, discover_files
 from .discovery.ignore import should_skip_path
 from .errors import ErrorCode, VibeWikiError
 from .scan import scan_repository
@@ -206,6 +207,12 @@ def import_uploaded_workspace(content_type: str, body: bytes) -> ImportedWorkspa
     if first_top not in {"app", "src", "tests", "prisma"}:
         project_name = first_top
 
+    return _build_imported_workspace(selected, project_name)
+
+
+def _build_imported_workspace(
+    selected: list[tuple[str, str, bytes]], project_name: str
+) -> ImportedWorkspace:
     temp_parent = Path(tempfile.mkdtemp(prefix="vibewiki-import-"))
     root = temp_parent / project_name
     root.mkdir()
@@ -222,6 +229,94 @@ def import_uploaded_workspace(content_type: str, body: bytes) -> ImportedWorkspa
     return ImportedWorkspace(root=root, build_summary=build_summary)
 
 
+def import_local_workspace(repository: str | Path) -> ImportedWorkspace:
+    """Copy a user-selected local directory into a bounded import workspace.
+
+    This loopback-only path import exists for browsers that cannot expose a
+    directory picker. It uses the same ignored/sensitive path policy and byte
+    and file limits as multipart Browse, then builds a temporary snapshot so
+    the server never mutates the user's source repository.
+    """
+
+    source_root = Path(repository).expanduser().absolute()
+    discovered = list(discover_files(source_root, include_generic=True))
+    schema = source_root / Path(PRISMA_SCHEMA_RELATIVE_PATH)
+    if (
+        schema.is_file()
+        and not schema.is_symlink()
+        and not should_skip_path(PurePosixPath(PRISMA_SCHEMA_RELATIVE_PATH))
+    ):
+        schema_size = schema.stat().st_size
+        discovered.append(
+            DiscoveredFile(
+                path=PRISMA_SCHEMA_RELATIVE_PATH,
+                language="prisma",
+                size=schema_size,
+                absolute_path=schema,
+            )
+        )
+    if not discovered:
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "local path contains no supported source, config, or documentation files",
+        )
+    if len(discovered) > MAX_IMPORT_FILES:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "local path contains too many supported files "
+            f"(limit: {MAX_IMPORT_FILES})",
+        )
+    total_bytes = sum(item.size for item in discovered)
+    if total_bytes > MAX_IMPORT_BYTES:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "local path exceeds the supported byte limit "
+            f"(limit: {MAX_IMPORT_BYTES})",
+        )
+
+    paths = [PurePosixPath(item.path) for item in discovered]
+    chosen_prefix = _choose_source_prefix(paths)
+    selected: list[tuple[str, str, bytes]] = []
+    seen: set[str] = set()
+    read_bytes = 0
+    for item in discovered:
+        path = PurePosixPath(item.path)
+        if path.parts[: len(chosen_prefix)] != chosen_prefix:
+            continue
+        trimmed = path.parts[len(chosen_prefix) :]
+        if not trimmed:
+            continue
+        normalized = PurePosixPath(*trimmed).as_posix()
+        if normalized in seen:
+            raise VibeWikiError(
+                ErrorCode.INVALID_OUTPUT,
+                "local path contains duplicate normalized source paths",
+            )
+        seen.add(normalized)
+        try:
+            payload = item.absolute_path.read_bytes()
+        except (OSError, ValueError) as error:
+            raise VibeWikiError(
+                ErrorCode.PERMISSION_DENIED,
+                "permission denied while reading the local source path",
+            ) from error
+        read_bytes += len(payload)
+        if read_bytes > MAX_IMPORT_BYTES:
+            raise VibeWikiError(
+                ErrorCode.INVALID_OUTPUT,
+                "local path exceeds the supported byte limit "
+                f"(limit: {MAX_IMPORT_BYTES})",
+            )
+        selected.append((path.parts[0], normalized, payload))
+    if not selected:
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "local path package contains no supported source files",
+        )
+    project_name = re.sub(r"[^A-Za-z0-9._-]+", "-", source_root.name).strip("-")
+    return _build_imported_workspace(selected, project_name or "local-source")
+
+
 def cleanup_workspace(workspace: ImportedWorkspace) -> None:
     """Remove only the temporary workspace created by a browser import."""
 
@@ -234,5 +329,6 @@ __all__ = [
     "MAX_IMPORT_FILES",
     "MAX_MULTIPART_PARTS",
     "cleanup_workspace",
+    "import_local_workspace",
     "import_uploaded_workspace",
 ]

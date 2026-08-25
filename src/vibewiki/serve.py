@@ -22,6 +22,7 @@ from .importer import (
     MAX_IMPORT_BYTES,
     ImportedWorkspace,
     cleanup_workspace,
+    import_local_workspace,
     import_uploaded_workspace,
 )
 from .intent import compare_product_intent
@@ -754,6 +755,50 @@ def create_server(
                         {"error": "invalid_output", "message": str(error)},
                     )
                 return
+            if parsed.path == "/api/import-path":
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "local path import is available only on a loopback server",
+                        )
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "local path import payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict) or not isinstance(
+                        payload.get("path"), str
+                    ):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "local repository path is required",
+                        )
+                    imported = import_local_workspace(payload["path"].strip())
+                    old_workspace = self.server.imported_workspace
+                    self.server.workspace_root = imported.root
+                    self.server.workspace_artifact = _artifact(imported.root)
+                    self.server.imported_workspace = imported
+                    if old_workspace is not None:
+                        cleanup_workspace(old_workspace)
+                    self._write_json(
+                        200, {**imported.build_summary, "import_mode": "local-path"}
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/llm/config":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))
@@ -880,6 +925,7 @@ def create_server(
     server.workspace_artifact = artifact
     server.llm_settings: LLMSettings | None = None
     server.imported_workspace: ImportedWorkspace | None = None
+    server.local_path_import_allowed = host in {"127.0.0.1", "localhost", "::1"}
     return server
 
 

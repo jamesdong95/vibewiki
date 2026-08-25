@@ -78,6 +78,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   contract legacy cho CI và fixture golden.
 - Generic adapter coverage đã thêm Angular Router route arrays và NestJS
   controller decorators với route evidence deterministic.
+- Browse có fallback **Use local path** qua loopback API cho môi trường không
+  cung cấp folder picker; snapshot vẫn đi qua ignore, secret và size limits.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

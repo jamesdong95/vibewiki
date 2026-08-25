@@ -271,6 +271,7 @@
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     .browse-wrap { display: inline-flex; align-items: center; gap: 8px; }
     .browse-hint { color: var(--muted-2); font-family: var(--mono); font-size: 8px; white-space: nowrap; }
+    .path-import-input { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--ink); background: rgba(255,255,255,0.035); font-family: var(--mono); font-size: 10px; }
 
     .main-scroll { overflow: auto; padding: 30px 30px 44px; }
     .main-scroll::-webkit-scrollbar, .inspector::-webkit-scrollbar { width: 8px; }
@@ -476,6 +477,16 @@
       .node { width: 132px; }
     }
 
+    @media (max-width: 1400px) {
+      .browse-hint { display: none; }
+      .top-actions { min-width: 0; gap: 5px; }
+      .top-actions .text-button { padding-right: 8px; padding-left: 8px; }
+      .browse-wrap { gap: 5px; }
+      .top-search { min-width: 150px; max-width: 360px; }
+      .top-actions > .icon-button[aria-label="Notifications"],
+      .top-actions > .text-button[data-toast="Share is disabled in local-only preview."] { display: none; }
+    }
+
     @media (max-width: 1040px) {
       .app-shell { grid-template-columns: 218px minmax(520px, 1fr); }
       .inspector { display: none; }
@@ -589,6 +600,7 @@
           <div class="browse-wrap">
             <span class="browse-hint">JS/TS · Python · Go · Rust · config/docs</span>
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
+            <button class="text-button" type="button" id="local-path-button" title="Import a local repository path through the loopback server">Use local path</button>
           </div>
           <button class="text-button" type="button" id="observe-button" title="Observe a local app with safe GET requests">Observe runtime</button>
           <button class="text-button" type="button" id="llm-settings-button" title="Configure local LLM">LLM setup</button>
@@ -613,7 +625,23 @@
         <button class="text-button" type="button" id="source-package-cancel">Cancel</button>
       </div>
 
-      <div class="main-scroll">
+  <div class="modal-backdrop" id="local-path-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Import local repository path">
+      <div class="command-input"><span>⌂</span><strong>Import local path</strong></div>
+      <form class="settings-form" id="local-path-form">
+        <p class="settings-copy">Use this when the browser folder picker is unavailable. The loopback VibeWiki server reads a bounded snapshot locally; no source is sent to a cloud service.</p>
+        <label class="settings-label" for="source-path">Repository path</label>
+        <input class="path-import-input" id="source-path" type="text" autocomplete="off" spellcheck="false" placeholder="/Users/you/project" aria-label="Local repository path" />
+        <div class="settings-status" id="local-path-status" role="status" aria-live="polite">Only available when VibeWiki is bound to loopback.</div>
+        <div class="settings-actions">
+          <button class="text-button" type="button" id="local-path-cancel">Cancel</button>
+          <button class="text-button primary" type="submit">Import and scan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="main-scroll">
         <div class="section-heading">
           <div>
             <div class="eyebrow" id="eyebrow">Living product wiki / snapshot 14</div>
@@ -1106,6 +1134,11 @@
 
     const sourcePicker = document.getElementById('source-picker');
     const browseButton = document.getElementById('browse-button');
+    const localPathButton = document.getElementById('local-path-button');
+    const localPathModal = document.getElementById('local-path-modal');
+    const localPathForm = document.getElementById('local-path-form');
+    const sourcePath = document.getElementById('source-path');
+    const localPathStatus = document.getElementById('local-path-status');
     const scanButton = document.getElementById('scan-button');
     const browseStatus = document.getElementById('browse-status');
     const browsePicker = document.getElementById('browse-picker');
@@ -1133,6 +1166,51 @@
     function chooseSourceFolder() {
       setBrowseStatus('Đang chờ chọn một thư mục source local…', 'busy');
       sourcePicker.click();
+    }
+    function openLocalPathImport() {
+      localPathModal.classList.add('open');
+      localPathModal.setAttribute('aria-hidden', 'false');
+      localPathStatus.className = 'settings-status';
+      localPathStatus.textContent = 'Loopback only · snapshot is copied into a temporary workspace.';
+      sourcePath.focus();
+    }
+    function closeLocalPathImport() {
+      localPathModal.classList.remove('open');
+      localPathModal.setAttribute('aria-hidden', 'true');
+    }
+    async function importLocalPath(event) {
+      event.preventDefault();
+      const path = sourcePath.value.trim();
+      if (!path) return sourcePath.focus();
+      localPathStatus.className = 'settings-status';
+      localPathStatus.textContent = 'Đang đọc và scan local path…';
+      localPathButton.disabled = true;
+      browseButton.disabled = true;
+      scanButton.disabled = true;
+      setBrowseStatus('Đang import snapshot từ local path…', 'busy');
+      try {
+        const response = await fetch('/api/import-path', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({path})
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(importErrorMessage(result));
+        localPathStatus.className = 'settings-status success';
+        localPathStatus.textContent = `Scan thành công: ${result.counts?.scanned_files || 0} files · ${result.counts?.facts || 0} facts.`;
+        setBrowseStatus('Scan thành công từ local path. Đang tải graph mới…', 'success');
+        showToast('Local path imported successfully.');
+        window.setTimeout(() => window.location.reload(), 1400);
+      } catch (error) {
+        const message = error.message || 'Không thể đọc local path.';
+        localPathStatus.className = 'settings-status error';
+        localPathStatus.textContent = message;
+        setBrowseStatus(`Lỗi scan: ${message} Bạn có thể thử path khác.`, 'error');
+        showToast(message);
+        localPathButton.disabled = false;
+        browseButton.disabled = false;
+        scanButton.disabled = false;
+      }
     }
     function formatProfileBytes(value) {
       const bytes = Number(value || 0);
@@ -1338,6 +1416,12 @@
     profileModal.addEventListener('click', event => {
       if (event.target === profileModal) closeProjectProfile();
     });
+    localPathButton.addEventListener('click', openLocalPathImport);
+    document.getElementById('local-path-cancel').addEventListener('click', closeLocalPathImport);
+    localPathModal.addEventListener('click', event => {
+      if (event.target === localPathModal) closeLocalPathImport();
+    });
+    localPathForm.addEventListener('submit', importLocalPath);
     browseButton.addEventListener('click', chooseSourceFolder);
     sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
     document.getElementById('scan-button').addEventListener('click', chooseSourceFolder);

@@ -6,6 +6,7 @@ import threading
 import zipfile
 from io import BytesIO
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
@@ -292,6 +293,10 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="profile-focus"' in html
     assert "function nodeMatchesScope" in html
     assert "setScope(scope)" in html
+    assert 'id="local-path-button"' in html
+    assert 'id="local-path-modal"' in html
+    assert 'id="source-path"' in html
+    assert "function importLocalPath" in html
     assert "function buildImportGroups" in html
 
 
@@ -427,6 +432,71 @@ def test_serve_imports_a_browser_selected_source_folder(tmp_path: Path) -> None:
     assert summary["project"] == "picked-source"
     assert summary["counts"]["facts"] == 1
     assert not (imported_workspace.root / ".env.local").exists()
+
+
+def test_serve_imports_a_local_repository_path_without_browser_picker(
+    tmp_path: Path,
+) -> None:
+    root = _fixture_copy(tmp_path)
+    source = tmp_path / "local-path-source"
+    (source / "src").mkdir(parents=True)
+    (source / "src/main.js").write_text(
+        "export function start() { return true; }\n"
+    )
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = Request(
+        f"http://127.0.0.1:{server.server_address[1]}/api/import-path",
+        data=json.dumps({"path": str(source)}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(request) as response:
+            imported = json.load(response)
+        with urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}/api/summary"
+        ) as response:
+            summary = json.load(response)
+    finally:
+        imported_workspace = server.imported_workspace
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        if imported_workspace is not None:
+            cleanup_workspace(imported_workspace)
+
+    assert imported["import_mode"] == "local-path"
+    assert imported["counts"]["scanned_files"] == 1
+    assert summary["project"] == "local-path-source"
+    assert summary["counts"]["facts"] == 1
+
+
+def test_local_path_import_rejects_non_loopback_server(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, host="0.0.0.0", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = Request(
+        f"http://127.0.0.1:{server.server_address[1]}/api/import-path",
+        data=json.dumps({"path": str(root)}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with pytest.raises(HTTPError) as raised:
+            urlopen(request)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert raised.value.code == 422
 
 
 def test_import_limit_ignores_sensitive_and_unsupported_payloads(monkeypatch) -> None:

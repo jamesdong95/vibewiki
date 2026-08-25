@@ -163,8 +163,11 @@ larger than the local safety limit, Browse offers bounded package candidates
 such as `apps/frontend` or `packages/web` instead of failing the entire scan.
 Selected supported files are sent only to this loopback process, scanned
 locally, and the temporary imported workspace is removed when the server exits.
-The CLI's default scan remains strict for the original direct Next.js App
-Router contract; Browse uses the generic local import profile.
+If the browser cannot open a directory picker, use **Use local path** in the
+viewer; the loopback server reads the path locally, applies the same limits and
+secret filters, and imports a temporary snapshot without mutating the source.
+The CLI keeps byte-compatible strict discovery for a direct Next.js App Router
+and auto-selects the generic local import profile for other repositories.
 
 After a build, **Source files** in the Knowledge sidebar opens the indexed
 inventory. Filter by path or language, see stale files, and click a file to

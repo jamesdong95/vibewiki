@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.20-preview] - 2026-08-25
+
+### Added
+
+- **Use local path** fallback in the viewer for environments where a browser
+  folder picker is unavailable.
+- Loopback-only `/api/import-path` with the same source filtering, 10,000-file
+  and 200 MB safety limits, temporary snapshot isolation, and artifact swap
+  behavior as multipart Browse.
+- Responsive topbar regression fix so Browse controls remain clickable in the
+  real workspace viewport.
+
 ## [0.1.19-preview] - 2026-08-25
 
 ### Added

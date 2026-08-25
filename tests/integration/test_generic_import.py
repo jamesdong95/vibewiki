@@ -8,7 +8,11 @@ import pytest
 
 from vibewiki.build import build_repository
 from vibewiki.errors import ErrorCode, VibeWikiError
-from vibewiki.importer import _multipart_files
+from vibewiki.importer import (
+    _multipart_files,
+    cleanup_workspace,
+    import_local_workspace,
+)
 from vibewiki.scan import scan_repository
 
 
@@ -54,6 +58,26 @@ def test_generic_javascript_repository_builds_without_app(tmp_path: Path) -> Non
     assert any(
         item["semantic_key"] == "test:tests/app.spec.js" for item in facts["facts"]
     )
+
+
+def test_local_path_import_builds_bounded_snapshot(tmp_path: Path) -> None:
+    source = tmp_path / "source-project"
+    (source / "src").mkdir(parents=True)
+    (source / "src/main.js").write_text(
+        "export function start() { return true; }\n"
+    )
+    (source / ".env.local").write_text("API_KEY=not-read\n")
+    (source / "image.png").write_bytes(b"not-indexed")
+
+    imported = import_local_workspace(source)
+    try:
+        assert imported.build_summary["counts"]["scanned_files"] == 1
+        assert imported.build_summary["counts"]["facts"] == 1
+        assert (imported.root / "src/main.js").is_file()
+        assert not (imported.root / ".env.local").exists()
+        assert not (imported.root / "image.png").exists()
+    finally:
+        cleanup_workspace(imported)
 
 
 def test_vite_react_fixture_emits_router_objects_and_api_wrapper_edges(
