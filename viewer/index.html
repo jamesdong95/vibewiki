@@ -497,7 +497,7 @@
       .browse-wrap { gap: 5px; }
       .top-search { min-width: 150px; max-width: 360px; }
       .top-actions > .icon-button[aria-label="Notifications"],
-      .top-actions > .text-button[data-toast="Share is disabled in local-only preview."] { display: none; }
+      .top-actions > #copy-link-button { display: none; }
     }
 
     @media (max-width: 1040px) {
@@ -620,7 +620,7 @@
           <button class="text-button" type="button" id="export-button" title="Download the current wiki export">Export wiki</button>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
           <button class="icon-button" type="button" data-toast="No unsynced changes. Local index is current." aria-label="Notifications" title="Notifications">◌</button>
-          <button class="text-button" type="button" data-toast="Share is disabled in local-only preview.">Share</button>
+          <button class="text-button" type="button" id="copy-link-button" title="Copy the local viewer URL">Copy link</button>
         </div>
       </header>
       <input class="source-picker" id="source-picker" type="file" webkitdirectory directory multiple aria-label="Choose source folder" />
@@ -946,6 +946,7 @@
         <button class="command-item" type="button" data-command-key="unknowns" data-command="Open unknowns"><span class="command-key">!</span><span>Review unknowns<small id="command-unknowns-meta">6 concepts need human context</small></span></button>
         <button class="command-item" type="button" data-command-key="scan" data-command="Scan latest"><span class="command-key">↻</span><span>Scan latest commit<small id="command-scan-meta">Update the local product graph</small></span></button>
         <button class="command-item" type="button" data-command-key="export" data-command="Export wiki"><span class="command-key">↓</span><span>Export wiki<small id="command-export-meta">Markdown + Mermaid bundle</small></span></button>
+        <button class="command-item" type="button" data-command-key="copy-link" data-command="Copy local link"><span class="command-key">↗</span><span>Copy local link<small>Works while this local server is running</small></span></button>
       </div>
     </div>
   </div>
@@ -1037,6 +1038,28 @@
       els.toast.classList.add('show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2700);
+    }
+
+    async function copyLocalLink() {
+      const link = window.location.href;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(link);
+        } else {
+          const input = document.createElement('textarea');
+          input.value = link;
+          input.setAttribute('readonly', '');
+          input.style.position = 'fixed';
+          input.style.opacity = '0';
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand('copy');
+          input.remove();
+        }
+        showToast('Local viewer link copied. It works while this server is running.');
+      } catch (error) {
+        showToast(`Copy failed. Local link: ${link}`);
+      }
     }
 
     function escapeHtml(value) {
@@ -1779,6 +1802,7 @@
     document.getElementById('mini-submit').addEventListener('click', () => submitQuestion(document.getElementById('mini-question')));
     document.getElementById('mini-question').addEventListener('keydown', event => { if (event.key === 'Enter') submitQuestion(event.currentTarget); });
     document.getElementById('export-button').addEventListener('click', exportWiki);
+    document.getElementById('copy-link-button').addEventListener('click', copyLocalLink);
     document.getElementById('observe-button').addEventListener('click', openObserveSettings);
     observeForm.addEventListener('submit', observeRuntime);
     document.getElementById('observe-cancel').addEventListener('click', closeObserveSettings);
@@ -2259,6 +2283,7 @@
             if (command === 'unknowns') this.setView('Unknowns');
             if (command === 'scan') rescanCurrentWorkspace();
             if (command === 'export') exportWiki();
+            if (command === 'copy-link') copyLocalLink();
           }
         };
         canvas.onclick = event => {

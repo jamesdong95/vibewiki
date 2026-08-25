@@ -87,6 +87,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   để người dùng mới có thể chạy một lệnh và mở được viewer.
 - Viewer tự phát hiện stale source trong lúc đang mở, hiển thị path bị đổi và
   chỉ rescan khi người dùng bấm xác nhận.
+- Placeholder Share đã được thay bằng Copy local link, có clipboard fallback và
+  thông báo rõ link chỉ hoạt động khi local server còn chạy.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

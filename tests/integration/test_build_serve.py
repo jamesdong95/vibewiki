@@ -338,6 +338,10 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'class="ask-section-label">Evidence' in html
     assert 'class="ask-section-label">Confidence' in html
     assert 'class="ask-section-label">Unknowns' in html
+    assert 'id="copy-link-button"' in html
+    assert "function copyLocalLink" in html
+    assert "Local viewer link copied" in html
+    assert 'data-command-key="copy-link"' in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:

@@ -87,6 +87,8 @@ The local product provides:
 - One-click ZIP export of the generated wiki, graph, evidence, and unknowns
   artifacts without bundling source files.
 - Explicit confidence, unknowns, and local-runtime status.
+- Copy a local viewer link while the loopback server is running, plus source-free
+  ZIP export for sharing the generated wiki artifact.
 - A local-first visual language that does not require a hosted backend.
 
 Runtime observation is available as an explicit, safe baseline. Start a local

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.25-preview] - 2026-08-25
+
+### Changed
+
+- Replaced the disabled Share placeholder with a working **Copy local link**
+  action and clipboard fallback.
+- Added the same action to the command palette for compact viewports; the UI
+  explains that the copied URL works while the local server is running.
+- Added static regression and live browser coverage for the action.
+
 ## [0.1.24-preview] - 2026-08-25
 
 ### Changed
