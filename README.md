@@ -80,15 +80,17 @@ not execute JavaScript, so browser-only behavior remains unknown there. For a
 browser-backed local probe, install the optional adapter and Chromium once:
 
 ```bash
-uv pip install 'vibewiki[runtime]'
-playwright install chromium
+uv sync --extra runtime
+uv run playwright install chromium
 uv run vibewiki observe http://127.0.0.1:3000 \
   --repository /path/to/repo --mode browser --screenshots
 ```
 
 Browser mode runs headless with a fresh context, follows same-origin routes,
 blocks cross-origin and non-GET requests, and never submits forms or performs
-authentication. The viewer exposes the same choice from **Observe runtime**.
+authentication. Observed routes and API requests are joined to matching graph
+nodes by path/method; selected nodes show runtime status and console errors in
+the inspector. The viewer exposes the same choice from **Observe runtime**.
 
 ## Product direction
 
@@ -262,7 +264,7 @@ use the presentation fixture when running under `vibewiki serve`.
 2. Add file discovery and deterministic Next.js/TypeScript facts.
 3. Persist sources, nodes, edges, claims, and evidence in SQLite.
 4. Generate Markdown/Mermaid wiki pages and replace demo data in the viewer.
-5. Add bounded runtime observation evidence with safe read-only defaults. *(HTTP mode in 0.1.4-preview; browser mode in 0.1.5-preview)*
+5. Add bounded runtime observation evidence with safe read-only defaults. *(HTTP mode in 0.1.4-preview; browser mode and graph linkage in 0.1.6-preview)*
 6. Package clean installs and CI gates for external users.
 7. Add broader language/framework adapters behind fixture-backed gates.
 

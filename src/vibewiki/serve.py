@@ -31,6 +31,7 @@ from .llm import (
     llm_status,
 )
 from .observe import observe_repository
+from .runtime_links import attach_runtime_links
 
 
 def _artifact(root: Path) -> dict[str, Any]:
@@ -366,7 +367,7 @@ def api_payload(
     edges = _artifact_edges(artifact, stale_by_path)
     params = params or {}
     intent = compare_product_intent(root, artifact)
-    runtime = _runtime(root)
+    runtime = attach_runtime_links(_runtime(root), nodes)
     unknowns = artifact["unknowns"] + intent["gaps"] + runtime.get("unknowns", [])
     if path == "/api/summary":
         return {

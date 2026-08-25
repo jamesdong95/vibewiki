@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.6-preview] - 2026-08-25
+
+### Added
+
+- Runtime route, network request, and browser console evidence is joined to
+  matching static route/API graph nodes by path and method.
+- Runtime graph links are persisted in `runtime.json` and included in exports.
+- Selected route/API nodes now show linked runtime evidence and console errors
+  directly in the viewer inspector.
+
 ## [0.1.5-preview] - 2026-08-25
 
 ### Added

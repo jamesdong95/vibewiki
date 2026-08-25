@@ -100,6 +100,42 @@ def test_serve_exposes_real_artifact_apis(
             runtime = json.load(response)
         with urlopen(f"{base}/api/summary") as response:
             observed_summary = json.load(response)
+        linked_artifact = {**runtime}
+        linked_artifact["routes"] = [
+            *runtime["routes"],
+            {
+                "path": "/signup",
+                "status": 200,
+                "url": f"{base}/signup",
+            },
+        ]
+        linked_artifact["network"] = [
+            *runtime["network"],
+            {
+                "method": "POST",
+                "status": None,
+                "url": f"{base}/api/users",
+                "error": "blocked_by_safe_policy",
+            },
+        ]
+        linked_artifact["console"] = [
+            {
+                "line": 12,
+                "column": 3,
+                "text": "runtime error",
+                "type": "error",
+                "url": f"{base}/signup",
+            }
+        ]
+        (root / ".vibewiki/runtime.json").write_text(
+            json.dumps(linked_artifact), encoding="utf-8"
+        )
+        with urlopen(f"{base}/api/nodes") as response:
+            linked_nodes = json.load(response)
+        with urlopen(f"{base}/api/runtime") as response:
+            linked_runtime = json.load(response)
+        with urlopen(f"{base}/api/inspect/route:page:/signup") as response:
+            linked_inspector = json.load(response)
         screenshot_dir = root / ".vibewiki/runtime-screenshots"
         screenshot_dir.mkdir(parents=True)
         (screenshot_dir / "route-01.png").write_bytes(b"fake-png")
@@ -184,6 +220,8 @@ def test_serve_exposes_real_artifact_apis(
         "unknowns": 1,
     }
     assert runtime["routes"][0]["path"] == "/"
+    assert runtime["routes"][0]["graph_nodes"] == ["route:page:/"]
+    assert runtime["network"][0]["graph_nodes"] == ["route:page:/"]
     assert runtime["unknowns"][0]["subject"] == "runtime:javascript-and-side-effects"
     assert observed_summary["runtime"] == {
         "configured": True,
@@ -193,6 +231,17 @@ def test_serve_exposes_real_artifact_apis(
         "console_errors": 0,
         "observed_at": runtime["observed_at"],
     }
+    signup_node = next(
+        node for node in linked_nodes["nodes"] if node["id"] == "route:page:/signup"
+    )
+    assert len(signup_node["runtime"]["routes"]) == 1
+    assert len(signup_node["runtime"]["console"]) == 1
+    assert "route:handler:/api/users" in linked_runtime["network"][-1]["graph_nodes"]
+    assert (
+        "api_call:app/signup/page.tsx:/api/users"
+        in linked_runtime["network"][-1]["graph_nodes"]
+    )
+    assert linked_inspector["node"]["runtime"]["console"][0]["text"] == "runtime error"
     with zipfile.ZipFile(BytesIO(export_bytes_with_runtime)) as exported:
         exported_names = set(exported.namelist())
         assert "vibewiki-export/runtime.json" in exported_names

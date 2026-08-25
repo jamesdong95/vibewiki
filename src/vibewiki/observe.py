@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from html.parser import HTMLParser
 from pathlib import Path
@@ -14,6 +15,7 @@ from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .analyzer import write_json
 from .config import MANIFEST_DIRECTORY
 from .errors import ErrorCode, VibeWikiError
+from .runtime_links import attach_runtime_links
 
 OBSERVER_VERSION = "0.2.0"
 HTTP_OBSERVER_VERSION = "0.1.0-http"
@@ -84,6 +86,27 @@ def _write_runtime(root: Path, runtime: dict[str, Any]) -> None:
     output = root / MANIFEST_DIRECTORY
     output.mkdir(exist_ok=True)
     write_json(output / "runtime.json", runtime)
+
+
+def _persist_runtime_links(root: Path, runtime: dict[str, Any]) -> dict[str, Any]:
+    """Persist graph joins when a built artifact is available."""
+    graph_path = root / MANIFEST_DIRECTORY / "graph.json"
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return runtime
+    if not isinstance(graph, dict):
+        return runtime
+    nodes = [
+        {
+            "id": fact.get("semantic_key"),
+            "kind": fact.get("kind"),
+            "attributes": fact.get("attributes", {}),
+        }
+        for fact in graph.get("facts", [])
+        if fact.get("semantic_key") and fact.get("kind")
+    ]
+    return attach_runtime_links(runtime, nodes) if nodes else runtime
 
 
 def _runtime_summary(
@@ -307,6 +330,7 @@ def observe_repository(
             }
         ],
     }
+    runtime = _persist_runtime_links(root, runtime)
     _write_runtime(root, runtime)
     return _runtime_summary(_safe_runtime_url(target), "http", runtime)
 
@@ -564,6 +588,7 @@ def _observe_browser_repository(
         "target": _safe_runtime_url(target),
         "unknowns": unknowns,
     }
+    runtime = _persist_runtime_links(root, runtime)
     _write_runtime(root, runtime)
     return _runtime_summary(_safe_runtime_url(target), "browser", runtime)
 

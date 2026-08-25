@@ -428,7 +428,9 @@ và unknown rõ ràng cho JavaScript/console/side effects chưa được chạy.
 có nút Observe runtime và export chứa runtime artifact. Browser mode đã triển
 khai trong 0.1.5-preview qua `vibewiki[runtime]`, chạy headless Chromium với
 same-origin `GET`, chặn request khác origin/non-GET, thu console error, network
-status và screenshot metadata; side effects/auth vẫn là unknown.
+status và screenshot metadata; side effects/auth vẫn là unknown. Runtime
+records được join deterministic vào route/API node theo path + method, persist
+trong `runtime.json`, và hiển thị trong inspector.
 
 ### Phase 9 — Runtime explorer bằng Playwright
 
@@ -444,9 +446,13 @@ status và screenshot metadata; side effects/auth vẫn là unknown.
 
 **Gate:** demo app local có route transition và API request được liên kết với graph; lỗi runtime xuất hiện trong inspector.
 
+**Đã đạt trong 0.1.6-preview:** runtime route/network/console records có
+`graph_nodes` deterministic; `/api/nodes`, `/api/runtime` và `/api/inspect/*`
+trả linked evidence; viewer inspector hiển thị status/error cho node được chọn.
+
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.5-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.6-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 

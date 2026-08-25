@@ -361,6 +361,9 @@
     .impact-list { display: grid; gap: 8px; }
     .impact-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 11px; }
     .impact-row span:last-child { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .runtime-row.error { border-color: rgba(255,129,111,0.32); }
+    .runtime-row.error .file-icon { color: #ffb4a8; background: rgba(255,129,111,0.12); }
+    .runtime-row .evidence-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .inspector-footer { padding-top: 19px; }
     .mini-prompt { display: flex; align-items: center; gap: 8px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: rgba(255,255,255,0.025); }
     .mini-prompt input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 11px; }
@@ -689,6 +692,11 @@
         <pre class="source-viewer" id="source-viewer" aria-label="Source preview"></pre>
       </div>
 
+      <div class="inspector-section" id="runtime-inspector-section" hidden>
+        <div class="inspector-label">Runtime evidence</div>
+        <div class="evidence-list" id="runtime-inspector-list"></div>
+      </div>
+
       <div class="inspector-section">
         <div class="inspector-label">Connected to</div>
         <div class="impact-list" id="impact-list">
@@ -858,6 +866,8 @@
       sourceSection: document.getElementById('source-viewer-section'),
       sourceLabel: document.getElementById('source-viewer-label'),
       sourceViewer: document.getElementById('source-viewer'),
+      runtimeSection: document.getElementById('runtime-inspector-section'),
+      runtimeList: document.getElementById('runtime-inspector-list'),
       graphCanvas: document.getElementById('graph-canvas'),
       search: document.getElementById('graph-search'),
       currentView: document.getElementById('current-view'),
@@ -1424,6 +1434,7 @@
           confidence: node.status,
           copy: `${node.kind.replaceAll('_', ' ')} observed at ${node.meta || node.id}.`,
           evidence: node.evidence || [],
+          runtime: node.runtime || {},
           connected: edges.filter(edge => edge.source === node.id || edge.target === node.id).map(edge => {
             const other = nodeById.get(edge.source === node.id ? edge.target : edge.source);
             return [other ? other.title : edge.target, edge.relation];
@@ -1491,6 +1502,39 @@
           Unverified: node => node.status !== 'verified'
         };
 
+        function renderRuntimeInspector(runtime = {}) {
+          const entries = [];
+          (runtime.routes || []).forEach(item => entries.push({
+            kind: 'ROUTE',
+            label: `${item.method || 'GET'} ${item.path || item.url || '/'}`,
+            detail: item.error || (item.status ? `HTTP ${item.status}` : 'status unknown'),
+            error: Boolean(item.error)
+          }));
+          (runtime.network || []).forEach(item => entries.push({
+            kind: 'NET',
+            label: `${item.method || 'GET'} ${item.url || '/'}`,
+            detail: item.error || (item.status ? `HTTP ${item.status}` : 'status unknown'),
+            error: Boolean(item.error)
+          }));
+          (runtime.console || []).forEach(item => entries.push({
+            kind: 'ERR',
+            label: 'Browser console error',
+            detail: item.text || 'unknown console error',
+            error: true
+          }));
+          els.runtimeSection.hidden = !entries.length;
+          if (!entries.length) {
+            els.runtimeList.innerHTML = '';
+            return;
+          }
+          els.runtimeList.innerHTML = entries.slice(0, 24).map(item => `
+            <div class="evidence-row runtime-row ${item.error ? 'error' : ''}">
+              <span class="file-icon">${escapeHtml(item.kind)}</span>
+              <span class="evidence-info"><span class="evidence-path">${escapeHtml(item.label)}</span><span class="evidence-line">${escapeHtml(item.detail)}</span></span>
+              <span class="external-arrow">${item.error ? '!' : '✓'}</span>
+            </div>`).join('');
+        }
+
         function renderRealInspector(id) {
           const data = realData.get(id);
           const node = nodeById.get(id);
@@ -1502,6 +1546,7 @@
           els.confidenceText.textContent = data.confidence;
           els.badge.classList.toggle('inferred', data.confidence === 'inferred');
           els.badge.querySelector('.legend-dot').className = `legend-dot ${data.confidence}`;
+          renderRuntimeInspector(data.runtime);
           els.evidence.innerHTML = data.evidence.length ? data.evidence.map(item => `<div class="evidence-row" data-source-path="${escapeHtml(item.path)}" data-source-start="${item.line_start}" data-source-end="${item.line_end}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">lines ${item.line_start}–${item.line_end} · ${escapeHtml(item.status)}</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No direct evidence was emitted.</div>';
           els.connected.innerHTML = data.connected.length ? data.connected.map(([name, relation]) => `<div class="impact-row"><span>${name}</span><span>${relation}</span></div>`).join('') : '<div class="empty-state">No connected evidence yet.</div>';
           bindToastTargets();
@@ -1512,6 +1557,8 @@
           const unknown = unknowns[0];
           const intentGap = unknown?.type === 'intent_gap';
           const expected = unknown?.expected;
+          els.runtimeSection.hidden = true;
+          els.runtimeList.innerHTML = '';
           nodeList().forEach(item => item.classList.remove('selected'));
           els.title.textContent = intentGap ? `${unknown.flow_id} · ${expected.kind}` : (unknown ? unknown.subject : 'No unknowns');
           els.copy.textContent = intentGap
@@ -1529,6 +1576,8 @@
 
         function renderHistoryInspector() {
           const latest = historyRuns[0];
+          els.runtimeSection.hidden = true;
+          els.runtimeList.innerHTML = '';
           const commit = latest?.commit?.commit || 'no Git commit detected';
           const changes = latest ? Object.entries(latest.changes || {})
             .flatMap(([kind, paths]) => paths.map(path => ({kind, path}))) : [];
