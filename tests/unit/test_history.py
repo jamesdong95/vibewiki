@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 from vibewiki.history import (
+    graph_diff,
+    graph_index,
     history_for_subject,
     manifest_diff,
     record_scan,
@@ -31,6 +33,85 @@ def test_manifest_diff_is_sorted_and_classifies_hash_changes() -> None:
         "changed": ["app/a.ts"],
         "removed": ["app/removed.ts"],
     }
+
+
+def test_graph_diff_reports_added_changed_and_removed_nodes_and_edges() -> None:
+    before = graph_index(
+        {
+            "facts": [
+                {
+                    "attributes": {"path": "/"},
+                    "evidence": [{"path": "app/page.tsx"}],
+                    "kind": "route",
+                    "semantic_key": "route:page:/",
+                    "status": "verified",
+                },
+                {
+                    "attributes": {"name": "old"},
+                    "evidence": [{"path": "app/old.ts"}],
+                    "kind": "function",
+                    "semantic_key": "function:old",
+                    "status": "verified",
+                },
+            ],
+            "relations": [
+                {
+                    "evidence": [{"path": "app/page.tsx"}],
+                    "relation": "calls",
+                    "source": "route:page:/",
+                    "status": "verified",
+                    "target": "function:old",
+                }
+            ],
+        },
+        "run-1",
+    )
+    after = graph_index(
+        {
+            "facts": [
+                {
+                    "attributes": {"path": "/new"},
+                    "evidence": [{"path": "app/page.tsx"}],
+                    "kind": "route",
+                    "semantic_key": "route:page:/",
+                    "status": "verified",
+                },
+                {
+                    "attributes": {"name": "new"},
+                    "evidence": [{"path": "app/new.ts"}],
+                    "kind": "function",
+                    "semantic_key": "function:new",
+                    "status": "verified",
+                },
+            ],
+            "relations": [
+                {
+                    "evidence": [{"path": "app/page.tsx"}],
+                    "relation": "calls",
+                    "source": "route:page:/",
+                    "status": "verified",
+                    "target": "function:new",
+                }
+            ],
+        },
+        "run-2",
+    )
+
+    result = graph_diff(before, after, from_run_id="run-1", to_run_id="run-2")
+
+    assert result["status"] == "changed"
+    assert result["from_run_id"] == "run-1"
+    assert result["to_run_id"] == "run-2"
+    assert result["counts"] == {
+        "nodes_added": 1,
+        "nodes_changed": 1,
+        "nodes_removed": 1,
+        "edges_added": 1,
+        "edges_changed": 0,
+        "edges_removed": 1,
+    }
+    assert result["nodes_changed"][0]["after"]["id"] == "route:page:/"
+    assert result["nodes_removed"][0]["id"] == "function:old"
 
 
 def test_record_scan_keeps_bounded_runs_and_subject_history(tmp_path: Path) -> None:

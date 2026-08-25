@@ -118,6 +118,7 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
         "sources.json",
         "graph.json",
         "graph.db",
+        "graph-index.json",
         "intent.json",
         "history.json",
         "runtime.json",
@@ -583,6 +584,31 @@ def api_payload(
         return runtime
     if path == "/api/history":
         return {**load_history(root), "current_staleness": stale}
+    if path == "/api/changes":
+        history = load_history(root)
+        latest = history.get("runs", [None])[0]
+        graph_changes = (
+            latest.get("graph_changes") if isinstance(latest, dict) else None
+        )
+        if not isinstance(graph_changes, dict):
+            graph_changes = {
+                "counts": {
+                    "nodes_added": 0,
+                    "nodes_changed": 0,
+                    "nodes_removed": 0,
+                    "edges_added": 0,
+                    "edges_changed": 0,
+                    "edges_removed": 0,
+                },
+                "status": "unavailable",
+                "truncated": False,
+            }
+        return {
+            "files": latest.get("changes", {}) if isinstance(latest, dict) else {},
+            "graph": graph_changes,
+            "run": latest,
+            "status": graph_changes.get("status", "unavailable"),
+        }
     if path == "/api/history/subject":
         subject = params.get("subject", [""])[0]
         return history_for_subject(root, subject)

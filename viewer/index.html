@@ -2172,10 +2172,11 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           return;
         }
         const summary = await response.json();
-        const [nodeResponse, edgeResponse, historyResponse, staleResponse, runtimeResponse] = await Promise.all([
+        const [nodeResponse, edgeResponse, historyResponse, changesResponse, staleResponse, runtimeResponse] = await Promise.all([
           fetch('/api/nodes', { cache: 'no-store' }),
           fetch('/api/edges', { cache: 'no-store' }),
           fetch('/api/history', { cache: 'no-store' }),
+          fetch('/api/changes', { cache: 'no-store' }),
           fetch('/api/stale', { cache: 'no-store' }),
           fetch('/api/runtime', { cache: 'no-store' })
         ]);
@@ -2187,6 +2188,8 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const unknowns = nodePayload.unknowns || [];
         const intent = summary.intent || { configured: false, gaps: 0 };
         const historyPayload = historyResponse.ok ? await historyResponse.json() : { runs: [] };
+        const changesPayload = changesResponse.ok ? await changesResponse.json() : {status: 'unavailable'};
+        const latestChanges = changesPayload.graph || {};
         const stalePayload = staleResponse.ok ? await staleResponse.json() : { files: [] };
         const runtimePayload = runtimeResponse.ok ? await runtimeResponse.json() : { routes: [], network: [], unknowns: [] };
         const historyRuns = historyPayload.runs || [];
@@ -2414,26 +2417,59 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
 
         function renderHistoryInspector() {
           const latest = historyRuns[0];
+          const graph = latestChanges || {};
+          const graphCounts = graph.counts || {};
+          const fileChanges = latest ? Object.entries(latest.changes || {})
+            .flatMap(([kind, paths]) => paths.map(path => ({kind, path}))) : [];
+          const graphGroups = [
+            ['nodes_added', 'node added'],
+            ['nodes_changed', 'node changed'],
+            ['nodes_removed', 'node removed'],
+            ['edges_added', 'edge added'],
+            ['edges_changed', 'edge changed'],
+            ['edges_removed', 'edge removed']
+          ];
+          const graphChanges = graphGroups.flatMap(([group, label]) => (graph[group] || []).map(item => {
+            const record = item.after || item.before || item;
+            const isEdge = group.startsWith('edges_');
+            const target = isEdge
+              ? `${record.source} → ${record.target}`
+              : (record.title || record.id);
+            return {
+              label,
+              path: (record.paths || []).join(', ') || target,
+              node: isEdge ? '' : record.id,
+              target
+            };
+          }));
           els.reverseGraphSection.hidden = true;
           els.reverseGraphList.innerHTML = '';
           els.runtimeSection.hidden = true;
           els.runtimeList.innerHTML = '';
           const commit = latest?.commit?.commit || 'no Git commit detected';
-          const changes = latest ? Object.entries(latest.changes || {})
-            .flatMap(([kind, paths]) => paths.map(path => ({kind, path}))) : [];
           nodeList().forEach(item => item.classList.remove('selected'));
-          els.title.textContent = latest ? `${historyRuns.length} scan runs` : 'No scan history';
+          const totalGraphChanges = Object.values(graphCounts).reduce((sum, value) => sum + Number(value || 0), 0);
+          els.title.textContent = latest ? `Change review · ${historyRuns.length} scan runs` : 'No scan history';
           els.copy.textContent = latest
-            ? `Latest scan ${latest.scanned_at} · ${latest.files} files · ${commit}`
+            ? `Latest scan ${latest.scanned_at} · ${latest.files} files · ${commit} · ${fileChanges.length} file changes · ${totalGraphChanges} graph changes`
             : 'Run a local scan to start the repository history.';
-          els.confidenceText.textContent = staleSources.length ? 'stale' : 'current';
+          els.confidenceText.textContent = graph.status || (staleSources.length ? 'stale' : 'current');
           els.badge.classList.remove('inferred');
-          els.badge.querySelector('.legend-dot').className = `legend-dot ${staleSources.length ? 'stale' : 'verified'}`;
-          els.evidence.innerHTML = changes.length ? changes.slice(0, 40).map(item => `<div class="evidence-row" data-toast="${escapeHtml(item.kind)}: ${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">latest scan change</span></span><span class="external-arrow">↗</span></div>`).join('') : '<div class="empty-state">No file changes in the latest scan.</div>';
-          els.connected.innerHTML = staleSources.length
-            ? staleSources.map(item => `<div class="impact-row"><span>${escapeHtml(item.path)}</span><span>stale</span></div>`).join('')
-            : historyRuns.slice(0, 6).map(run => `<div class="impact-row"><span>${escapeHtml(run.scanned_at || run.run_id)}</span><span>${run.files} files</span></div>`).join('') || '<div class="empty-state">No scan runs yet.</div>';
+          els.badge.querySelector('.legend-dot').className = `legend-dot ${graph.status === 'changed' || staleSources.length ? 'stale' : 'verified'}`;
+          const fileRows = fileChanges.map(item => `<div class="evidence-row" data-toast="${escapeHtml(item.kind)}: ${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">file change · latest scan</span></span><span class="external-arrow">↗</span></div>`);
+          const graphRows = graphChanges.map(item => `<div class="evidence-row" data-change-node="${escapeHtml(item.node)}" data-toast="${escapeHtml(item.label)}: ${escapeHtml(item.target)}"><span class="file-icon">${item.label.startsWith('edge') ? '↝' : '◇'}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.target)}</span><span class="evidence-line">${escapeHtml(item.label)} · ${escapeHtml(item.path)}</span></span><span class="external-arrow">↗</span></div>`);
+          const rows = [...fileRows, ...graphRows];
+          els.evidence.innerHTML = rows.length ? rows.slice(0, 80).join('') : '<div class="empty-state">No file or graph changes in the latest scan.</div>';
+          const summaryRows = graphGroups.map(([group, label]) => `<div class="impact-row"><span>${escapeHtml(label)}</span><span>${Number(graphCounts[group] || 0)}</span></div>`).join('');
+          els.connected.innerHTML = `${summaryRows}${graph.truncated ? '<div class="empty-state">Change list was bounded at 200 items per category.</div>' : ''}${staleSources.length ? staleSources.slice(0, 6).map(item => `<div class="impact-row"><span>${escapeHtml(item.path)}</span><span>stale</span></div>`).join('') : ''}`;
           bindToastTargets();
+          els.evidence.querySelectorAll('[data-change-node]').forEach(item => {
+            item.onclick = () => {
+              const nodeId = item.dataset.changeNode;
+              if (nodeId && nodeById.has(nodeId)) renderRealInspector(nodeId);
+              else showToast('This changed node is no longer present in the current graph.');
+            };
+          });
         }
 
         function renderGraph(displayNodes) {

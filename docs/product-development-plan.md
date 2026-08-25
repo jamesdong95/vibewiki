@@ -127,12 +127,17 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   product name, audience, and multiple expected flow facts without hand-writing
   YAML; the loopback API validates and atomically writes `product.seed.yaml`,
   rescans, and refreshes intent gaps in the graph.
+- Scan history now persists a bounded, source-free graph index and exposes
+  `/api/changes`; the viewer separates file changes from added/changed/removed
+  nodes and edges so a rescan becomes a reviewable change set.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
 - Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
 - Flow authoring beyond the compact intent form (rich step editing, reusable
   templates, and review/resolve history) is not yet included.
+- Change review currently compares consecutive local builds only; it does not
+  yet provide a GitHub PR-style multi-commit comparison or inline source diff.
 - GitHub private-repository OAuth, webhook sync và hosted multi-user workspace
   chưa nằm trong local-first MVP; public archive import là boundary chủ động.
 

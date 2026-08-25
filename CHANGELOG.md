@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.39-preview] - 2026-08-25
+
+### Added
+
+- Bounded graph index snapshots for deterministic node/edge change detection.
+- `/api/changes` with file changes, graph changes, run IDs, counts, and a
+  truncation safety flag.
+- Scan history **Change review** UI separating source-file changes from graph
+  nodes and edges, with current-node inspection links.
+- Regression and browser smoke coverage for rescan-driven change review.
+
 ## [0.1.38-preview] - 2026-08-25
 
 ### Added

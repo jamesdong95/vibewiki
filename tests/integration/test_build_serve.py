@@ -110,6 +110,8 @@ def test_serve_exposes_real_artifact_apis(
             nodes = json.load(response)
         with urlopen(f"{base}/api/history") as response:
             history = json.load(response)
+        with urlopen(f"{base}/api/changes") as response:
+            changes = json.load(response)
         with urlopen(f"{base}/api/stale") as response:
             staleness = json.load(response)
         with urlopen(f"{base}/api/files") as response:
@@ -269,6 +271,8 @@ def test_serve_exposes_real_artifact_apis(
     assert summary["staleness"] == {"status": "current", "files": 0}
     assert len(history["runs"]) == 1
     assert staleness == {"files": [], "status": "current"}
+    assert changes["status"] == "baseline"
+    assert changes["graph"]["counts"]["nodes_added"] > 0
     assert {item["path"] for item in files["files"]} >= {
         "app/page.tsx",
         "app/api/users/route.ts",
@@ -479,6 +483,8 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "function copyLocalLink" in html
     assert "Local viewer link copied" in html
     assert 'data-command-key="copy-link"' in html
+    assert "fetch('/api/changes'" in html
+    assert "Change review" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
@@ -506,6 +512,10 @@ def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
             f"http://127.0.0.1:{server.server_address[1]}/api/summary"
         ) as response:
             summary = json.load(response)
+        with urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}/api/changes"
+        ) as response:
+            changes = json.load(response)
     finally:
         server.shutdown()
         server.server_close()
@@ -515,6 +525,8 @@ def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
     assert result["counts"]["scanned_files"] == 12
     assert summary["counts"]["scanned_files"] == 12
     assert summary["staleness"]["status"] == "current"
+    assert changes["status"] == "changed"
+    assert changes["graph"]["counts"]["nodes_added"] >= 1
 
 
 def test_rescan_restores_previous_artifact_when_scan_fails(

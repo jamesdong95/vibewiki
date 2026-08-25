@@ -76,6 +76,7 @@ REQUIRED_HTML_MARKERS = (
     'Browser JS · optional Playwright',
     '/api/runtime',
     "/api/stale",
+    "/api/changes",
     "/api/files",
     "/api/import-path",
     "/api/import-github",
