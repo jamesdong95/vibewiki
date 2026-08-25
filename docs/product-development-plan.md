@@ -95,6 +95,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   branch/tag tùy chọn; archive bị giới hạn trước khi đọc, chỉ regular supported
   files được copy, secrets/ignored paths bị loại, và private/authenticated
   repositories vẫn dùng local clone/path để không đưa credential vào MVP.
+- Workspace summary giữ provenance an toàn sau import/reload (`GitHub ·
+  owner/repo@ref`, `local-path · folder`, hoặc `browser-folder`) để người dùng
+  luôn biết graph hiện tại đến từ đâu mà không lộ absolute path.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

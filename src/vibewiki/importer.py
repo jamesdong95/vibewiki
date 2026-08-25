@@ -581,6 +581,7 @@ def import_github_workspace(url: str, ref: str | None = None) -> ImportedWorkspa
         "provider": "github",
         "repository": f"{owner}/{repository}",
         "ref": selected_ref,
+        "url": f"https://github.com/{owner}/{repository}",
         "archive_bytes": len(archive_bytes),
         "selected_files": len(selected),
         "skipped_files": skipped_files,

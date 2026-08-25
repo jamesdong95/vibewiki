@@ -514,6 +514,7 @@ def api_payload(
     path: str,
     query: str = "",
     params: dict[str, list[str]] | None = None,
+    source: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     facts = artifact["facts"]
     stale = stale_files(root, artifact)
@@ -525,11 +526,16 @@ def api_payload(
     runtime = attach_runtime_links(_runtime(root), nodes)
     unknowns = artifact["unknowns"] + intent["gaps"] + runtime.get("unknowns", [])
     profile = artifact.get("profile", {})
+    workspace_source = source or {
+        "provider": "local-workspace",
+        "label": root.name,
+    }
     if path == "/api/profile":
         return profile
     if path == "/api/summary":
         return {
             "project": artifact["fixture"],
+            "source": workspace_source,
             "profile": profile,
             "analyzer_version": ANALYZER_VERSION,
             "schema_version": SCHEMA_VERSION,
@@ -704,6 +710,7 @@ def create_server(
                                 parsed.path,
                                 parse_qs(parsed.query).get("q", [""])[0],
                                 parse_qs(parsed.query),
+                                getattr(self.server, "workspace_source", None),
                             )
                 except KeyError:
                     self.send_error(404, "not found")
@@ -811,6 +818,13 @@ def create_server(
                         self.server.workspace_root = imported.root
                         self.server.workspace_artifact = _artifact(imported.root)
                         self.server.imported_workspace = imported
+                        self.server.workspace_source = imported.build_summary.get(
+                            "import_source",
+                            {
+                                "provider": "github",
+                                "label": imported.root.name,
+                            },
+                        )
                         swapped = True
                         if old_workspace is not None:
                             cleanup_workspace(old_workspace)
@@ -861,6 +875,11 @@ def create_server(
                         self.server.workspace_root = imported.root
                         self.server.workspace_artifact = _artifact(imported.root)
                         self.server.imported_workspace = imported
+                        self.server.workspace_source = {
+                            "provider": "local-path",
+                            "label": Path(payload["path"]).expanduser().name
+                            or imported.root.name,
+                        }
                         if old_workspace is not None:
                             cleanup_workspace(old_workspace)
                     self._write_json(
@@ -1017,6 +1036,10 @@ def create_server(
                     self.server.workspace_root = imported.root
                     self.server.workspace_artifact = _artifact(imported.root)
                     self.server.imported_workspace = imported
+                    self.server.workspace_source = {
+                        "provider": "browser-folder",
+                        "label": imported.root.name,
+                    }
                     if old_workspace is not None:
                         cleanup_workspace(old_workspace)
                 payload = imported.build_summary
@@ -1052,6 +1075,10 @@ def create_server(
     server.workspace_artifact = artifact
     server.llm_settings: LLMSettings | None = None
     server.imported_workspace: ImportedWorkspace | None = None
+    server.workspace_source = {
+        "provider": "local-workspace",
+        "label": root.name,
+    }
     server.local_path_import_allowed = host in {"127.0.0.1", "localhost", "::1"}
     server.github_import_allowed = server.local_path_import_allowed
     server.workspace_lock = threading.RLock()

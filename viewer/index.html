@@ -2047,6 +2047,10 @@
         const runtimePayload = runtimeResponse.ok ? await runtimeResponse.json() : { routes: [], network: [], unknowns: [] };
         const historyRuns = historyPayload.runs || [];
         let staleSources = stalePayload.files || [];
+        const workspaceSource = summary.source || {provider: 'local-workspace', label: summary.project};
+        const sourceLabel = workspaceSource.provider === 'github'
+          ? `GitHub · ${workspaceSource.repository || workspaceSource.label}${workspaceSource.ref ? `@${workspaceSource.ref}` : ''}`
+          : `${workspaceSource.provider || 'local'} · ${workspaceSource.label || summary.project}`;
         const nodeById = new Map(nodes.map(node => [node.id, node]));
         const realData = new Map(nodes.map(node => [node.id, {
           title: node.title,
@@ -2071,10 +2075,10 @@
         setText('project-name', summary.project);
         currentProjectProfile = summary.profile || {};
         renderProjectProfile(currentProjectProfile);
-        setText('project-meta', `${currentProjectProfile.scan_mode || 'generic'} · ${currentProjectProfile.package_scope || 'local workspace'}`);
+        setText('project-meta', `${currentProjectProfile.scan_mode || 'generic'} · ${currentProjectProfile.package_scope || 'local workspace'} · ${sourceLabel}`);
         setText('crumb-project', summary.project.toUpperCase());
         setText('eyebrow', `Evidence graph / analyzer ${summary.analyzer_version}`);
-        document.querySelector('.heading-copy').textContent = `A local, evidence-backed map of ${summary.project} — generated from the latest deterministic scan.`;
+        document.querySelector('.heading-copy').textContent = `A local, evidence-backed map of ${summary.project} — generated from the latest deterministic scan · ${sourceLabel}.`;
         setText('stat-facts', summary.counts.facts);
         setText('stat-evidence', evidenceCount);
         setText('stat-relations', summary.counts.relations);

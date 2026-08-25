@@ -222,6 +222,10 @@ def test_serve_exposes_real_artifact_apis(
         thread.join(timeout=2)
 
     assert summary["project"] == "next-ts-demo"
+    assert summary["source"] == {
+        "provider": "local-workspace",
+        "label": "next-ts-demo",
+    }
     assert summary["profile"]["scan_mode"] == "next-app-router"
     assert summary["profile"]["package_scope"] == "single-package"
     assert profile == summary["profile"]
@@ -400,6 +404,8 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "/api/import-github" in html
     assert 'data-command-key="github"' in html
     assert "Public repositories only" in html
+    assert "const workspaceSource = summary.source" in html
+    assert "GitHub ·" in html
     assert "function buildImportGroups" in html
     assert "function rescanCurrentWorkspace" in html
     assert "/api/rescan" in html
@@ -712,6 +718,9 @@ def test_serve_imports_public_github_repository_through_loopback_api(
     assert imported["import_source"]["repository"] == "acme/demo"
     assert imported["import_source"]["skipped_files"] == 2
     assert summary["project"] == "github-source"
+    assert summary["source"]["provider"] == "github"
+    assert summary["source"]["repository"] == "acme/demo"
+    assert summary["source"]["ref"] == "main"
     assert summary["counts"]["facts"] == 1
 
 

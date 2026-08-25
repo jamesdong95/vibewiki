@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.28-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.28-preview) · scan a repository locally or import a public GitHub URL, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
+**Latest verified preview:** [`v0.1.29-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.29-preview) · scan a repository locally or import a public GitHub URL, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -189,6 +189,9 @@ archive only after the user submits the form, applies the same supported-file,
 ignore, secret, package-scope, file-count, and byte limits, and removes the
 temporary snapshot when the server exits. Private repositories and authenticated
 GitHub access stay local: clone them first, then use Browse or Use local path.
+The project switcher and workspace summary retain a safe provenance label after
+the graph reloads, such as `GitHub · owner/repo@main` or `local-path · my-app`;
+absolute local paths and credentials are never exposed in the viewer.
 After the graph is open, **Rescan workspace** runs scan + build against the
 current local workspace. It snapshots `.vibewiki/` first and restores the last
 known-good artifact if the rescan fails, so a temporary source error does not

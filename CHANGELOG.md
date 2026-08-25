@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.29-preview] - 2026-08-25
+
+### Added
+
+- Workspace provenance in `/api/summary` and the viewer after Browse, local
+  path, or public GitHub import.
+- Safe source labels such as `GitHub · owner/repo@ref` and `local-path · folder`
+  survive graph reloads without exposing absolute paths or credentials.
+- Regression coverage for provenance on initial workspace and GitHub API swap.
+
+### Changed
+
+- README and product plan now make the source/origin boundary visible to users.
+
 ## [0.1.28-preview] - 2026-08-25
 
 ### Added
