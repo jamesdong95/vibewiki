@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.34-preview] - 2026-08-25
+
+### Fixed
+
+- Grounded AI answer normalization now breaks inline numbered step headings
+  (`**Bước 1 — ...**`) into readable Markdown blocks before rendering.
+- The backend and viewer apply the same deterministic rule, including when a
+  provider returns escaped newlines or a single long response line.
+- Added a regression test for the formatting shape reported by users.
+
 ## [0.1.33-preview] - 2026-08-25
 
 ### Fixed

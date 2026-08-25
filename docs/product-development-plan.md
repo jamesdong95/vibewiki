@@ -110,6 +110,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Viewer graph summary counts now use the combined artifact edge set (facts,
   modules, packages, and symbols), so the displayed total matches the graph
   users can inspect.
+- Grounded answer normalization separates inline numbered step headings such as
+  `**Bước 1 — ...**` before the viewer renders Markdown, keeping model output
+  readable even when a provider returns one long line.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

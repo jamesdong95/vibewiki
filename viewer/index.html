@@ -1641,6 +1641,7 @@
         segments[index] = segments[index]
           .replace(/(?<!\n)[ \t]+(-{3,})[ \t]+/g, '\n\n$1\n\n')
           .replace(/[ \t]+(?=#{1,4}\s)/g, '\n\n')
+          .replace(/[ \t]+(?=\*\*(?:Bước|Step)\s+\d+\b)/g, '\n\n')
           .replace(/[ \t]+(?=[-*+]\s+(?:\*\*|[A-ZÀ-Ỹ]))/g, '\n')
           .replace(/[ \t]+(?=\d+[.)]\s+\*\*)/g, '\n');
       }

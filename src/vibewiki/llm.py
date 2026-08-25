@@ -223,6 +223,11 @@ def normalize_markdown(value: str) -> str:
             segment,
         )
         segment = re.sub(r"[ \t]+(?=#{1,4}\s)", "\n\n", segment)
+        segment = re.sub(
+            r"[ \t]+(?=\*\*(?:Bước|Step)\s+\d+\b)",
+            "\n\n",
+            segment,
+        )
         segment = re.sub(r"[ \t]+(?=[-*+]\s+(?:\*\*|[A-ZÀ-Ỹ]))", "\n", segment)
         segment = re.sub(r"[ \t]+(?=\d+[.)]\s+\*\*)", "\n", segment)
         segments[index] = segment

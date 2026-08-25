@@ -58,6 +58,18 @@ def test_normalize_markdown_does_not_rewrite_code_fences() -> None:
     assert "\n\n---\n\n## Detail" in normalized
 
 
+def test_normalize_markdown_separates_inline_step_headings() -> None:
+    value = "### Các bước trong flow **Bước 1 — Khởi tạo state** - Component"
+
+    normalized = normalize_markdown(value)
+
+    assert normalized == (
+        "### Các bước trong flow\n\n"
+        "**Bước 1 — Khởi tạo state**\n"
+        "- Component"
+    )
+
+
 def test_openai_compatible_settings_require_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
