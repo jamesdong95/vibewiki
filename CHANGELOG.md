@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.32-preview] - 2026-08-25
+
+### Added
+
+- Nested App Router and Pages Router route detection for monorepos scanned
+  from the repository root, including `.js`, `.jsx`, `.ts`, and `.tsx` files.
+- Package-scoped route semantic keys prevent same-path collisions between
+  multiple frontend packages while keeping the user-facing route path clear.
+- Regression coverage proving nested page and API handler facts retain exact
+  path evidence.
+
+### Changed
+
+- Nested route/API facts now participate in the existing evidence graph and
+  package-scoped page-to-handler links instead of remaining module-only.
+
 ## [0.1.31-preview] - 2026-08-25
 
 ### Added

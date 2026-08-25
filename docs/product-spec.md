@@ -60,6 +60,12 @@ into `scan --generic`. It is pattern-based rather than a language compiler:
 unrecognized constructs remain inventory/module evidence and are never promoted
 to verified behavior by filename alone.
 
+When a repository is scanned from its root, the same route detection applies
+inside common workspace packages. For example, `packages/web/app/page.tsx`,
+`apps/frontend/src/app/page.tsx`, and nested `pages/` files retain their exact
+relative evidence paths. Package-scoped semantic keys keep two packages with
+the same `/` route distinct without changing the user-facing route attribute.
+
 ### Unsupported behavior
 
 When the repository is outside this supported surface, or a construct cannot be

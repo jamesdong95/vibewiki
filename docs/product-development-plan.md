@@ -104,6 +104,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Reverse module/symbol graph resolve local workspace package names và
   subpaths (`@demo/ui`, `@demo/ui/button`) qua `types`/`module`/`main` và
   `exports` an toàn, không thực thi package scripts.
+- Nested App Router/Pages Router paths such as `packages/web/app/...` and
+  `apps/frontend/pages/...` retain route facts, package-scoped semantic keys,
+  and source evidence when the repository root is scanned directly.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

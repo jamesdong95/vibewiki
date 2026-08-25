@@ -196,16 +196,51 @@ def _relation(
     }
 
 
+def _source_root_index(path: str, root_name: str) -> int | None:
+    parts = path.split("/")
+    for index in range(len(parts) - 1, -1, -1):
+        if parts[index] == root_name:
+            return index
+    return None
+
+
+def _route_scope(path: str, root_name: str) -> str | None:
+    index = _source_root_index(path, root_name)
+    if index is None:
+        return None
+    scope = "/".join(path.split("/")[:index])
+    return scope or None
+
+
 def _route_for(path: str, suffix: str) -> str:
-    relative = path[len("app/") :]
+    root_index = _source_root_index(path, "app")
+    relative = (
+        "/".join(path.split("/")[root_index + 1 :])
+        if root_index is not None
+        else path
+    )
     relative = relative[: -len(suffix)]
     if not relative:
         return "/"
     return "/" + "/".join(part for part in relative.split("/") if part)
 
 
+def _route_key(kind: str, path: str, route: str, root_name: str = "app") -> str:
+    scope = _route_scope(path, root_name)
+    return (
+        f"route:{kind}:{route}"
+        if scope is None
+        else f"route:{kind}:{scope}:{route}"
+    )
+
+
 def _pages_route_for(path: str, suffix: str) -> str:
-    relative = path[len("pages/") :]
+    root_index = _source_root_index(path, "pages")
+    relative = (
+        "/".join(path.split("/")[root_index + 1 :])
+        if root_index is not None
+        else path
+    )
     relative = relative[: -len(suffix)]
     parts = [part for part in relative.split("/") if part]
     if parts and parts[-1] == "index":
@@ -215,7 +250,7 @@ def _pages_route_for(path: str, suffix: str) -> str:
 
 def _next_pages_route_matches(source: Source) -> list[dict[str, Any]]:
     """Find Next.js Pages Router pages and API files in generic mode."""
-    if not source.path.startswith("pages/"):
+    if _source_root_index(source.path, "pages") is None:
         return []
     suffix = next(
         (suffix for suffix in _SCRIPT_SUFFIXES if source.path.endswith(suffix)),
@@ -223,7 +258,10 @@ def _next_pages_route_matches(source: Source) -> list[dict[str, Any]]:
     )
     if suffix is None:
         return []
-    relative = source.path[len("pages/") : -len(suffix)]
+    pages_index = _source_root_index(source.path, "pages")
+    relative = "/".join(source.path.split("/")[pages_index + 1 :])[
+        : -len(suffix)
+    ]
     top_level = relative.split("/", 1)[0]
     if top_level in _PAGES_INTERNAL:
         return []
@@ -887,7 +925,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     relations: list[dict[str, Any]] = []
     page_keys: dict[str, str] = {}
     handler_keys: dict[str, str] = {}
-    handler_keys_by_route: dict[str, str] = {}
+    handler_keys_by_route: dict[tuple[str | None, str], str] = {}
     function_keys: dict[tuple[str, str], str] = {}
     model_keys: dict[str, str] = {}
     model_evidence: dict[str, dict[str, Any]] = {}
@@ -897,11 +935,13 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
 
     for path in sorted(sources):
         source = sources[path]
-        if path.startswith("app/") and path.endswith(_PAGE_SUFFIXES):
+        if _source_root_index(path, "app") is not None and path.endswith(
+            _PAGE_SUFFIXES
+        ):
             route = _route_for(
                 path, next(suffix for suffix in _PAGE_SUFFIXES if path.endswith(suffix))
             )
-            key = f"route:page:{route}"
+            key = _route_key("page", path, route)
             page_keys[path] = key
             match = _FUNCTION.search(source.text)
             line = _line(source.text, match.start()) if match else 1
@@ -913,12 +953,14 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                     [_evidence(path, "page_declaration", line)],
                 )
             )
-        elif path.startswith("app/") and path.endswith(_ROUTE_SUFFIXES):
+        elif _source_root_index(path, "app") is not None and path.endswith(
+            _ROUTE_SUFFIXES
+        ):
             suffix = next(suffix for suffix in _ROUTE_SUFFIXES if path.endswith(suffix))
             route = _route_for(path, suffix)
-            key = f"route:handler:{route}"
+            key = _route_key("handler", path, route)
             handler_keys[path] = key
-            handler_keys_by_route[route] = key
+            handler_keys_by_route[(_route_scope(path, "app"), route)] = key
             method_matches = list(_METHOD.finditer(source.text))
             facts.append(
                 _fact(
@@ -1101,7 +1143,11 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                         [_evidence(path, "api_call", line)],
                     )
                 )
-                target = handler_keys_by_route.get(endpoint)
+                target = handler_keys_by_route.get(
+                    (_route_scope(path, "app"), endpoint)
+                )
+                if target is None:
+                    target = handler_keys_by_route.get((None, endpoint))
                 if target:
                     relations.append(
                         _relation(

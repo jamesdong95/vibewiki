@@ -153,6 +153,39 @@ def test_build_resolves_workspace_package_names_and_exports(
     )
 
 
+def test_build_detects_nested_app_router_routes_without_losing_paths(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "packages/web"
+    (package / "app/api/users").mkdir(parents=True)
+    (package / "app/page.tsx").write_text(
+        "export default function Home() { return null; }\n"
+    )
+    (package / "app/api/users/route.ts").write_text(
+        "export async function GET() { return Response.json({ ok: true }); }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    route_facts = {
+        item["semantic_key"]: item
+        for item in graph["facts"]
+        if item["kind"] == "route"
+    }
+    page = route_facts["route:page:packages/web:/"]
+    handler = route_facts["route:handler:packages/web:/api/users"]
+    assert page["attributes"] == {
+        "file": "packages/web/app/page.tsx",
+        "path": "/",
+    }
+    assert handler["attributes"]["file"] == "packages/web/app/api/users/route.ts"
+    assert handler["attributes"]["path"] == "/api/users"
+    assert page["evidence"][0]["path"] == "packages/web/app/page.tsx"
+    assert handler["evidence"][0]["path"] == "packages/web/app/api/users/route.ts"
+
+
 def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
     (tmp_path / "src/internal").mkdir(parents=True)
     (tmp_path / "src/main/java/com/demo").mkdir(parents=True)
