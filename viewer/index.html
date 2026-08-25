@@ -455,8 +455,10 @@
     .settings-copy { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
     .settings-field { display: grid; gap: 6px; }
     .settings-field label { color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
-    .settings-field input, .settings-field select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--panel-2); font-size: 11px; }
-    .settings-field input:focus, .settings-field select:focus { border-color: var(--lime); }
+    .settings-field input, .settings-field select, .settings-field textarea { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--panel-2); font-size: 11px; }
+    .settings-field input:focus, .settings-field select:focus, .settings-field textarea:focus { border-color: var(--lime); }
+    .settings-field textarea { min-height: 132px; resize: vertical; font-family: var(--mono); font-size: 10px; line-height: 1.5; }
+    .settings-copy code { padding: 1px 4px; border-radius: 3px; color: var(--cyan); background: rgba(166,233,239,0.09); font-family: var(--mono); font-size: .92em; }
     .settings-check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
     .settings-check input { accent-color: var(--lime); }
     .settings-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
@@ -618,6 +620,7 @@
             <button class="text-button" type="button" id="github-button" title="Import a public GitHub repository">Import GitHub</button>
           </div>
           <button class="text-button" type="button" id="observe-button" title="Observe a local app with safe GET requests">Observe runtime</button>
+          <button class="text-button" type="button" id="intent-button" title="Configure product intent and expected flows">Product intent</button>
           <button class="text-button" type="button" id="llm-settings-button" title="Configure local LLM">LLM setup</button>
           <button class="text-button" type="button" id="export-button" title="Download the current wiki export">Export wiki</button>
           <button class="icon-button" type="button" id="command-open" aria-label="Open command palette" title="Command palette">⌘</button>
@@ -962,6 +965,34 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="intent-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Configure product intent">
+      <div class="command-input"><span>◇</span><strong>Product intent</strong></div>
+      <form class="settings-form" id="intent-form">
+        <p class="settings-copy">Khai báo điều sản phẩm cần có. VibeWiki sẽ đối chiếu với graph hiện tại và đưa phần chưa thấy vào Unknowns. Không cần sửa YAML thủ công.</p>
+        <div class="settings-field">
+          <label for="intent-product-name">Product name</label>
+          <input id="intent-product-name" type="text" placeholder="My product" required autocomplete="off" />
+        </div>
+        <div class="settings-field">
+          <label for="intent-audience">Audience (optional)</label>
+          <input id="intent-audience" type="text" placeholder="solo developers" autocomplete="off" />
+        </div>
+        <div class="settings-field">
+          <label for="intent-flows">Flows</label>
+          <textarea id="intent-flows" rows="7" required spellcheck="false" placeholder="signup | Sign up | route:/signup; api:/api/users; test:tests/signup.test.ts
+checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
+          <small class="settings-copy">Mỗi dòng: <code>id | Tên flow | kind:value; kind:value</code>. Hỗ trợ route, api, entity, file, function, module, package, symbol, test.</small>
+        </div>
+        <div class="settings-status" id="intent-settings-status" role="status" aria-live="polite"></div>
+        <div class="settings-actions">
+          <button class="text-button" type="button" id="intent-cancel">Cancel</button>
+          <button class="text-button primary" type="submit">Save and compare</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="command-modal" aria-hidden="true">
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Command palette">
       <div class="command-input"><span>⌘</span><input id="command-search" type="search" placeholder="Jump to a view or ask a question…" autocomplete="off" /></div>
@@ -972,6 +1003,7 @@
         <button class="command-item" type="button" data-command-key="export" data-command="Export wiki"><span class="command-key">↓</span><span>Export wiki<small id="command-export-meta">Markdown + Mermaid bundle</small></span></button>
         <button class="command-item" type="button" data-command-key="copy-link" data-command="Copy local link"><span class="command-key">↗</span><span>Copy local link<small>Works while this local server is running</small></span></button>
         <button class="command-item" type="button" data-command-key="github" data-command="Import GitHub repository"><span class="command-key">◉</span><span>Import GitHub repository<small>Public HTTPS archive · bounded local scan</small></span></button>
+        <button class="command-item" type="button" data-command-key="intent" data-command="Configure product intent"><span class="command-key">◇</span><span>Configure product intent<small>Compare expected flows with the local graph</small></span></button>
       </div>
     </div>
   </div>
@@ -1227,6 +1259,13 @@
     const profileFocus = document.getElementById('profile-focus');
     const profileScopeHint = document.getElementById('profile-scope-hint');
     const profileDetails = document.getElementById('profile-details');
+    const intentButton = document.getElementById('intent-button');
+    const intentModal = document.getElementById('intent-modal');
+    const intentForm = document.getElementById('intent-form');
+    const intentProductName = document.getElementById('intent-product-name');
+    const intentAudience = document.getElementById('intent-audience');
+    const intentFlows = document.getElementById('intent-flows');
+    const intentSettingsStatus = document.getElementById('intent-settings-status');
     let currentProjectProfile = null;
     const MAX_IMPORT_FILES = 10000;
     const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
@@ -1434,6 +1473,106 @@
       profileModal.classList.remove('open');
       profileModal.setAttribute('aria-hidden', 'true');
     }
+    const INTENT_KINDS = new Set(['api', 'entity', 'file', 'function', 'module', 'package', 'route', 'symbol', 'test']);
+    function parseIntentFlows(value) {
+      const lines = value.split('\n').map(line => line.trim()).filter(Boolean);
+      if (!lines.length) throw new Error('Cần khai báo ít nhất một flow.');
+      const ids = new Set();
+      return lines.map((line, index) => {
+        const parts = line.split('|').map(part => part.trim());
+        if (parts.length < 3 || !parts[0] || !parts[2]) {
+          throw new Error(`Flow dòng ${index + 1} cần dạng id | tên | kind:value; kind:value.`);
+        }
+        if (ids.has(parts[0])) throw new Error(`Flow id bị trùng: ${parts[0]}.`);
+        ids.add(parts[0]);
+        const expected = parts[2].split(';').map(item => item.trim()).filter(Boolean).map(item => {
+          const separator = item.indexOf(':');
+          if (separator <= 0 || separator === item.length - 1) {
+            throw new Error(`Expectation không hợp lệ ở flow ${parts[0]}: ${item}.`);
+          }
+          const kind = item.slice(0, separator).trim().toLowerCase();
+          const value = item.slice(separator + 1).trim();
+          if (!INTENT_KINDS.has(kind)) throw new Error(`Kind chưa được hỗ trợ: ${kind}.`);
+          if (!value) throw new Error(`Expectation ${kind} trong flow ${parts[0]} chưa có value.`);
+          return {kind, value};
+        });
+        if (!expected.length) throw new Error(`Flow ${parts[0]} cần ít nhất một expectation.`);
+        return {id: parts[0], name: parts[1] || parts[0], expected};
+      });
+    }
+    function renderIntentForm(intent = {}) {
+      const product = intent.product || {};
+      intentProductName.value = product.name || '';
+      intentAudience.value = intent.audience || product.audience || '';
+      intentFlows.value = (intent.flows || []).map(flow => {
+        const expected = (flow.expected || []).map(item => `${item.kind}:${item.value}`).join('; ');
+        return `${flow.id} | ${flow.name || flow.id} | ${expected}`;
+      }).join('\n');
+    }
+    async function openIntentSettings() {
+      intentModal.classList.add('open');
+      intentModal.setAttribute('aria-hidden', 'false');
+      intentSettingsStatus.className = 'settings-status';
+      intentSettingsStatus.textContent = 'Loading current product intent…';
+      try {
+        const response = await fetch('/api/intent', {cache: 'no-store'});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể đọc product intent hiện tại.');
+        renderIntentForm(result);
+        intentSettingsStatus.textContent = result.configured
+          ? 'Đang chỉnh sửa seed hiện tại. Save sẽ scan lại và cập nhật Unknowns.'
+          : 'Chưa có intent. Hãy thêm flow đầu tiên để bắt đầu đối chiếu.';
+      } catch (error) {
+        intentSettingsStatus.className = 'settings-status error';
+        intentSettingsStatus.textContent = error.message || 'Không thể đọc product intent.';
+      }
+      intentProductName.focus();
+    }
+    function closeIntentSettings() {
+      intentModal.classList.remove('open');
+      intentModal.setAttribute('aria-hidden', 'true');
+    }
+    async function saveIntent(event) {
+      event.preventDefault();
+      const productName = intentProductName.value.trim();
+      if (!productName) return intentProductName.focus();
+      let flows;
+      try {
+        flows = parseIntentFlows(intentFlows.value);
+      } catch (error) {
+        intentSettingsStatus.className = 'settings-status error';
+        intentSettingsStatus.textContent = error.message || 'Flow format không hợp lệ.';
+        return;
+      }
+      intentSettingsStatus.className = 'settings-status';
+      intentSettingsStatus.textContent = 'Đang lưu product intent và scan lại graph…';
+      const saveButton = intentForm.querySelector('button[type="submit"]');
+      saveButton.disabled = true;
+      intentButton.disabled = true;
+      try {
+        const response = await fetch('/api/intent', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            product: {name: productName},
+            audience: intentAudience.value.trim(),
+            flows
+          })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể lưu product intent.');
+        const counts = result.intent?.counts || {};
+        intentSettingsStatus.className = 'settings-status success';
+        intentSettingsStatus.textContent = `Đã lưu: ${counts.flows || 0} flows · ${counts.gaps || 0} gaps. Graph sẽ được cập nhật.`;
+        showToast('Product intent saved and compared.');
+        window.setTimeout(() => window.location.reload(), 900);
+      } catch (error) {
+        intentSettingsStatus.className = 'settings-status error';
+        intentSettingsStatus.textContent = `${error.message || 'Không thể lưu product intent.'} Artifact hiện tại vẫn được giữ nguyên.`;
+        saveButton.disabled = false;
+        intentButton.disabled = false;
+      }
+    }
     function isSupportedSourceFile(file) {
       const path = (file.webkitRelativePath || file.name || '').replaceAll('\\', '/').toLowerCase();
       if (/(^|\/)(node_modules|\.git|\.next|dist|build|out|coverage|\.cache|\.vibewiki)(\/|$)/.test(path)) return false;
@@ -1586,6 +1725,10 @@
         showToast('Graph scope will be available after the local artifact loads.');
       }
     });
+    intentButton.addEventListener('click', openIntentSettings);
+    document.getElementById('intent-cancel').addEventListener('click', closeIntentSettings);
+    intentForm.addEventListener('submit', saveIntent);
+    intentModal.addEventListener('click', event => { if (event.target === intentModal) closeIntentSettings(); });
     profileModal.addEventListener('click', event => {
       if (event.target === profileModal) closeProjectProfile();
     });
@@ -2382,6 +2525,7 @@
             if (command === 'export') exportWiki();
             if (command === 'copy-link') copyLocalLink();
             if (command === 'github') openGitHubImport();
+            if (command === 'intent') openIntentSettings();
           }
         };
         canvas.onclick = event => {

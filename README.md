@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.37-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.37-preview) · scan a repository locally or import a public GitHub URL, detect Astro/Nuxt filesystem routes, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
+**Latest verified preview:** [`v0.1.38-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.38-preview) · scan a repository locally or import a public GitHub URL, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -103,6 +103,9 @@ The local product provides:
   detection, and explicit scan/rescan status.
 - A project profile and source inventory that make package scope, language
   coverage, stale files, and file-level evidence visible before interpretation.
+- A **Product intent** form that writes a validated local seed, rescans the
+  workspace, and turns missing expected route/API/file/test evidence into
+  explicit Unknowns without requiring manual YAML editing.
 - A local-first visual language that does not require a hosted backend.
 
 Runtime observation is available as an explicit, safe baseline. Start a local
@@ -224,7 +227,7 @@ remain local.
 
 Every build also exposes `/api/profile`, `/api/files`, `/api/packages`, `/api/modules`,
 `/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/impact`,
-`/api/import-github`, `/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
+`/api/intent`, `/api/import-github`, `/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
 optional grounded discussion. `/api/impact` accepts a node subject plus
 `direction=upstream|downstream|both`, and returns a bounded deterministic
 neighborhood with the original edge evidence. Use `vibewiki history

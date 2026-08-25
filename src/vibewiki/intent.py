@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -214,14 +216,7 @@ def _normalise_expected(value: Any, flow_id: str, index: int) -> dict[str, str]:
     }
 
 
-def load_product_seed(root: Path) -> dict[str, Any] | None:
-    path = root / SEED_FILENAME
-    if not path.is_file():
-        return None
-    try:
-        parsed = _parse_seed(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError) as error:
-        raise _invalid("file could not be read") from error
+def _normalise_seed(parsed: dict[str, Any]) -> dict[str, Any]:
     _validate_mapping_fields(parsed, _ROOT_FIELDS, "root")
     product = parsed.get("product", {})
     if isinstance(product, str):
@@ -261,6 +256,90 @@ def load_product_seed(root: Path) -> dict[str, Any] | None:
         "audience": parsed.get("audience", product.get("audience")),
         "flows": flows,
     }
+
+
+def normalise_product_seed(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize a product seed supplied by a local API client."""
+
+    if not isinstance(value, dict):
+        raise _invalid("root must be a mapping")
+    return _normalise_seed(value)
+
+
+def _yaml_scalar(value: Any) -> str:
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float, list, dict)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _seed_yaml(seed: dict[str, Any]) -> str:
+    """Serialize only the validated, canonical seed shape to safe YAML."""
+
+    lines = ["product:"]
+    product = seed.get("product", {})
+    if product.get("name") is not None:
+        lines.append(f"  name: {_yaml_scalar(product['name'])}")
+    if product.get("audience") is not None:
+        lines.append(f"  audience: {_yaml_scalar(product['audience'])}")
+    if seed.get("audience") is not None:
+        lines.append(f"audience: {_yaml_scalar(seed['audience'])}")
+    lines.append("flows:")
+    for flow in seed["flows"]:
+        lines.extend(
+            [
+                f"  - id: {_yaml_scalar(flow['id'])}",
+                f"    name: {_yaml_scalar(flow['name'])}",
+                "    expected:",
+            ]
+        )
+        for expected in flow["expected"]:
+            lines.extend(
+                [
+                    f"      - kind: {_yaml_scalar(expected['kind'])}",
+                    f"        value: {_yaml_scalar(expected['value'])}",
+                    f"        label: {_yaml_scalar(expected['label'])}",
+                ]
+            )
+    return "\n".join(lines) + "\n"
+
+
+def write_product_seed(root: Path, value: dict[str, Any]) -> dict[str, Any]:
+    """Validate and atomically persist product intent inside the workspace."""
+
+    seed = normalise_product_seed(value)
+    destination = Path(root) / SEED_FILENAME
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=".product.seed.", suffix=".tmp", dir=destination.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(_seed_yaml(seed))
+        os.replace(temporary, destination)
+    except OSError as error:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise _invalid("file could not be written") from error
+    return seed
+
+
+def load_product_seed(root: Path) -> dict[str, Any] | None:
+    path = root / SEED_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        parsed = _parse_seed(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as error:
+        raise _invalid("file could not be read") from error
+    return _normalise_seed(parsed)
 
 
 def _nodes(artifact: dict[str, Any]) -> list[dict[str, Any]]:
@@ -409,4 +488,10 @@ def compare_product_intent(
     }
 
 
-__all__ = ["SEED_FILENAME", "compare_product_intent", "load_product_seed"]
+__all__ = [
+    "SEED_FILENAME",
+    "compare_product_intent",
+    "load_product_seed",
+    "normalise_product_seed",
+    "write_product_seed",
+]

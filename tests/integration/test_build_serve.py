@@ -308,6 +308,58 @@ def test_serve_exposes_real_artifact_apis(
         assert "vibewiki-export/runtime-screenshots/route-01.png" in exported_names
 
 
+def test_serve_configures_product_intent_from_local_ui(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    payload = {
+        "product": {"name": "Signup demo"},
+        "audience": "developers",
+        "flows": [
+            {
+                "id": "signup",
+                "name": "Signup",
+                "expected": [
+                    {"kind": "route", "value": "/signup"},
+                    {"kind": "api", "value": "/api/users"},
+                ],
+            }
+        ],
+    }
+    request = Request(
+        f"{base}/api/intent",
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(request) as response:
+            saved = json.load(response)
+        with urlopen(f"{base}/api/intent") as response:
+            intent = json.load(response)
+        with urlopen(f"{base}/api/summary") as response:
+            summary = json.load(response)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert saved["saved"] is True
+    assert saved["intent"]["configured"] is True
+    assert intent["product"]["name"] == "Signup demo"
+    assert intent["counts"]["flows"] == 1
+    assert intent["counts"]["gaps"] == 0
+    assert summary["intent"] == {
+        "configured": True,
+        "flows": 1,
+        "gaps": 0,
+        "observed": 1,
+        "partial": 0,
+    }
 def test_workspace_swap_blocks_api_readers_until_artifact_is_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -392,6 +444,11 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="profile-browse"' in html
     assert 'id="profile-scope"' in html
     assert 'id="profile-focus"' in html
+    assert 'id="intent-button"' in html
+    assert 'id="intent-modal"' in html
+    assert 'id="intent-flows"' in html
+    assert "function parseIntentFlows" in html
+    assert "/api/intent" in html
     assert "function nodeMatchesScope" in html
     assert "setScope(scope)" in html
     assert 'id="local-path-button"' in html

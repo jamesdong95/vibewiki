@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.38-preview] - 2026-08-25
+
+### Added
+
+- Product intent setup directly in the viewer; no manual `product.seed.yaml`
+  editing is required for the common flow workflow.
+- Loopback `POST /api/intent` validates and atomically persists a canonical
+  seed, rescans the workspace, and returns updated intent comparison counts.
+- Regression coverage for intent writer round-tripping, API configuration,
+  UI markers, and browser Unknowns refresh.
+
 ## [0.1.37-preview] - 2026-08-25
 
 ### Added

@@ -27,7 +27,7 @@ from .importer import (
     import_local_workspace,
     import_uploaded_workspace,
 )
-from .intent import compare_product_intent
+from .intent import SEED_FILENAME, compare_product_intent, write_product_seed
 from .llm import (
     MAX_QUESTION_CHARS,
     LLMSettings,
@@ -733,6 +733,79 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/intent":
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "product intent setup is available only on a "
+                            "loopback server",
+                        )
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "product intent payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "product intent payload is invalid",
+                        )
+                    if not self.server.rescan_lock.acquire(blocking=False):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "a workspace scan is already in progress",
+                        )
+                    try:
+                        with self.server.workspace_lock:
+                            seed_path = self.server.workspace_root / SEED_FILENAME
+                            previous_seed = (
+                                seed_path.read_bytes() if seed_path.is_file() else None
+                            )
+                            try:
+                                write_product_seed(
+                                    self.server.workspace_root, payload
+                                )
+                                result = rescan_repository(
+                                    self.server.workspace_root
+                                )
+                            except Exception:
+                                if previous_seed is None:
+                                    try:
+                                        seed_path.unlink(missing_ok=True)
+                                    except OSError:
+                                        pass
+                                else:
+                                    seed_path.write_bytes(previous_seed)
+                                raise
+                            self.server.workspace_artifact = _artifact(
+                                self.server.workspace_root
+                            )
+                            intent = compare_product_intent(
+                                self.server.workspace_root,
+                                self.server.workspace_artifact,
+                            )
+                    finally:
+                        self.server.rescan_lock.release()
+                    self._write_json(
+                        200,
+                        {"saved": True, "intent": intent, "rescan": result},
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/observe":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))

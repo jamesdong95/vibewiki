@@ -123,10 +123,16 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Astro `src/pages` and Nuxt `pages` filesystem routes now produce framework-
   labeled route facts for index and bracket-style dynamic segments, with exact
   source path evidence.
+- Product intent onboarding is now available in the viewer: users can define
+  product name, audience, and multiple expected flow facts without hand-writing
+  YAML; the loopback API validates and atomically writes `product.seed.yaml`,
+  rescans, and refreshes intent gaps in the graph.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
 - Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
+- Flow authoring beyond the compact intent form (rich step editing, reusable
+  templates, and review/resolve history) is not yet included.
 - GitHub private-repository OAuth, webhook sync và hosted multi-user workspace
   chưa nằm trong local-first MVP; public archive import là boundary chủ động.
 

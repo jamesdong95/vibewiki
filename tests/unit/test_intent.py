@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 
 from vibewiki.errors import ErrorCode, VibeWikiError
-from vibewiki.intent import compare_product_intent, load_product_seed
+from vibewiki.intent import (
+    compare_product_intent,
+    load_product_seed,
+    write_product_seed,
+)
 
 
 def _artifact() -> dict:
@@ -105,3 +109,28 @@ def test_product_intent_rejects_unknown_seed_fields(tmp_path: Path) -> None:
         load_product_seed(tmp_path)
     assert raised.value.code is ErrorCode.INVALID_OUTPUT
     assert "surprise" in raised.value.message
+
+
+def test_product_intent_writer_round_trips_canonical_seed(tmp_path: Path) -> None:
+    seed = {
+        "product": {"name": "Demo"},
+        "audience": "developers",
+        "flows": [
+            {
+                "id": "signup",
+                "name": "Signup",
+                "expected": [
+                    {"kind": "route", "value": "/signup"},
+                    {"kind": "api", "value": "/api/users"},
+                ],
+            }
+        ],
+    }
+
+    written = write_product_seed(tmp_path, seed)
+
+    assert written["flows"][0]["expected"][0]["label"] == "/signup"
+    assert load_product_seed(tmp_path) == written
+    text = (tmp_path / "product.seed.yaml").read_text(encoding="utf-8")
+    assert "Demo" in text
+    assert "api" in text
