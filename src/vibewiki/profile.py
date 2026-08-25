@@ -10,7 +10,9 @@ from .config import LOCAL_IMPORT_MAX_BYTES, LOCAL_IMPORT_MAX_FILES
 
 _FRAMEWORK_LABELS = {
     "angular": "Angular Router",
+    "astro": "Astro pages",
     "next_pages": "Next.js Pages Router",
+    "nuxt": "Nuxt pages",
     "nestjs": "NestJS controllers",
     "vue_router": "Vue Router",
     "sveltekit": "SvelteKit",

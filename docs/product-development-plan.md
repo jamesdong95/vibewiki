@@ -120,6 +120,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   infrastructure formats (Astro, GraphQL, Protobuf, Terraform/HCL, PowerShell,
   Perl, R, Solidity, Objective-C, F#, and related templates/scripts) with
   discovery and local-path regression coverage.
+- Astro `src/pages` and Nuxt `pages` filesystem routes now produce framework-
+  labeled route facts for index and bracket-style dynamic segments, with exact
+  source path evidence.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

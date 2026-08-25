@@ -248,6 +248,25 @@ def _pages_route_for(path: str, suffix: str) -> str:
     return "/" + "/".join(parts)
 
 
+def _filesystem_route_for(path: str, root_name: str, suffix: str) -> str | None:
+    root_index = _source_root_index(path, root_name)
+    if root_index is None or not path.endswith(suffix):
+        return None
+    relative = "/".join(path.split("/")[root_index + 1 :])[: -len(suffix)]
+    parts = [part for part in relative.split("/") if part]
+    if parts and parts[-1] == "index":
+        parts.pop()
+    route_parts: list[str] = []
+    for part in parts:
+        if part.startswith("[...") and part.endswith("]"):
+            route_parts.append("*" + part[4:-1])
+        elif part.startswith("[") and part.endswith("]"):
+            route_parts.append(":" + part[1:-1])
+        else:
+            route_parts.append(part)
+    return "/" + "/".join(route_parts)
+
+
 def _next_pages_route_matches(source: Source) -> list[dict[str, Any]]:
     """Find Next.js Pages Router pages and API files in generic mode."""
     if _source_root_index(source.path, "pages") is None:
@@ -278,6 +297,40 @@ def _next_pages_route_matches(source: Source) -> list[dict[str, Any]]:
             "framework": "next_pages",
             "handler": handler,
             "method": "ANY" if is_api else "GET",
+            "offset": 0,
+            "path": route,
+        }
+    ]
+
+
+def _astro_route_matches(source: Source) -> list[dict[str, Any]]:
+    """Map Astro src/pages filesystem routes to deterministic route facts."""
+    route = _filesystem_route_for(source.path, "pages", ".astro")
+    if route is None or "/src/" not in f"/{source.path}":
+        return []
+    return [
+        {
+            "kind": "astro_page",
+            "framework": "astro",
+            "handler": None,
+            "method": "GET",
+            "offset": 0,
+            "path": route,
+        }
+    ]
+
+
+def _nuxt_route_matches(source: Source) -> list[dict[str, Any]]:
+    """Map Nuxt pages/*.vue filesystem routes to deterministic route facts."""
+    route = _filesystem_route_for(source.path, "pages", ".vue")
+    if route is None:
+        return []
+    return [
+        {
+            "kind": "nuxt_page",
+            "framework": "nuxt",
+            "handler": None,
+            "method": "GET",
             "offset": 0,
             "path": route,
         }
@@ -985,6 +1038,8 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         elif path.endswith(_ANALYZABLE_SUFFIXES) and not path.startswith("tests/"):
             for route in [
                 *_next_pages_route_matches(source),
+                *_astro_route_matches(source),
+                *_nuxt_route_matches(source),
                 *_generic_route_matches(source),
             ]:
                 method = route["method"]

@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.36-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.36-preview) · scan a repository locally or import a public GitHub URL, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
+**Latest verified preview:** [`v0.1.37-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.37-preview) · scan a repository locally or import a public GitHub URL, detect Astro/Nuxt filesystem routes, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -167,6 +167,10 @@ Matching API calls are linked to generic route nodes when the method and path
 are literal.
 Unrecognized constructs remain source/module evidence rather than being
 presented as verified behavior.
+
+Astro `src/pages/*.astro` and Nuxt `pages/*.vue` routes are also mapped with
+deterministic filesystem evidence, including `index` and bracket-style dynamic
+segments such as `[slug]`.
 
 For JavaScript/TypeScript monorepos, reverse edges also resolve local package
 names such as `@acme/ui` and subpaths such as `@acme/ui/button` from package

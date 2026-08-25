@@ -459,6 +459,33 @@ def test_generic_analyzer_detects_angular_and_nest_routes(tmp_path: Path) -> Non
     assert "NestJS controllers" in graph["profile"]["frameworks"]
 
 
+def test_generic_analyzer_detects_astro_and_nuxt_filesystem_routes(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src/pages/blog").mkdir(parents=True)
+    (tmp_path / "packages/admin/pages").mkdir(parents=True)
+    (tmp_path / "src/pages/index.astro").write_text("<h1>Home</h1>\n")
+    (tmp_path / "src/pages/blog/[slug].astro").write_text(
+        "<h1>Blog</h1>\n"
+    )
+    (tmp_path / "packages/admin/pages/about.vue").write_text(
+        "<template><h1>About</h1></template>\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    route_keys = {
+        item["semantic_key"] for item in graph["facts"] if item["kind"] == "route"
+    }
+    assert "route:astro:src/pages/index.astro:GET:/" in route_keys
+    assert "route:astro:src/pages/blog/[slug].astro:GET:/blog/:slug" in route_keys
+    assert "route:nuxt:packages/admin/pages/about.vue:GET:/about" in route_keys
+    assert "Astro pages" in graph["profile"]["frameworks"]
+    assert "Nuxt pages" in graph["profile"]["frameworks"]
+
+
 def test_importer_selects_nested_web_package_deterministically() -> None:
     content_type, body = _multipart(
         {
