@@ -54,6 +54,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Scan history local qua `.vibewiki/history.json`, `vibewiki history`,
   `/api/history`, `/api/stale`; changed/removed source được đánh dấu stale trên
   node, edge, source và export runtime.
+- Bounded reverse graph traversal qua `/api/impact` và viewer inspector: upstream,
+  downstream, both, depth/limit safeguards và edge evidence giữ nguyên.
 - README, changelog, screenshot live preview, release metadata và draft PR đã có.
 - Packaging baseline đã hoàn tất: wheel chứa viewer asset, clean-install
   quickstart và CI smoke gate chạy trên Python 3.11–3.13 ở Ubuntu/macOS.
@@ -457,7 +459,7 @@ trả linked evidence; viewer inspector hiển thị status/error cho node đư�
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.9-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.10-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 

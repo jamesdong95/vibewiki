@@ -361,6 +361,10 @@
     .impact-list { display: grid; gap: 8px; }
     .impact-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 11px; }
     .impact-row span:last-child { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .impact-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .impact-control { padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: rgba(255,255,255,0.025); cursor: pointer; font-family: var(--mono); font-size: 9px; }
+    .impact-control:hover, .impact-control.active { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
+    .impact-status { margin-bottom: 8px; color: var(--muted-2); font-family: var(--mono); font-size: 9px; }
     .runtime-row.error { border-color: rgba(255,129,111,0.32); }
     .runtime-row.error .file-icon { color: #ffb4a8; background: rgba(255,129,111,0.12); }
     .runtime-row .evidence-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -707,6 +711,17 @@
         </div>
       </div>
 
+      <div class="inspector-section" id="reverse-graph-section" hidden>
+        <div class="inspector-label">Reverse graph</div>
+        <div class="impact-controls" role="group" aria-label="Reverse graph direction">
+          <button class="impact-control" type="button" data-impact-direction="upstream">Upstream</button>
+          <button class="impact-control" type="button" data-impact-direction="downstream">Downstream</button>
+          <button class="impact-control active" type="button" data-impact-direction="both">Both</button>
+        </div>
+        <div class="impact-status" id="reverse-graph-status">Loading graph neighborhood…</div>
+        <div class="impact-list" id="reverse-graph-list"></div>
+      </div>
+
       <div class="inspector-footer">
         <div class="mini-prompt">
           <span style="color:var(--lime);font-family:var(--mono);">›</span>
@@ -868,6 +883,9 @@
       sourceViewer: document.getElementById('source-viewer'),
       runtimeSection: document.getElementById('runtime-inspector-section'),
       runtimeList: document.getElementById('runtime-inspector-list'),
+      reverseGraphSection: document.getElementById('reverse-graph-section'),
+      reverseGraphStatus: document.getElementById('reverse-graph-status'),
+      reverseGraphList: document.getElementById('reverse-graph-list'),
       graphCanvas: document.getElementById('graph-canvas'),
       search: document.getElementById('graph-search'),
       currentView: document.getElementById('current-view'),
@@ -877,6 +895,7 @@
     let toastTimer;
     let zoom = 1;
     let runtimeObservationLabel = '';
+    let traversalRequest = 0;
 
     function showToast(message) {
       els.toastText.textContent = message;
@@ -1548,6 +1567,50 @@
             </div>`).join('');
         }
 
+        async function renderReverseGraph(id, direction = 'both') {
+          if (!els.reverseGraphSection) return;
+          const requestId = ++traversalRequest;
+          els.reverseGraphSection.hidden = false;
+          els.reverseGraphStatus.textContent = 'Đang tính neighborhood có bằng chứng…';
+          els.reverseGraphList.innerHTML = '';
+          document.querySelectorAll('[data-impact-direction]').forEach(button => {
+            button.classList.toggle('active', button.dataset.impactDirection === direction);
+          });
+          try {
+            const response = await fetch(
+              '/api/impact?subject=' + encodeURIComponent(id)
+                + '&direction=' + encodeURIComponent(direction)
+                + '&depth=3&limit=40',
+              {cache: 'no-store'}
+            );
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.message || 'Không thể truy vấn reverse graph.');
+            if (requestId !== traversalRequest) return;
+            const nodes = result.nodes || [];
+            const suffix = result.truncated ? ' · đã giới hạn kết quả' : '';
+            els.reverseGraphStatus.textContent = nodes.length
+              + ' node · ' + (result.edges?.length || 0) + ' edge · depth '
+              + result.depth + suffix;
+            els.reverseGraphList.innerHTML = nodes.length ? nodes.map(item => {
+              const node = item.node || {};
+              return '<button class="impact-row" type="button" data-impact-node="'
+                + escapeHtml(node.id || '')
+                + '" style="border:0;background:transparent;text-align:left;cursor:pointer;padding:3px 0;width:100%;">'
+                + '<span>' + escapeHtml(node.title || node.id || 'Unknown node') + '</span>'
+                + '<span>' + escapeHtml(item.direction || '') + ' · d' + item.distance
+                + '</span></button>';
+            }).join('') : '<div class="empty-state">No connected upstream/downstream evidence.</div>';
+            els.reverseGraphList.querySelectorAll('[data-impact-node]').forEach(button => {
+              button.onclick = () => renderRealInspector(button.dataset.impactNode);
+            });
+          } catch (error) {
+            if (requestId !== traversalRequest) return;
+            els.reverseGraphStatus.textContent =
+              'Reverse graph unavailable: ' + (error.message || 'local API error');
+            els.reverseGraphList.innerHTML = '<div class="empty-state">Try another direction or inspect the direct connections above.</div>';
+          }
+        }
+
         function renderRealInspector(id) {
           const data = realData.get(id);
           const node = nodeById.get(id);
@@ -1564,10 +1627,13 @@
           els.connected.innerHTML = data.connected.length ? data.connected.map(([name, relation]) => `<div class="impact-row"><span>${name}</span><span>${relation}</span></div>`).join('') : '<div class="empty-state">No connected evidence yet.</div>';
           bindToastTargets();
           bindSourceTargets();
+          renderReverseGraph(id);
         }
 
         function renderUnknownInspector() {
           const unknown = unknowns[0];
+          els.reverseGraphSection.hidden = true;
+          els.reverseGraphList.innerHTML = '';
           const intentGap = unknown?.type === 'intent_gap';
           const expected = unknown?.expected;
           els.runtimeSection.hidden = true;
@@ -1589,6 +1655,8 @@
 
         function renderHistoryInspector() {
           const latest = historyRuns[0];
+          els.reverseGraphSection.hidden = true;
+          els.reverseGraphList.innerHTML = '';
           els.runtimeSection.hidden = true;
           els.runtimeList.innerHTML = '';
           const commit = latest?.commit?.commit || 'no Git commit detected';
@@ -1694,6 +1762,13 @@
           const target = event.target.closest('[data-real-node]');
           if (target) renderRealInspector(target.dataset.realNode);
         };
+        document.querySelectorAll('[data-impact-direction]').forEach(button => {
+          button.onclick = () => {
+            if (state.selected && nodeById.has(state.selected)) {
+              renderReverseGraph(state.selected, button.dataset.impactDirection);
+            }
+          };
+        });
         els.search.oninput = event => { state.query = event.target.value.trim().toLowerCase(); renderState(); };
         document.getElementById('scan-button').onclick = chooseSourceFolder;
         renderState();

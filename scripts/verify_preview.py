@@ -46,6 +46,8 @@ REQUIRED_HTML_MARKERS = (
     'function renderHistoryInspector',
     'function observeRuntime',
     'function renderRuntimeInspector',
+    'function renderReverseGraph',
+    'data-impact-direction="upstream"',
     'function normalizeMarkdown',
     'Browser JS · optional Playwright',
     '/api/runtime',

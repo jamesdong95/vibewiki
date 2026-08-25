@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.10-preview] - 2026-08-25
+
+### Added
+
+- Bounded deterministic `/api/impact` traversal for upstream, downstream, or
+  both directions, preserving source evidence on every returned edge.
+- Reverse graph controls in the viewer inspector with depth/limit status and
+  clear empty/error states.
+- Regression coverage for Next.js route flow traversal, generic module symbols,
+  and the live HTTP endpoint.
+
 ## [0.1.9-preview] - 2026-08-25
 
 ### Fixed

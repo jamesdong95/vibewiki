@@ -159,10 +159,12 @@ current question is sent to that provider; source import and graph generation
 remain local.
 
 Every build also exposes `/api/files`, `/api/packages`, `/api/modules`,
-`/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/llm/status`,
-and `/api/ask` for bounded local evidence inspection and optional grounded
-discussion. Use `vibewiki history /path/to/repo <path-or-node>` for the same
-scan history from the CLI.
+`/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/impact`,
+`/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
+optional grounded discussion. `/api/impact` accepts a node subject plus
+`direction=upstream|downstream|both`, and returns a bounded deterministic
+neighborhood with the original edge evidence. Use `vibewiki history
+/path/to/repo <path-or-node>` for the same scan history from the CLI.
 Package, symbol, and call edges are deterministic; source evidence is served
 by relative path and line range only. Traversal, symlinks, ignored paths, and
 sensitive names are rejected.

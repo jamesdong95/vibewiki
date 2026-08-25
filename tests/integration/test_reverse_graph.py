@@ -106,3 +106,50 @@ def test_source_api_returns_bounded_lines_and_rejects_traversal(tmp_path: Path) 
             params={"path": ["../src/main.js"]},
         )
     assert rejected.value.code is ErrorCode.PATH_NOT_FOUND
+
+
+def test_impact_api_returns_bounded_upstream_and_downstream_evidence(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/main.js").write_text(
+        "import { helper } from './helper.js';\n"
+        "export function main() { return helper(); }\n"
+    )
+    (tmp_path / "src/helper.js").write_text(
+        "export function helper() { return 1; }\n"
+    )
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    helper_id = "symbol:src/helper.js:helper"
+    upstream = api_payload(
+        tmp_path,
+        graph,
+        "/api/impact",
+        params={"subject": [helper_id], "direction": ["upstream"]},
+    )
+    downstream = api_payload(
+        tmp_path,
+        graph,
+        "/api/impact",
+        params={"subject": [helper_id], "direction": ["downstream"]},
+    )
+
+    assert upstream["node"]["id"] == helper_id
+    assert any(
+        item["node"]["id"] == "symbol:src/main.js:main"
+        and item["direction"] == "upstream"
+        for item in upstream["nodes"]
+    )
+    assert downstream["nodes"] == []
+    assert upstream["counts"]["nodes"] <= 100
+
+    with pytest.raises(VibeWikiError, match="direction"):
+        api_payload(
+            tmp_path,
+            graph,
+            "/api/impact",
+            params={"subject": [helper_id], "direction": ["sideways"]},
+        )

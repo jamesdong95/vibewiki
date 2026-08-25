@@ -7,6 +7,7 @@ import json
 import os
 import sysconfig
 import zipfile
+from collections import deque
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -303,6 +304,127 @@ def _artifact_edges(
     return [_mark_edge_stale(edge, stale_by_path) for edge in edges]
 
 
+MAX_TRAVERSAL_DEPTH = 4
+MAX_TRAVERSAL_NODES = 100
+
+
+def _graph_traversal(
+    subject: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    *,
+    direction: str,
+    depth: int,
+    limit: int,
+) -> dict[str, Any]:
+    """Return a bounded deterministic upstream/downstream graph neighborhood."""
+
+    node_by_id = {node["id"]: node for node in nodes}
+    root = node_by_id.get(subject)
+    if root is None:
+        return {
+            "subject": subject,
+            "direction": direction,
+            "depth": depth,
+            "limit": limit,
+            "truncated": False,
+            "node": None,
+            "nodes": [],
+            "edges": [],
+        }
+
+    adjacency: dict[str, list[tuple[str, dict[str, Any], str]]] = {}
+    for edge in sorted(
+        edges,
+        key=lambda item: (
+            str(item.get("source", "")),
+            str(item.get("target", "")),
+            str(item.get("relation", "")),
+        ),
+    ):
+        source = edge.get("source")
+        target = edge.get("target")
+        if source not in node_by_id or target not in node_by_id:
+            continue
+        if direction in {"downstream", "both"}:
+            adjacency.setdefault(source, []).append((target, edge, "downstream"))
+        if direction in {"upstream", "both"}:
+            adjacency.setdefault(target, []).append((source, edge, "upstream"))
+
+    queue: deque[tuple[str, int]] = deque([(subject, 0)])
+    visited = {subject}
+    result_nodes: list[dict[str, Any]] = []
+    result_edges: list[dict[str, Any]] = []
+    truncated = False
+    while queue:
+        current, distance = queue.popleft()
+        if distance >= depth:
+            continue
+        for neighbor, edge, step_direction in adjacency.get(current, []):
+            if neighbor in visited:
+                continue
+            if len(result_nodes) >= limit:
+                truncated = True
+                break
+            visited.add(neighbor)
+            queue.append((neighbor, distance + 1))
+            result_nodes.append(
+                {
+                    "node": node_by_id[neighbor],
+                    "distance": distance + 1,
+                    "direction": step_direction,
+                }
+            )
+            result_edges.append(edge)
+        if truncated:
+            break
+
+    return {
+        "subject": subject,
+        "direction": direction,
+        "depth": depth,
+        "limit": limit,
+        "truncated": truncated,
+        "node": root,
+        "nodes": result_nodes,
+        "edges": result_edges,
+    }
+
+
+def _traversal_params(params: dict[str, list[str]]) -> tuple[str, str, int, int]:
+    subject = params.get("subject", [""])[0]
+    direction = params.get("direction", ["both"])[0].casefold()
+    if not subject or len(subject) > 256:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "impact query requires a valid subject",
+        )
+    if direction not in {"upstream", "downstream", "both"}:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "impact direction must be upstream, downstream, or both",
+        )
+    try:
+        depth = int(params.get("depth", ["3"])[0])
+        limit = int(params.get("limit", [str(MAX_TRAVERSAL_NODES)])[0])
+    except ValueError as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "impact depth and limit must be integers",
+        ) from error
+    if not 1 <= depth <= MAX_TRAVERSAL_DEPTH:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            f"impact depth must be between 1 and {MAX_TRAVERSAL_DEPTH}",
+        )
+    if not 1 <= limit <= MAX_TRAVERSAL_NODES:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            f"impact limit must be between 1 and {MAX_TRAVERSAL_NODES}",
+        )
+    return subject, direction, depth, limit
+
+
 def _safe_source_path(value: str) -> str:
     raw = unquote(value).replace("\\", "/")
     path = PurePosixPath(raw)
@@ -442,6 +564,21 @@ def api_payload(
         return history_for_subject(root, subject)
     if path == "/api/edges":
         return {"edges": edges}
+    if path == "/api/impact":
+        subject, direction, depth, limit = _traversal_params(params)
+        result = _graph_traversal(
+            subject,
+            nodes,
+            edges,
+            direction=direction,
+            depth=depth,
+            limit=limit,
+        )
+        result["counts"] = {
+            "nodes": len(result["nodes"]),
+            "edges": len(result["edges"]),
+        }
+        return result
     if path == "/api/files":
         return {
             "files": [
