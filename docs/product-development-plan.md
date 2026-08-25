@@ -107,6 +107,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Nested App Router/Pages Router paths such as `packages/web/app/...` and
   `apps/frontend/pages/...` retain route facts, package-scoped semantic keys,
   and source evidence when the repository root is scanned directly.
+- Viewer graph summary counts now use the combined artifact edge set (facts,
+  modules, packages, and symbols), so the displayed total matches the graph
+  users can inspect.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

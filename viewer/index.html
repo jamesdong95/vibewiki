@@ -697,7 +697,7 @@
         <div class="stats-row" aria-label="Workspace summary">
           <div class="stat"><div class="stat-label">Concepts discovered</div><div class="stat-bottom"><span class="stat-value" id="stat-facts">34</span><span class="stat-trend" id="stat-facts-trend">+4 this scan</span></div></div>
           <div class="stat"><div class="stat-label">Evidence links</div><div class="stat-bottom"><span class="stat-value" id="stat-evidence">78</span><span class="stat-trend" id="stat-evidence-trend">92% verified</span></div></div>
-          <div class="stat"><div class="stat-label">Graph relations</div><div class="stat-bottom"><span class="stat-value" id="stat-relations">08</span><span class="stat-trend" id="stat-relations-trend">mapped</span></div></div>
+          <div class="stat"><div class="stat-label">Graph edges</div><div class="stat-bottom"><span class="stat-value" id="stat-relations">08</span><span class="stat-trend" id="stat-relations-trend">static + package</span></div></div>
           <div class="stat"><div class="stat-label">Needs human review</div><div class="stat-bottom"><span class="stat-value" id="stat-unknowns">06</span><span class="stat-trend warn" id="stat-unknowns-trend">2 new</span></div></div>
         </div>
 
@@ -2081,11 +2081,12 @@
         document.querySelector('.heading-copy').textContent = `A local, evidence-backed map of ${summary.project} — generated from the latest deterministic scan · ${sourceLabel}.`;
         setText('stat-facts', summary.counts.facts);
         setText('stat-evidence', evidenceCount);
-        setText('stat-relations', summary.counts.relations);
+        const graphEdgeCount = summary.graph_counts?.edges ?? summary.counts.relations;
+        setText('stat-relations', graphEdgeCount);
         setText('stat-unknowns', pad(summary.counts.unknowns));
         setText('stat-facts-trend', `${summary.counts.scanned_files} source files`);
         setText('stat-evidence-trend', 'source-linked');
-        setText('stat-relations-trend', 'verified edges');
+        setText('stat-relations-trend', 'static + package');
         setText('stat-unknowns-trend', staleSources.length
           ? `${staleSources.length} stale sources`
           : (intent.configured ? `${intent.gaps} intent gaps` : 'review queue'));

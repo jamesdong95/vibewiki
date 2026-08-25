@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.33-preview] - 2026-08-25
+
+### Fixed
+
+- Viewer workspace summary now displays the complete graph edge count from
+  facts, modules, packages, and symbols instead of only the smaller fact
+  relation subset.
+- The summary label now says `Graph edges` and identifies the combined static
+  and package graph source, matching the interactive graph and inspector.
+
 ## [0.1.32-preview] - 2026-08-25
 
 ### Added

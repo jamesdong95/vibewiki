@@ -237,6 +237,7 @@ def test_serve_exposes_real_artifact_apis(
         "scanned_files": 11,
         "unknowns": 1,
     }
+    assert summary["graph_counts"]["edges"] > summary["counts"]["relations"]
     assert any(node["id"] == "route:page:/signup" for node in nodes["nodes"])
     assert inspected["node"]["attributes"]["path"] == "/signup"
     assert any(edge["relation"] == "calls" for edge in inspected["connected"])
