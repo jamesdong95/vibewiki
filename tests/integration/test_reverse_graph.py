@@ -47,6 +47,69 @@ def test_build_emits_repository_inventory_and_reverse_module_edges(
     } == {("symbol:src/main.js:main", "symbol:src/helper.js:helper")}
 
 
+def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
+    (tmp_path / "src/internal").mkdir(parents=True)
+    (tmp_path / "src/main/java/com/demo").mkdir(parents=True)
+    (tmp_path / "src/native").mkdir(parents=True)
+    (tmp_path / "src/com/demo").mkdir(parents=True)
+    (tmp_path / "src/main.py").write_text(
+        "from .helpers import helper\n\nhelper()\n"
+    )
+    (tmp_path / "src/helpers.py").write_text("def helper():\n    return True\n")
+    (tmp_path / "src/main.go").write_text(
+        'package main\nimport "./internal"\nfunc main() { internal.Run() }\n'
+    )
+    (tmp_path / "src/internal/health.go").write_text(
+        "package internal\nfunc Run() {}\n"
+    )
+    (tmp_path / "src/lib.rs").write_text("mod helper;\nuse crate::helper::compute;\n")
+    (tmp_path / "src/helper.rs").write_text("pub fn compute() -> i32 { 1 }\n")
+    (tmp_path / "src/main/java/com/demo/App.java").write_text(
+        "package com.demo;\nimport com.demo.Helper;\nclass App {}\n"
+    )
+    (tmp_path / "src/main/java/com/demo/Helper.java").write_text(
+        "package com.demo;\nclass Helper {}\n"
+    )
+    (tmp_path / "src/native/main.c").write_text(
+        '#include "util.h"\nint main(void) { return 0; }\n'
+    )
+    (tmp_path / "src/native/util.h").write_text("int helper(void);\n")
+    (tmp_path / "src/Feature.swift").write_text("import Utility\nstruct Feature {}\n")
+    (tmp_path / "src/Utility.swift").write_text("struct Utility {}\n")
+    (tmp_path / "src/main.dart").write_text("import 'helper.dart';\nvoid main() {}\n")
+    (tmp_path / "src/helper.dart").write_text("String helper() => 'ok';\n")
+    (tmp_path / "src/main.scala").write_text(
+        "import com.demo.ScalaHelper\nobject Main {}\n"
+    )
+    (tmp_path / "src/com/demo/ScalaHelper.scala").write_text(
+        "object ScalaHelper {}\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+    module_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+        if edge["relation"] == "imports"
+    }
+
+    assert ("module:src/main.py", "module:src/helpers.py") in module_edges
+    assert ("module:src/main.go", "module:src/internal/health.go") in module_edges
+    assert ("module:src/lib.rs", "module:src/helper.rs") in module_edges
+    assert (
+        "module:src/main/java/com/demo/App.java",
+        "module:src/main/java/com/demo/Helper.java",
+    ) in module_edges
+    assert ("module:src/native/main.c", "module:src/native/util.h") in module_edges
+    assert ("module:src/Feature.swift", "module:src/Utility.swift") in module_edges
+    assert ("module:src/main.dart", "module:src/helper.dart") in module_edges
+    assert (
+        "module:src/main.scala",
+        "module:src/com/demo/ScalaHelper.scala",
+    ) in module_edges
+
+
 def test_build_groups_nested_package_manifests(tmp_path: Path) -> None:
     (tmp_path / "packages/web/src").mkdir(parents=True)
     (tmp_path / "packages/api/src").mkdir(parents=True)

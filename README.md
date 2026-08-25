@@ -39,9 +39,10 @@ The semantic analyzer is intentionally deterministic: it covers Next.js App
 Router, generic JavaScript/JSX/TypeScript/TSX repositories, common source
 languages such as Python, Go, Rust, Java/Kotlin, Ruby/PHP, C/C++/C#, Swift,
 Dart, shell and SQL, plus Prisma models, markup, configuration, documentation,
-CommonJS/ESM module references, and test links. The extra language adapters are
-conservative regex-based facts rather than full compiler ASTs; files whose
-semantics are not recognized still remain visible as inventory evidence. LLM
+CommonJS/ESM module references, Python/Go/Rust/Java-family/C-family local module
+references, and test links. The extra language adapters are conservative
+regex-based facts rather than full compiler ASTs; files whose semantics are not
+recognized still remain visible as inventory evidence. LLM
 reasoning, runtime exploration, and network access are not required.
 
 ## Preview the UI

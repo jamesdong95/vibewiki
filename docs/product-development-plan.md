@@ -67,6 +67,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Browse large-repo preflight nhóm package monorepo, hiển thị file/byte counts,
   cho phép scan package nằm trong safety limit và giữ artifact cũ khi import
   thất bại.
+- Reverse module graph có evidence cho Python, Go, Rust, Java/Kotlin và C/C++
+  local imports; external dependencies vẫn được đánh dấu inferred.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

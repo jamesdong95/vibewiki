@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.16-preview] - 2026-08-25
+
+### Added
+
+- Reverse module edges for Python relative/absolute imports, Go local imports,
+  Rust `mod`/`use`, Java/Kotlin package imports, and C/C++ local includes.
+- Deterministic path/line evidence for the new language adapters while keeping
+  unresolved external dependencies visible as inferred external modules.
+- Multilanguage fixture coverage for Python, Go, Rust, Java, and C reverse graph
+  relationships.
+
 ## [0.1.15-preview] - 2026-08-25
 
 ### Added

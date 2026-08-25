@@ -31,6 +31,23 @@ _REQUIRE = re.compile(r"\b(?:require|import)\s*\(\s*[\"']([^\"']+)[\"']\s*\)")
 _REQUIRE_BINDING = re.compile(
     r"(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*[\"']([^\"']+)[\"']\s*\)"
 )
+_PY_IMPORT = re.compile(
+    r"(?m)^[ \t]*(?:from[ \t]+([.\w]+)[ \t]+import\b.*|import[ \t]+(.+?))[ \t]*$"
+)
+_GO_IMPORT = re.compile(r'(?m)^[ \t]*(?:import[ \t]+)?"([^"]+)"')
+_RUST_MOD = re.compile(r"(?m)^[ \t]*mod[ \t]+([A-Za-z_]\w*)[ \t]*;")
+_RUST_USE = re.compile(
+    r"(?m)^[ \t]*use[ \t]+((?:crate|self|super)(?:::[A-Za-z_]\w*)+)"
+)
+_JVM_IMPORT = re.compile(
+    r"(?m)^[ \t]*import[ \t]+(?:static[ \t]+)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)"
+)
+_SWIFT_IMPORT = re.compile(r"(?m)^[ \t]*import[ \t]+([A-Za-z_]\w*)")
+_DART_IMPORT = re.compile(r"(?m)^[ \t]*import[ \t]+['\"]([^'\"]+)['\"]")
+_RELATIVE_INCLUDE = re.compile(
+    r"(?m)^[ \t]*(?:#include|require_relative|require|source)[ \t]*"
+    r"[<(\"]([^)>\"]+)[)>\"]"
+)
 _CLASS = re.compile(
     r"(?:^|\n)\s*(?:export\s+(?:default\s+)?)?class\s+(\w+)\b"
 )
@@ -289,6 +306,197 @@ def _resolve_import(source_path: str, imported: str, sources: set[str]) -> str |
         if candidate in sources:
             return candidate
     return None
+
+
+def _resolve_candidates(
+    bases: list[str], sources: set[str], suffixes: tuple[str, ...]
+) -> str | None:
+    for base in bases:
+        normalized = posixpath.normpath(base)
+        candidates = [normalized]
+        candidates.extend(f"{normalized}{suffix}" for suffix in suffixes)
+        candidates.extend(f"{normalized}/index{suffix}" for suffix in suffixes)
+        candidates.extend(f"{normalized}/__init__{suffix}" for suffix in suffixes)
+        for candidate in candidates:
+            if candidate in sources:
+                return candidate
+    return None
+
+
+def _resolve_by_suffix(
+    module_path: str, sources: set[str], suffixes: tuple[str, ...]
+) -> str | None:
+    normalized = module_path.strip("./").replace(".", "/")
+    candidates = {normalized, *(f"{normalized}{suffix}" for suffix in suffixes)}
+    matches = sorted(
+        path
+        for path in sources
+        if path.endswith(suffixes)
+        and any(
+            path == candidate or path.endswith(f"/{candidate}")
+            for candidate in candidates
+        )
+    )
+    return matches[0] if matches else None
+
+
+def _resolve_language_import(
+    source_path: str, imported: str, sources: set[str]
+) -> str | None:
+    """Resolve common non-JS imports without pretending to be a compiler."""
+    directory = posixpath.dirname(source_path)
+    if source_path.endswith((".py", ".pyi")):
+        dots = len(imported) - len(imported.lstrip("."))
+        module = imported[dots:]
+        if dots:
+            base = directory
+            for _ in range(max(dots - 1, 0)):
+                base = posixpath.dirname(base)
+            module_path = posixpath.join(base, module.replace(".", "/"))
+            return _resolve_candidates(
+                [module_path], sources, (".py", ".pyi")
+            )
+        module_path = module.replace(".", "/")
+        return _resolve_candidates(
+            [posixpath.join(directory, module_path), module_path],
+            sources,
+            (".py", ".pyi"),
+        )
+    if source_path.endswith(".rs"):
+        if imported.startswith("crate::"):
+            parts = imported.removeprefix("crate::").split("::")
+            crate_root = "src" if source_path.startswith("src/") else ""
+            return _resolve_candidates(
+                [
+                    posixpath.join(crate_root, "/".join(parts[:index]))
+                    for index in range(len(parts), 0, -1)
+                ],
+                sources,
+                (".rs",),
+            )
+        if imported.startswith("super::"):
+            base = posixpath.dirname(posixpath.dirname(source_path))
+            parts = imported.removeprefix("super::").split("::")
+            return _resolve_candidates(
+                [
+                    posixpath.join(base, "/".join(parts[:index]))
+                    for index in range(len(parts), 0, -1)
+                ],
+                sources,
+                (".rs",),
+            )
+        if imported.startswith("self::"):
+            parts = imported.removeprefix("self::").split("::")
+            return _resolve_candidates(
+                [
+                    posixpath.join(directory, "/".join(parts[:index]))
+                    for index in range(len(parts), 0, -1)
+                ],
+                sources,
+                (".rs",),
+            )
+        return _resolve_candidates(
+            [posixpath.join(directory, imported)], sources, (".rs",)
+        )
+    if source_path.endswith(".go") and imported.startswith("."):
+        base = posixpath.normpath(posixpath.join(directory, imported))
+        matches = sorted(
+            path
+            for path in sources
+            if path.startswith(f"{base}/") and path.endswith(".go")
+        )
+        return matches[0] if matches else None
+    if source_path.endswith((".java", ".kt", ".kts")):
+        return _resolve_by_suffix(
+            imported, sources, (".java", ".kt", ".kts")
+        )
+    if source_path.endswith(".scala"):
+        return _resolve_by_suffix(imported, sources, (".scala",))
+    if source_path.endswith(".swift"):
+        return _resolve_by_suffix(imported, sources, (".swift",))
+    if source_path.endswith(".dart"):
+        if imported.startswith("package:"):
+            imported = imported.split("/", 1)[-1]
+        return _resolve_candidates(
+            [posixpath.join(directory, imported)], sources, (".dart",)
+        )
+    if source_path.endswith((".h", ".hpp", ".c", ".cpp")):
+        return _resolve_candidates(
+            [posixpath.join(directory, imported)],
+            sources,
+            (".h", ".hpp", ".c", ".cpp"),
+        )
+    if imported.startswith((".", "/")):
+        return _resolve_candidates(
+            [posixpath.join(directory, imported)],
+            sources,
+            (".rb", ".php", ".sh", ".bash", ".zsh", ".h", ".hpp", ".c", ".cpp"),
+        )
+    return None
+
+
+def _module_references(source: Source) -> list[tuple[str, int]]:
+    """Extract literal module references for the reverse dependency graph."""
+    references: list[tuple[str, int]] = [
+        (match.group(2), match.start()) for match in _IMPORT.finditer(source.text)
+    ]
+    references.extend(
+        (match.group(1), match.start()) for match in _REEXPORT.finditer(source.text)
+    )
+    references.extend(
+        (match.group(1), match.start()) for match in _REQUIRE.finditer(source.text)
+    )
+    if source.path.endswith((".py", ".pyi")):
+        for match in _PY_IMPORT.finditer(source.text):
+            if match.group(1):
+                references.append((match.group(1), match.start(1)))
+            else:
+                for item in match.group(2).split(","):
+                    specifier = item.strip().split(" as ", 1)[0].strip()
+                    if specifier:
+                        references.append((specifier, match.start(2)))
+    elif source.path.endswith(".go"):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _GO_IMPORT.finditer(source.text)
+        )
+    elif source.path.endswith(".rs"):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _RUST_MOD.finditer(source.text)
+        )
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _RUST_USE.finditer(source.text)
+        )
+    elif source.path.endswith((".java", ".kt", ".kts")):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _JVM_IMPORT.finditer(source.text)
+        )
+    elif source.path.endswith(".scala"):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _JVM_IMPORT.finditer(source.text)
+        )
+    elif source.path.endswith(".swift"):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _SWIFT_IMPORT.finditer(source.text)
+        )
+    elif source.path.endswith(".dart"):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _DART_IMPORT.finditer(source.text)
+        )
+    elif source.path.endswith(
+        (".rb", ".php", ".sh", ".bash", ".zsh", ".h", ".hpp", ".c", ".cpp")
+    ):
+        references.extend(
+            (match.group(1), match.start(1))
+            for match in _RELATIVE_INCLUDE.finditer(source.text)
+        )
+    return references
 
 
 def _load_sources(root: Path, manifest: dict[str, Any]) -> dict[str, Source]:
@@ -1110,17 +1318,11 @@ def build_module_graph(
                 "status": "verified",
             }
         )
-        references: list[tuple[str, int]] = [
-            (match.group(2), match.start()) for match in _IMPORT.finditer(source.text)
-        ]
-        references.extend(
-            (match.group(1), match.start()) for match in _REEXPORT.finditer(source.text)
-        )
-        references.extend(
-            (match.group(1), match.start()) for match in _REQUIRE.finditer(source.text)
-        )
+        references = _module_references(source)
         for specifier, offset in references:
             resolved = _resolve_import(path, specifier, source_paths)
+            if resolved is None:
+                resolved = _resolve_language_import(path, specifier, source_paths)
             target = f"module:{resolved}" if resolved else f"external:{specifier}"
             add_edge(source_id, target, specifier, path, offset)
 
