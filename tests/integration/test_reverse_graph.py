@@ -88,6 +88,9 @@ def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
     scan_repository(tmp_path, allow_generic=True)
     build_repository(tmp_path)
     graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+    assert graph["profile"]["scan_mode"] == "generic"
+    assert graph["profile"]["package_scope"] == "single-package"
+    assert graph["profile"]["limits"]["max_import_files"] == 10_000
     module_edges = {
         (edge["source"], edge["target"])
         for edge in graph["module_edges"]
