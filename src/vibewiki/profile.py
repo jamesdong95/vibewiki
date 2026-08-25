@@ -9,7 +9,9 @@ from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .config import LOCAL_IMPORT_MAX_BYTES, LOCAL_IMPORT_MAX_FILES
 
 _FRAMEWORK_LABELS = {
+    "angular": "Angular Router",
     "next_pages": "Next.js Pages Router",
+    "nestjs": "NestJS controllers",
     "vue_router": "Vue Router",
     "sveltekit": "SvelteKit",
     "generic": "Generic route registrations",

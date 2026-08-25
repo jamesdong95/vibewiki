@@ -12,7 +12,8 @@
 
 > Live preview from the local `scan → build → serve` workflow.
 
-> VibeWiki is an early-stage open-source concept and UI prototype for developers who need to understand what an AI-assisted codebase actually does.
+> VibeWiki is a local-first codebase intelligence tool for developers who need
+> to understand what an AI-assisted codebase actually does.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -78,7 +79,7 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory viewer
 
 Then open <http://127.0.0.1:4173/>.
 
-The prototype demonstrates:
+The local product provides:
 
 - Product map and evidence-oriented graph navigation.
 - Inspector panels for routes, flows, APIs, services, entities, tests, and commits.
@@ -118,29 +119,34 @@ the inspector. The viewer exposes the same choice from **Observe runtime**.
 
 ## Product direction
 
-The current end-to-end local flow is:
+The shortest end-to-end local flow is:
 
 ```bash
-uv run vibewiki scan /path/to/next-app
-uv run vibewiki build /path/to/next-app
-uv run vibewiki serve /path/to/next-app --port 4173
+uv run vibewiki analyze /path/to/repository
+uv run vibewiki serve /path/to/repository --port 4173
 ```
 
-For a non-Next repository, opt into the conservative generic analyzer:
+`analyze` auto-detects a direct Next.js App Router and otherwise uses the
+generic local analyzer. The explicit two-step form remains available when you
+want to inspect each stage:
 
 ```bash
-uv run vibewiki scan /path/to/repository --generic
+uv run vibewiki scan /path/to/repository
 uv run vibewiki build /path/to/repository
 uv run vibewiki serve /path/to/repository --port 4173
 ```
 
+Use `--generic` to force the broader source/config/docs registry or
+`--strict-next` to preserve the original direct App Router validation.
+
 Generic mode keeps every supported file in inventory and recognizes common
 route registrations in Express/Fastify/Hono-style JavaScript, React Router JSX
 and `createBrowserRouter` route objects, Flask/FastAPI, and Go `HandleFunc`
-code, Next.js Pages Router files, Vue Router `createRouter` route objects, and
-SvelteKit `src/routes` files, plus literal fetch/Axios/common `apiClient`
-wrapper calls. Matching API calls are linked to generic route nodes when the
-method and path are literal.
+code, Next.js Pages Router files, Vue Router `createRouter` route objects,
+Angular Router route arrays, NestJS controller decorators, and SvelteKit
+`src/routes` files, plus literal fetch/Axios/common `apiClient` wrapper calls.
+Matching API calls are linked to generic route nodes when the method and path
+are literal.
 Unrecognized constructs remain source/module evidence rather than being
 presented as verified behavior.
 

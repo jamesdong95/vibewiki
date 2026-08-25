@@ -94,14 +94,14 @@ def test_changed_supported_file_updates_same_size_digest(tmp_path: Path) -> None
     assert before["files"][0]["sha256"] != after["files"][0]["sha256"]
 
 
-def test_scan_rejects_missing_valid_app_typescript_without_partial_output(
+def test_strict_scan_rejects_pages_router_without_partial_output(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "pages").mkdir()
     (tmp_path / "pages/index.tsx").write_text("export default function Page() {}\n")
 
     with pytest.raises(VibeWikiError) as raised:
-        scan_repository(tmp_path)
+        scan_repository(tmp_path, allow_generic=False)
 
     assert raised.value.code is ErrorCode.UNSUPPORTED_STACK
     assert not (tmp_path / ".vibewiki").exists()

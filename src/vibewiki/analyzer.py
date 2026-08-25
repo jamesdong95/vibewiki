@@ -89,6 +89,15 @@ _REACT_ROUTER_FACTORY = re.compile(
 _REACT_ROUTER_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])(/[^'\"]*)\1")
 _VUE_ROUTER_FACTORY = re.compile(r"\bcreateRouter\s*\(")
 _VUE_ROUTER_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])(/[^'\"]*)\1")
+_ANGULAR_ROUTER_MARKER = re.compile(
+    r"\b(?:RouterModule\.forRoot|RouterModule\.forChild|provideRouter)\s*\(",
+)
+_ANGULAR_ROUTE_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])([^'\"]*)\1")
+_NEST_CONTROLLER = re.compile(r"@Controller\s*\(\s*(['\"])([^'\"]*)\1\s*\)")
+_NEST_METHOD = re.compile(
+    r"@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*"
+    r"(?:\(\s*(['\"])([^'\"]*)\2\s*\)|\(\s*\))"
+)
 _PAGES_INTERNAL = {"_app", "_document", "_error"}
 _SVELTEKIT_ROUTE_SCRIPT_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
@@ -573,6 +582,44 @@ def _generic_route_matches(source: Source) -> list[dict[str, Any]]:
                         "path": match.group(2),
                     }
                 )
+        if _ANGULAR_ROUTER_MARKER.search(source.text):
+            for match in _ANGULAR_ROUTE_OBJECT.finditer(source.text):
+                raw_path = match.group(2)
+                route_path = raw_path or "/"
+                if not route_path.startswith("/"):
+                    route_path = "/" + route_path
+                matches.append(
+                    {
+                        "kind": "angular_router_object",
+                        "framework": "angular",
+                        "handler": None,
+                        "method": "GET",
+                        "offset": match.start(),
+                        "path": route_path,
+                    }
+                )
+        controller = _NEST_CONTROLLER.search(source.text)
+        if controller:
+            prefix = controller.group(2).strip("/")
+            for match in _NEST_METHOD.finditer(source.text):
+                child = (match.group(3) or "").strip("/")
+                route_path = "/" + "/".join(
+                    part for part in (prefix, child) if part
+                )
+                matches.append(
+                    {
+                        "kind": "nest_controller",
+                        "framework": "nestjs",
+                        "handler": None,
+                        "method": (
+                            match.group(1).upper()
+                            if match.group(1) != "All"
+                            else "ANY"
+                        ),
+                        "offset": match.start(),
+                        "path": route_path,
+                    }
+                )
     matches.extend(_sveltekit_route_matches(source))
     if source.path.endswith(".py"):
         for match in _GENERIC_ROUTE_DECORATOR.finditer(source.text):
@@ -778,7 +825,14 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         if (
             item["kind"] != "route"
             or item["attributes"].get("framework")
-            not in {"generic", "next_pages", "vue_router", "sveltekit"}
+            not in {
+                "angular",
+                "generic",
+                "nestjs",
+                "next_pages",
+                "vue_router",
+                "sveltekit",
+            }
         ):
             continue
         methods = item["attributes"].get("methods") or ["ANY"]

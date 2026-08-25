@@ -35,14 +35,28 @@ def test_cli_scan_emits_relative_deterministic_summary(
     assert str(tmp_path) not in captured.out
 
 
-def test_cli_scan_uses_stable_unsupported_stack_exit_code(
+def test_cli_scan_auto_detects_pages_router_as_generic(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     (tmp_path / "pages").mkdir()
     (tmp_path / "pages/index.js").write_text("export default function Page() {}\n")
 
-    assert main(["scan", str(tmp_path)]) == 3
+    assert main(["scan", str(tmp_path)]) == 0
+    captured = capsys.readouterr()
+
+    assert captured.err == ""
+    assert json.loads(captured.out)["status"] == "ok"
+
+
+def test_cli_scan_strict_next_keeps_stable_unsupported_stack_exit_code(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "pages/index.js").write_text("export default function Page() {}\n")
+
+    assert main(["scan", str(tmp_path), "--strict-next"]) == 3
     captured = capsys.readouterr()
 
     assert captured.out == ""
@@ -65,6 +79,25 @@ def test_cli_scan_generic_accepts_non_next_repository(
 
     assert summary["status"] == "ok"
     assert summary["counts"]["scanned_files"] == 1
+
+
+def test_cli_analyze_runs_scan_and_build_in_one_step(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/main.js").write_text(
+        "export function main() { return true; }\n"
+    )
+
+    assert main(["analyze", str(tmp_path)]) == 0
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["command"] == "analyze"
+    assert result["status"] == "ok"
+    assert result["scan"]["counts"]["scanned_files"] == 1
+    assert result["build"]["counts"]["scanned_files"] == 1
+    assert (tmp_path / ".vibewiki/graph.json").is_file()
 
 
 def test_cli_history_returns_runs_for_a_source_path(

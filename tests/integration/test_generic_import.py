@@ -261,6 +261,41 @@ def test_generic_framework_routes_and_api_calls_build_reverse_graph(
     )
 
 
+def test_generic_analyzer_detects_angular_and_nest_routes(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/app-routing.module.ts").write_text(
+        "import { RouterModule, Routes } from '@angular/router';\n"
+        "const routes: Routes = [\n"
+        "  { path: '', component: HomeComponent },\n"
+        "  { path: 'users/:id', loadComponent: () => UserComponent },\n"
+        "];\n"
+        "export const routing = RouterModule.forRoot(routes);\n"
+    )
+    (tmp_path / "src/users.controller.ts").write_text(
+        "import { Controller, Get } from '@nestjs/common';\n"
+        "@Controller('users')\n"
+        "export class UsersController {\n"
+        "  @Get(':id')\n"
+        "  findOne() { return true; }\n"
+        "}\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+    routes = {
+        item["semantic_key"]: item
+        for item in graph["facts"]
+        if item["kind"] == "route"
+    }
+
+    assert "route:angular:src/app-routing.module.ts:GET:/" in routes
+    assert "route:angular:src/app-routing.module.ts:GET:/users/:id" in routes
+    assert "route:nestjs:src/users.controller.ts:GET:/users/:id" in routes
+    assert "Angular Router" in graph["profile"]["frameworks"]
+    assert "NestJS controllers" in graph["profile"]["frameworks"]
+
+
 def test_importer_selects_nested_web_package_deterministically() -> None:
     content_type, body = _multipart(
         {

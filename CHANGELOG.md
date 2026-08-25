@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.19-preview] - 2026-08-25
+
+### Added
+
+- CLI scan auto-detects direct Next.js App Router versus generic repositories;
+  `--strict-next` preserves the legacy validation contract.
+- `vibewiki analyze REPOSITORY` runs scan and build in one deterministic step.
+- Generic route evidence for Angular Router route objects and NestJS controller
+  decorators, with profile framework labels and regression fixtures.
+
 ## [0.1.18-preview] - 2026-08-25
 
 ### Added

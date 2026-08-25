@@ -73,6 +73,11 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   framework/language coverage, package scope và giới hạn import trong viewer;
   project switcher đã trở thành control Browse scope thật; selector package
   focus graph/evidence/inspector mà không cần import lại.
+- CLI onboarding tự nhận diện direct Next App Router hoặc generic repository;
+  `vibewiki analyze` chạy scan + build trong một bước, còn `--strict-next` giữ
+  contract legacy cho CI và fixture golden.
+- Generic adapter coverage đã thêm Angular Router route arrays và NestJS
+  controller decorators với route evidence deterministic.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

@@ -139,26 +139,38 @@ def scan_repository(
     repository: str | os.PathLike[str],
     *,
     offline: bool = True,
-    allow_generic: bool = False,
+    allow_generic: bool | None = None,
 ) -> dict[str, Any]:
     """Scan a local source tree and write only its manifest.
 
-    A direct Next App Router is still recognized specially, while a generic
-    JavaScript/TypeScript or Prisma repository is accepted without requiring
-    a top-level ``app`` directory. ``allow_generic=False`` is retained as a
-    strict mode for callers that need the original Next-only validation.
+    A direct Next App Router keeps its byte-compatible strict discovery. Other
+    repositories are auto-detected as generic source trees. ``allow_generic``
+    can be set explicitly to ``False`` for callers that need the original
+    Next-only validation, or ``True`` to force the broader source registry.
     """
 
     require_offline(offline)
     root = _repository_root(repository)
     before = previous_manifest(root)
-    discovered = discover_files(root, include_generic=allow_generic)
+    generic_discovered = discover_files(root, include_generic=True)
+    direct_next = (
+        _has_direct_app(root)
+        and not _has_pages_router_marker(root)
+        and bool(_app_files(generic_discovered))
+        and not _has_nested_router_surface(generic_discovered)
+    )
+    effective_generic = (not direct_next) if allow_generic is None else allow_generic
+    discovered = (
+        generic_discovered
+        if effective_generic
+        else discover_files(root, include_generic=False)
+    )
     inventory = discover_inventory(root)
     has_schema = _has_prisma_schema(root)
     if not discovered and not has_schema:
         message = (
             "repository contains no supported source, config, or documentation files"
-            if allow_generic
+            if effective_generic
             else (
                 "repository contains no supported JavaScript, TypeScript, or "
                 "Prisma source"
@@ -168,13 +180,13 @@ def scan_repository(
             ErrorCode.UNSUPPORTED_STACK,
             message,
         )
-    if not allow_generic and _has_pages_router_marker(root):
+    if not effective_generic and _has_pages_router_marker(root):
         raise VibeWikiError(
             ErrorCode.UNSUPPORTED_STACK,
             "Pages Router repositories are not supported; use an App Router "
             "or generic source tree",
         )
-    if not allow_generic and (
+    if not effective_generic and (
         not _has_direct_app(root)
         or not _app_files(discovered)
         or _has_nested_router_surface(discovered)
@@ -184,7 +196,7 @@ def scan_repository(
             "repository is not a direct Next App Router source tree",
         )
     if (
-        allow_generic
+        effective_generic
         and _has_direct_app(root)
         and _has_nested_router_surface(discovered)
     ):

@@ -40,7 +40,27 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument(
         "--generic",
         action="store_true",
-        help="include generic source/config/docs and nested repository layouts",
+        help="force the generic source/config/docs analyzer",
+    )
+    scan_parser.add_argument(
+        "--strict-next",
+        action="store_true",
+        help="require the original direct Next.js App Router contract",
+    )
+    analyze_parser = commands.add_parser(
+        "analyze",
+        help="scan and build a repository in one command",
+    )
+    analyze_parser.add_argument("repository", help="repository directory to analyze")
+    analyze_parser.add_argument(
+        "--generic",
+        action="store_true",
+        help="force the generic source/config/docs analyzer",
+    )
+    analyze_parser.add_argument(
+        "--strict-next",
+        action="store_true",
+        help="require the original direct Next.js App Router contract",
     )
     build_parser = commands.add_parser(
         "build",
@@ -115,8 +135,31 @@ def run(argv: Sequence[str] | None = None) -> int:
     """
     arguments = build_parser().parse_args(argv)
     if arguments.command == "scan":
-        summary = scan_repository(arguments.repository, allow_generic=arguments.generic)
+        allow_generic = (
+            True if arguments.generic else False if arguments.strict_next else None
+        )
+        summary = scan_repository(arguments.repository, allow_generic=allow_generic)
         print(canonical_json(summary), end="")
+    elif arguments.command == "analyze":
+        allow_generic = (
+            True if arguments.generic else False if arguments.strict_next else None
+        )
+        scan_summary = scan_repository(
+            arguments.repository,
+            allow_generic=allow_generic,
+        )
+        build_summary = build_repository(arguments.repository)
+        print(
+            canonical_json(
+                {
+                    "build": build_summary,
+                    "command": "analyze",
+                    "scan": scan_summary,
+                    "status": "ok",
+                }
+            ),
+            end="",
+        )
     elif arguments.command == "build":
         print(canonical_json(build_repository(arguments.repository)), end="")
     elif arguments.command == "history":
