@@ -58,6 +58,32 @@ def test_build_requires_scan_output(tmp_path: Path) -> None:
     assert raised.value.code is ErrorCode.INVALID_OUTPUT
 
 
+def test_serve_bootstraps_missing_artifact(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    assert not (root / ".vibewiki").exists()
+
+    server = create_server(root, port=0)
+    try:
+        assert server.auto_analyzed is True
+        assert (root / ".vibewiki/graph.json").is_file()
+    finally:
+        server.server_close()
+
+    server = create_server(root, port=0)
+    try:
+        assert server.auto_analyzed is False
+    finally:
+        server.server_close()
+
+
+def test_serve_reports_unsupported_repository_during_auto_bootstrap(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(VibeWikiError, match="no supported"):
+        create_server(tmp_path, port=0)
+    assert not (tmp_path / ".vibewiki").exists()
+
+
 def test_serve_exposes_real_artifact_apis(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

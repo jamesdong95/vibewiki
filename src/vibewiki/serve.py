@@ -74,6 +74,16 @@ def _artifact(root: Path) -> dict[str, Any]:
     return data
 
 
+def _ensure_artifact(root: Path) -> bool:
+    """Create the first local artifact so ``serve`` works as one command."""
+
+    graph = root / MANIFEST_DIRECTORY / "graph.json"
+    if graph.is_file():
+        return False
+    rescan_repository(root)
+    return True
+
+
 def _runtime(root: Path) -> dict[str, Any]:
     path = root / MANIFEST_DIRECTORY / "runtime.json"
     if not path.is_file():
@@ -649,6 +659,7 @@ def create_server(
     repository: str | Path, host: str = "127.0.0.1", port: int = 0
 ) -> ThreadingHTTPServer:
     root = Path(repository).absolute()
+    auto_analyzed = _ensure_artifact(root)
     artifact = _artifact(root)
     viewer = _viewer_directory()
 
@@ -975,6 +986,7 @@ def create_server(
     server.imported_workspace: ImportedWorkspace | None = None
     server.local_path_import_allowed = host in {"127.0.0.1", "localhost", "::1"}
     server.rescan_lock = threading.Lock()
+    server.auto_analyzed = auto_analyzed
     return server
 
 
@@ -1007,6 +1019,7 @@ def serve_repository(
                     "command": "serve",
                     "port": actual_port,
                     "artifact_root": MANIFEST_DIRECTORY,
+                    "auto_analyzed": server.auto_analyzed,
                     "schema_version": SCHEMA_VERSION,
                     "status": "ready",
                 }

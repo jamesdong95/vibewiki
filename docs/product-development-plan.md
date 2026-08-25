@@ -83,6 +83,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Viewer có **Rescan workspace** thật qua loopback API; rescan snapshot artifact
   hiện tại, cập nhật graph sau khi source đổi, và rollback `.vibewiki/` nếu scan
   hoặc build thất bại.
+- `vibewiki serve REPOSITORY` tự bootstrap scan + build khi chưa có artifact,
+  để người dùng mới có thể chạy một lệnh và mở được viewer.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

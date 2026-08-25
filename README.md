@@ -122,13 +122,15 @@ the inspector. The viewer exposes the same choice from **Observe runtime**.
 The shortest end-to-end local flow is:
 
 ```bash
-uv run vibewiki analyze /path/to/repository
 uv run vibewiki serve /path/to/repository --port 4173
 ```
 
-`analyze` auto-detects a direct Next.js App Router and otherwise uses the
-generic local analyzer. The explicit two-step form remains available when you
-want to inspect each stage:
+If `.vibewiki/graph.json` is missing, `serve` automatically runs the same local
+scan + build flow before opening the viewer. It prints `auto_analyzed: true` in
+the ready event and keeps the existing artifact if preparation fails. For a
+separate, scriptable analysis result, use `analyze`; it auto-detects a direct
+Next.js App Router and otherwise uses the generic local analyzer. The explicit
+two-step form remains available when you want to inspect each stage:
 
 ```bash
 uv run vibewiki scan /path/to/repository

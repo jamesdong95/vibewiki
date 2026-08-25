@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.22-preview] - 2026-08-25
+
+### Added
+
+- `vibewiki serve REPOSITORY` now auto-runs the local scan + build pipeline when
+  no `.vibewiki/graph.json` exists, so a new user can open a repository with one
+  command.
+- Serve startup reports whether the artifact was auto-analyzed and preserves
+  the same safe rollback behavior when first analysis fails.
+- Regression coverage for first-run bootstrap, repeat serve, and unsupported
+  repository errors.
+
 ## [0.1.21-preview] - 2026-08-25
 
 ### Added
