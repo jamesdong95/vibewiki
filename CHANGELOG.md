@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.36-preview] - 2026-08-25
+
+### Added
+
+- Generic Browse/import support for Astro, GraphQL/GQL, Protobuf, Terraform,
+  HCL, PowerShell, batch, Perl, R, Objective-C/C++, F#/Visual Basic, Solidity,
+  Clojure, assembly, Gradle, and common template files.
+- Regression coverage proving discovery and local-path import preserve these
+  formats inside bounded temporary workspaces.
+
 ## [0.1.35-preview] - 2026-08-25
 
 ### Fixed

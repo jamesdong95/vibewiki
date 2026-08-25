@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.35-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.35-preview) · scan a repository locally or import a public GitHub URL, accept mixed root/nested package routes, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
+**Latest verified preview:** [`v0.1.36-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.36-preview) · scan a repository locally or import a public GitHub URL, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -179,7 +179,8 @@ external services.
 You can also use **Browse source** in the viewer to choose a local source
 folder. Browse accepts common source, config, and documentation files
 (including JavaScript/JSX, TypeScript/TSX, Python, Go, Rust, Java/Kotlin,
-C-family, Swift/Dart, shell, SQL, markup, JSON/YAML/TOML and Markdown), plus
+C-family, Swift/Dart, shell, SQL, Astro, GraphQL, Protobuf, Terraform/HCL,
+PowerShell, Perl, R, Solidity, markup, JSON/YAML/TOML and Markdown), plus
 Prisma. It detects a supported package inside common monorepos and shows
 skipped-file or size-limit errors before import. If the whole repository is
 larger than the local safety limit, Browse offers bounded package candidates

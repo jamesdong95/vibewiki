@@ -277,7 +277,7 @@ wheels = [
 
 [[package]]
 name = "vibewiki"
-version = "0.1.35rc0"
+version = "0.1.36rc0"
 source = { editable = "." }
 
 [package.optional-dependencies]

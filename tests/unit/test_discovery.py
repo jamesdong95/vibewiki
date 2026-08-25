@@ -69,6 +69,39 @@ def test_discovery_does_not_follow_symlinks_or_special_files(tmp_path: Path) -> 
     assert str(outside) not in discovered
 
 
+def test_generic_discovery_covers_common_source_and_schema_formats(
+    tmp_path: Path,
+) -> None:
+    paths = {
+        "page.astro": "---\nconst title = 'demo';\n---\n",
+        "schema.graphql": "type Query { health: Boolean }\n",
+        "service.proto": "syntax = 'proto3';\n",
+        "infra/main.tf": "resource \"demo\" \"main\" {}\n",
+        "scripts/check.ps1": "Write-Output 'ok'\n",
+        "templates/card.hbs": "<article>{{title}}</article>\n",
+        "src/math.r": "value <- 1\n",
+        "src/contract.sol": "contract Demo {}\n",
+    }
+    for relative, content in paths.items():
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content)
+
+    discovered = discover_files(tmp_path, include_generic=True)
+
+    assert {item.path for item in discovered} == set(paths)
+    assert {item.language for item in discovered} == {
+        "astro",
+        "graphql",
+        "protobuf",
+        "terraform",
+        "powershell",
+        "handlebars",
+        "r",
+        "solidity",
+    }
+
+
 def test_sensitive_paths_are_classified_without_needing_file_contents() -> None:
     assert is_sensitive_path(Path(".env.production"))
     assert is_sensitive_path(Path("config/credentials.json"))

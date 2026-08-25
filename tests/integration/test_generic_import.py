@@ -114,6 +114,24 @@ def test_local_path_import_builds_bounded_snapshot(tmp_path: Path) -> None:
         cleanup_workspace(imported)
 
 
+def test_local_path_import_accepts_common_source_formats(tmp_path: Path) -> None:
+    source = tmp_path / "multi-format"
+    (source / "src").mkdir(parents=True)
+    (source / "src/page.astro").write_text("---\nconst title = 'demo';\n---\n")
+    (source / "src/schema.graphql").write_text("type Query { health: Boolean }\n")
+    (source / "infra/main.tf").parent.mkdir(parents=True)
+    (source / "infra/main.tf").write_text('resource "demo" "main" {}\n')
+
+    imported = import_local_workspace(source)
+    try:
+        assert imported.build_summary["counts"]["scanned_files"] == 3
+        assert (imported.root / "src/page.astro").is_file()
+        assert (imported.root / "src/schema.graphql").is_file()
+        assert (imported.root / "infra/main.tf").is_file()
+    finally:
+        cleanup_workspace(imported)
+
+
 def test_github_import_uses_public_archive_and_selects_web_package(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

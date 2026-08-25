@@ -116,6 +116,10 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Generic scanning now accepts repositories that contain both a root `app/`
   and nested package routers; strict Next mode keeps its legacy validation while
   package-scoped route keys prevent collisions.
+- Browse/import generic registry now covers additional real-world source and
+  infrastructure formats (Astro, GraphQL, Protobuf, Terraform/HCL, PowerShell,
+  Perl, R, Solidity, Objective-C, F#, and related templates/scripts) with
+  discovery and local-path regression coverage.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
