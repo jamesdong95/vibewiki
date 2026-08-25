@@ -55,17 +55,22 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   `/api/history`, `/api/stale`; changed/removed source được đánh dấu stale trên
   node, edge, source và export runtime.
 - README, changelog, screenshot live preview, release metadata và draft PR đã có.
+- Packaging baseline đã hoàn tất: wheel chứa viewer asset, clean-install
+  quickstart và CI smoke gate chạy trên Python 3.11–3.13 ở Ubuntu/macOS.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
-- Runtime observer read-only với route/network/console evidence tách khỏi static facts.
-- Packaging/CI/cài đặt sạch cho người dùng ngoài môi trường phát triển.
+- Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
+- Runtime browser observation vẫn cần một acceptance fixture thực thi JavaScript
+  thật trong CI; HTTP observer và local browser smoke đã có.
 
 ### Thứ tự implementation tự động tiếp theo
 
-1. **Runtime:** `vibewiki observe` read-only, không login/form side effect mặc định.
-2. **Distribution:** clean install, CI macOS/Linux, quickstart fixture và release gate.
-3. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
+1. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
+2. **Runtime acceptance:** thêm fixture app có route/API/client JavaScript để
+   kiểm chứng liên kết runtime-to-static trong browser mode.
+3. **User workflow:** thêm project profile/scan selection và bounded large-repo
+   import khi nhu cầu người dùng thật chứng minh giới hạn hiện tại chưa đủ.
 
 ### Giả định để triển khai
 
@@ -452,7 +457,7 @@ trả linked evidence; viewer inspector hiển thị status/error cho node đư�
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.8-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.9-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vibewiki"
-version = "0.1.8-preview"
+version = "0.1.9-preview"
 description = "Evidence-based product reverse engineering for AI-built codebases."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -16,6 +16,9 @@ runtime = ["playwright>=1.40"]
 
 [project.scripts]
 vibewiki = "vibewiki.cli:main"
+
+[tool.setuptools.data-files]
+"share/vibewiki" = ["viewer/index.html"]
 
 [dependency-groups]
 dev = [

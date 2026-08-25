@@ -46,7 +46,30 @@ reasoning, runtime exploration, and network access are not required.
 
 ## Preview the UI
 
-Requirements: Python 3.11+ or another static HTTP server.
+Requirements: Python 3.11+. For a checkout, `uv` is recommended; a built
+wheel also includes the viewer asset for clean installs.
+
+Install from a local checkout:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+```
+
+Then run the end-to-end workflow:
+
+```bash
+vibewiki scan tests/fixtures/next-ts-demo
+vibewiki build tests/fixtures/next-ts-demo
+vibewiki serve tests/fixtures/next-ts-demo --port 4173
+```
+
+The same `vibewiki serve` command works after installing a wheel; it does not
+depend on the repository's `viewer/` directory being present at runtime.
+
+For a static presentation-only preview, Python's built-in HTTP server is also
+available:
 
 ```bash
 python3 -m http.server 4173 --bind 127.0.0.1 --directory viewer

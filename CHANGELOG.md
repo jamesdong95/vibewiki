@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.9-preview] - 2026-08-25
+
+### Fixed
+
+- Package the local viewer with the Python wheel so `vibewiki serve` works from
+  a clean install without a source checkout.
+- Add a CI smoke install that runs the packaged CLI against the fixture and
+  checks the served viewer.
+- Document the clean-install and end-to-end quickstart path.
+
 ## [0.1.8-preview] - 2026-08-25
 
 ### Added

@@ -248,6 +248,25 @@ def test_serve_exposes_real_artifact_apis(
         assert "vibewiki-export/runtime-screenshots/route-01.png" in exported_names
 
 
+def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(f"http://127.0.0.1:{server.server_address[1]}/") as response:
+            html = response.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert "VibeWiki" in html
+    assert "Browse source" in html
+
+
 def test_serve_marks_source_evidence_stale_after_build(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     scan_repository(root)

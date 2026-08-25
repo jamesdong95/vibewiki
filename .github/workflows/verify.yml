@@ -41,6 +41,25 @@ jobs:
           node -e 'const fs=require("fs"); const html=fs.readFileSync("viewer/index.html","utf8");
           const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
           scripts.forEach(source=>new Function(source)); console.log(`JS_SYNTAX_PASS scripts=${scripts.length}`);'
+      - name: Build and smoke-test clean wheel install
+        run: |
+          rm -rf /tmp/vibewiki-dist /tmp/vibewiki-install
+          uv build --out-dir /tmp/vibewiki-dist
+          python -m venv /tmp/vibewiki-install
+          /tmp/vibewiki-install/bin/python -m pip install --no-index /tmp/vibewiki-dist/*.whl
+          /tmp/vibewiki-install/bin/vibewiki --version
+          cp -R tests/fixtures/next-ts-demo /tmp/vibewiki-quickstart
+          /tmp/vibewiki-install/bin/vibewiki scan /tmp/vibewiki-quickstart
+          /tmp/vibewiki-install/bin/vibewiki build /tmp/vibewiki-quickstart
+          /tmp/vibewiki-install/bin/vibewiki serve /tmp/vibewiki-quickstart --port 4173 >/tmp/vibewiki-serve.log 2>&1 &
+          server_pid=$!
+          for attempt in $(seq 1 20); do
+            curl --fail --silent http://127.0.0.1:4173/ && break
+            sleep 0.25
+          done
+          curl --fail --silent http://127.0.0.1:4173/ | grep -q "Browse source"
+          kill "$server_pid"
+          wait "$server_pid" || true
 
   preview:
     name: Presentation preview

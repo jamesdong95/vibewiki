@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sysconfig
 import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
@@ -32,6 +33,24 @@ from .llm import (
 )
 from .observe import observe_repository
 from .runtime_links import attach_runtime_links
+
+
+def _viewer_directory() -> Path:
+    """Locate the viewer in a source checkout or a clean package install."""
+
+    source_viewer = Path(__file__).resolve().parents[2] / "viewer"
+    if (source_viewer / "index.html").is_file():
+        return source_viewer
+
+    data_root = Path(sysconfig.get_path("data") or "")
+    installed_viewer = data_root / "share" / "vibewiki"
+    if (installed_viewer / "index.html").is_file():
+        return installed_viewer
+
+    raise VibeWikiError(
+        ErrorCode.INVALID_OUTPUT,
+        "viewer asset is not installed; reinstall the vibewiki package",
+    )
 
 
 def _artifact(root: Path) -> dict[str, Any]:
@@ -487,7 +506,7 @@ def create_server(
 ) -> ThreadingHTTPServer:
     root = Path(repository).absolute()
     artifact = _artifact(root)
-    viewer = Path(__file__).resolve().parents[2] / "viewer"
+    viewer = _viewer_directory()
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
