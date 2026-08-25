@@ -136,8 +136,9 @@ uv run vibewiki serve /path/to/repository --port 4173
 Generic mode keeps every supported file in inventory and recognizes common
 route registrations in Express/Fastify/Hono-style JavaScript, React Router JSX
 and `createBrowserRouter` route objects, Flask/FastAPI, and Go `HandleFunc`
-code, plus literal fetch/Axios/common `apiClient` wrapper calls. Matching API
-calls are linked to generic route nodes when the method and path are literal.
+code, Next.js Pages Router files, plus literal fetch/Axios/common `apiClient`
+wrapper calls. Matching API calls are linked to generic route nodes when the
+method and path are literal.
 Unrecognized constructs remain source/module evidence rather than being
 presented as verified behavior.
 
@@ -154,6 +155,10 @@ sent only to this loopback process, scanned locally, and the temporary imported
 workspace is removed when the server exits. The CLI's default scan remains
 strict for the original direct Next.js App Router contract; Browse uses the
 generic local import profile.
+
+After a build, **Source files** in the Knowledge sidebar opens the indexed
+inventory. Filter by path or language, see stale files, and click a file to
+preview bounded source lines without leaving the local viewer.
 
 The server remains offline when no LLM provider is configured. If a remote
 provider is explicitly enabled, only the bounded retrieved context for the

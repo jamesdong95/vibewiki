@@ -70,6 +70,7 @@ _REACT_ROUTER_FACTORY = re.compile(
     r"\b(?:createBrowserRouter|createHashRouter|createMemoryRouter)\s*\("
 )
 _REACT_ROUTER_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])(/[^'\"]*)\1")
+_PAGES_INTERNAL = {"_app", "_document", "_error"}
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
 _WRITE = re.compile(r"db\.(\w+)\.create\s*\(")
@@ -162,6 +163,48 @@ def _route_for(path: str, suffix: str) -> str:
     if not relative:
         return "/"
     return "/" + "/".join(part for part in relative.split("/") if part)
+
+
+def _pages_route_for(path: str, suffix: str) -> str:
+    relative = path[len("pages/") :]
+    relative = relative[: -len(suffix)]
+    parts = [part for part in relative.split("/") if part]
+    if parts and parts[-1] == "index":
+        parts.pop()
+    return "/" + "/".join(parts)
+
+
+def _next_pages_route_matches(source: Source) -> list[dict[str, Any]]:
+    """Find Next.js Pages Router pages and API files in generic mode."""
+    if not source.path.startswith("pages/"):
+        return []
+    suffix = next(
+        (suffix for suffix in _SCRIPT_SUFFIXES if source.path.endswith(suffix)),
+        None,
+    )
+    if suffix is None:
+        return []
+    relative = source.path[len("pages/") : -len(suffix)]
+    top_level = relative.split("/", 1)[0]
+    if top_level in _PAGES_INTERNAL:
+        return []
+    route = _pages_route_for(source.path, suffix)
+    is_api = route == "/api" or route.startswith("/api/")
+    functions = _function_matches(source.path, source.text)
+    handler = next(
+        (match.group(1) for match in functions if match.group(1)),
+        None,
+    )
+    return [
+        {
+            "kind": "next_pages_api" if is_api else "next_pages_page",
+            "framework": "next_pages",
+            "handler": handler,
+            "method": "ANY" if is_api else "GET",
+            "offset": 0,
+            "path": route,
+        }
+    ]
 
 
 def _resolve_import(source_path: str, imported: str, sources: set[str]) -> str | None:
@@ -349,9 +392,13 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                 )
             )
         elif path.endswith(_ANALYZABLE_SUFFIXES) and not path.startswith("tests/"):
-            for route in _generic_route_matches(source):
+            for route in [
+                *_next_pages_route_matches(source),
+                *_generic_route_matches(source),
+            ]:
                 method = route["method"]
-                key = f"route:generic:{path}:{method}:{route['path']}"
+                framework = route.get("framework", "generic")
+                key = f"route:{framework}:{path}:{method}:{route['path']}"
                 if key in {item["semantic_key"] for item in facts}:
                     continue
                 methods = [] if method == "ANY" else [method]
@@ -361,7 +408,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                         key,
                         {
                             "file": path,
-                            "framework": "generic",
+                            "framework": framework,
                             "methods": methods,
                             "path": route["path"],
                         },
@@ -449,7 +496,7 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     for item in facts:
         if (
             item["kind"] != "route"
-            or item["attributes"].get("framework") != "generic"
+            or item["attributes"].get("framework") not in {"generic", "next_pages"}
         ):
             continue
         methods = item["attributes"].get("methods") or ["ANY"]

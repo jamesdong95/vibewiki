@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.13-preview] - 2026-08-25
+
+### Added
+
+- Next.js Pages Router facts for page files and API routes in generic Browse
+  imports, including deterministic page/API path evidence and API-call links.
+- A Source files inventory in the viewer with file filtering, stale status, and
+  one-click source preview from the local artifact.
+
+### Fixed
+
+- Keep Source files navigation out of the crowded top bar so it remains
+  clickable at the supported desktop viewport.
+
 ## [0.1.12-preview] - 2026-08-25
 
 ### Added

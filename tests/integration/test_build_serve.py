@@ -77,6 +77,8 @@ def test_serve_exposes_real_artifact_apis(
             history = json.load(response)
         with urlopen(f"{base}/api/stale") as response:
             staleness = json.load(response)
+        with urlopen(f"{base}/api/files") as response:
+            files = json.load(response)
         with urlopen(f"{base}/api/inspect/route:page:/signup") as response:
             inspected = json.load(response)
         with urlopen(
@@ -219,6 +221,10 @@ def test_serve_exposes_real_artifact_apis(
     assert summary["staleness"] == {"status": "current", "files": 0}
     assert len(history["runs"]) == 1
     assert staleness == {"files": [], "status": "current"}
+    assert {item["path"] for item in files["files"]} >= {
+        "app/page.tsx",
+        "app/api/users/route.ts",
+    }
     assert observed["counts"] == {
         "console_errors": 0,
         "network": 1,

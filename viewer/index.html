@@ -46,6 +46,19 @@
       font-size: 13px;
       letter-spacing: -0.01em;
     }
+    html.workspace-loading .app-shell { visibility: hidden; }
+    html.workspace-loading::after {
+      content: "Loading local evidence graph…";
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      z-index: 10;
+      transform: translate(-50%, -50%);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
 
     body::before {
       content: "";
@@ -361,6 +374,11 @@
     .impact-list { display: grid; gap: 8px; }
     .impact-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 11px; }
     .impact-row span:last-child { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .file-inventory-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 0; border: 0; color: var(--ink-soft); background: transparent; text-align: left; cursor: pointer; }
+    .file-inventory-row:hover { color: var(--ink); }
+    .file-inventory-path { min-width: 0; overflow: hidden; font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .file-inventory-meta { flex: 0 0 auto; color: var(--muted); font-family: var(--mono); font-size: 8px; }
+    .file-inventory-meta.stale { color: var(--orange); }
     .impact-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .impact-control { padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: rgba(255,255,255,0.025); cursor: pointer; font-family: var(--mono); font-size: 9px; }
     .impact-control:hover, .impact-control.active { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
@@ -522,6 +540,9 @@
         </button>
         <button class="nav-item" type="button" data-view="Scan history">
           <span class="nav-icon">◷</span><span>Scan history</span><span class="nav-count" id="sidebar-scan-count">14</span>
+        </button>
+        <button class="nav-item" type="button" data-view="Source files" id="files-button">
+          <span class="nav-icon">▤</span><span>Source files</span><span class="nav-count" id="sidebar-files-count">00</span>
         </button>
       </nav>
 
@@ -804,6 +825,21 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="files-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Source files">
+      <div class="command-input"><span>▱</span><strong>Source files</strong></div>
+      <p class="settings-copy" id="files-summary">Loading the indexed source inventory…</p>
+      <div class="settings-field">
+        <label for="files-search">Filter files</label>
+        <input id="files-search" type="search" placeholder="src, app, package.json…" autocomplete="off" />
+      </div>
+      <div class="impact-list" id="files-list" style="max-height:360px;overflow:auto;"></div>
+      <div class="settings-actions">
+        <button class="text-button" type="button" id="files-close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="command-modal" aria-hidden="true">
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Command palette">
       <div class="command-input"><span>⌘</span><input id="command-search" type="search" placeholder="Jump to a view or ask a question…" autocomplete="off" /></div>
@@ -817,6 +853,7 @@
   </div>
 
   <script>
+    document.documentElement.classList.add('workspace-loading');
     const nodeData = {
       persona: {
         title: 'Solo founder', type: 'Persona', confidence: 'verified',
@@ -966,6 +1003,10 @@
     }
 
     function setView(view) {
+      if (view === 'Source files') {
+        openSourceInventory();
+        return;
+      }
       if (window.realWorkspace) {
         window.realWorkspace.setView(view);
         return;
@@ -1259,6 +1300,65 @@
         showToast(error.message || 'Không thể export wiki hiện tại.');
       }
     }
+    const filesModal = document.getElementById('files-modal');
+    const filesSearch = document.getElementById('files-search');
+    const filesSummary = document.getElementById('files-summary');
+    const filesList = document.getElementById('files-list');
+    let indexedFiles = [];
+    function closeSourceInventory() {
+      filesModal.classList.remove('open');
+      filesModal.setAttribute('aria-hidden', 'true');
+    }
+    function renderSourceInventory() {
+      const query = filesSearch.value.trim().toLowerCase();
+      const filtered = indexedFiles.filter(item => {
+        const haystack = (item.path + ' ' + (item.language || '') + ' ' + (item.status || '')).toLowerCase();
+        return !query || haystack.includes(query);
+      });
+      const staleCount = indexedFiles.filter(item => item.status === 'stale').length;
+      const staleLabel = staleCount ? ' · ' + staleCount + ' stale' : '';
+      const matchLabel = query ? ' · ' + filtered.length + ' matching' : '';
+      filesSummary.textContent = indexedFiles.length + ' indexed files' + staleLabel + matchLabel;
+      filesList.innerHTML = filtered.length
+        ? filtered.slice(0, 500).map(item => {
+          const status = item.status === 'stale'
+            ? 'stale'
+            : (item.language || 'file') + ' · ' + Math.ceil((item.size || 0) / 1024) + ' KB';
+          return '<button class="file-inventory-row" type="button" data-inventory-path="' + escapeHtml(item.path) + '">'
+            + '<span class="file-inventory-path">' + escapeHtml(item.path) + '</span>'
+            + '<span class="file-inventory-meta ' + (item.status === 'stale' ? 'stale' : '') + '">'
+            + escapeHtml(status) + '</span></button>';
+        }).join('')
+        : '<div class="empty-state">No indexed files match this filter.</div>';
+      filesList.querySelectorAll('[data-inventory-path]').forEach(button => {
+        button.onclick = () => {
+          const path = button.dataset.inventoryPath;
+          closeSourceInventory();
+          openSourceEvidence(path, 1, 80);
+        };
+      });
+    }
+    async function openSourceInventory() {
+      filesModal.classList.add('open');
+      filesModal.setAttribute('aria-hidden', 'false');
+      filesSearch.value = '';
+      filesSummary.textContent = 'Loading the indexed source inventory…';
+      filesList.innerHTML = '<div class="empty-state">Loading files…</div>';
+      try {
+        const response = await fetch('/api/files', {cache: 'no-store'});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể tải source inventory.');
+        indexedFiles = result.files || [];
+        renderSourceInventory();
+        filesSearch.focus();
+      } catch (error) {
+        filesSummary.textContent = error.message || 'Không thể tải source inventory.';
+        filesList.innerHTML = '<div class="empty-state">Source inventory unavailable for this workspace.</div>';
+      }
+    }
+    document.getElementById('files-close').addEventListener('click', closeSourceInventory);
+    filesModal.addEventListener('click', event => { if (event.target === filesModal) closeSourceInventory(); });
+    filesSearch.addEventListener('input', renderSourceInventory);
     const observeModal = document.getElementById('observe-modal');
     const observeForm = document.getElementById('observe-form');
     const observeTarget = document.getElementById('observe-target');
@@ -1438,7 +1538,11 @@
     async function bootRealWorkspace() {
       try {
         const response = await fetch('/api/summary', { cache: 'no-store' });
-        if (!response.ok) return;
+        if (!response.ok) {
+          document.documentElement.classList.remove('workspace-loading');
+          showToast('Local artifact unavailable; showing the static preview.');
+          return;
+        }
         const summary = await response.json();
         const [nodeResponse, edgeResponse, historyResponse, staleResponse, runtimeResponse] = await Promise.all([
           fetch('/api/nodes', { cache: 'no-store' }),
@@ -1502,6 +1606,7 @@
         setText('sidebar-evidence-count', evidenceCount);
         setText('sidebar-unknown-count', pad(summary.counts.unknowns));
         setText('sidebar-scan-count', pad(historyRuns.length));
+        setText('sidebar-files-count', summary.counts.scanned_files);
         runtimeObservationLabel = runtimePayload.routes?.length
           ? `Observed · ${runtimePayload.routes.length} route${runtimePayload.routes.length === 1 ? '' : 's'}`
           : '';
@@ -1772,9 +1877,12 @@
         els.search.oninput = event => { state.query = event.target.value.trim().toLowerCase(); renderState(); };
         document.getElementById('scan-button').onclick = chooseSourceFolder;
         renderState();
+        document.documentElement.classList.remove('workspace-loading');
         showToast(`Loaded ${summary.counts.facts} facts from the local build.`);
       } catch (error) {
         // Static preview mode intentionally stays available without an API.
+        document.documentElement.classList.remove('workspace-loading');
+        showToast('Local API unavailable; showing the static preview.');
       }
     }
     bootRealWorkspace();

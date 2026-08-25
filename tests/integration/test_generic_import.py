@@ -82,6 +82,33 @@ def test_vite_react_fixture_emits_router_objects_and_api_wrapper_edges(
     )
 
 
+def test_next_pages_fixture_emits_page_and_api_routes(tmp_path: Path) -> None:
+    source = Path(__file__).parents[1] / "fixtures" / "next-pages-demo"
+    root = tmp_path / "next-pages-demo"
+    shutil.copytree(source, root)
+    scan_repository(root, allow_generic=True)
+    build_repository(root)
+    artifact = json.loads((root / ".vibewiki/graph.json").read_text())
+
+    routes = {
+        item["semantic_key"]: item
+        for item in artifact["facts"]
+        if item["kind"] == "route"
+    }
+    assert "route:next_pages:pages/index.tsx:GET:/" in routes
+    assert "route:next_pages:pages/account.jsx:GET:/account" in routes
+    assert "route:next_pages:pages/api/users.js:ANY:/api/users" in routes
+    assert routes["route:next_pages:pages/api/users.js:ANY:/api/users"][
+        "attributes"
+    ]["methods"] == []
+    assert any(
+        edge["source"] == "api_call:src/client.ts:/api/users"
+        and edge["target"] == "route:next_pages:pages/api/users.js:ANY:/api/users"
+        and edge["relation"] == "calls"
+        for edge in artifact["relations"]
+    )
+
+
 def test_generic_multi_language_repository_keeps_files_and_symbols(
     tmp_path: Path,
 ) -> None:

@@ -61,6 +61,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   quickstart và CI smoke gate chạy trên Python 3.11–3.13 ở Ubuntu/macOS.
 - Runtime acceptance baseline đã hoàn tất: fixture browser local, Playwright /
   Chromium smoke, route/API/console graph linkage và CI runtime job.
+- Generic adapter coverage có fixture Vite/React và Next.js Pages Router; viewer
+  có Source files inventory để đi từ indexed file đến bounded source preview.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
@@ -457,7 +459,7 @@ trả linked evidence; viewer inspector hiển thị status/error cho node đư�
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.12-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.13-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
