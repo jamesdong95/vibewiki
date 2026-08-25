@@ -14,7 +14,11 @@ import pytest
 
 from vibewiki.build import build_repository
 from vibewiki.errors import ErrorCode, VibeWikiError
-from vibewiki.importer import _multipart_files, cleanup_workspace
+from vibewiki.importer import (
+    _multipart_files,
+    cleanup_workspace,
+    import_local_workspace,
+)
 from vibewiki.rescan import rescan_repository
 from vibewiki.scan import scan_repository
 from vibewiki.serve import _artifact, create_server
@@ -389,6 +393,13 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="local-path-modal"' in html
     assert 'id="source-path"' in html
     assert "function importLocalPath" in html
+    assert 'id="github-button"' in html
+    assert 'id="github-modal"' in html
+    assert 'id="github-url"' in html
+    assert "function importGitHub" in html
+    assert "/api/import-github" in html
+    assert 'data-command-key="github"' in html
+    assert "Public repositories only" in html
     assert "function buildImportGroups" in html
     assert "function rescanCurrentWorkspace" in html
     assert "/api/rescan" in html
@@ -643,6 +654,89 @@ def test_serve_imports_a_local_repository_path_without_browser_picker(
     assert imported["counts"]["scanned_files"] == 1
     assert summary["project"] == "local-path-source"
     assert summary["counts"]["facts"] == 1
+
+
+def test_serve_imports_public_github_repository_through_loopback_api(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _fixture_copy(tmp_path)
+    source = tmp_path / "github-source"
+    (source / "src").mkdir(parents=True)
+    (source / "src/main.js").write_text(
+        "export function fromGithub() { return true; }\n"
+    )
+    scan_repository(root)
+    build_repository(root)
+
+    def fake_import(url: str, ref: str | None = None):
+        assert url == "https://github.com/acme/demo"
+        assert ref == "main"
+        imported = import_local_workspace(source)
+        imported.build_summary["import_source"] = {
+            "provider": "github",
+            "repository": "acme/demo",
+            "ref": ref,
+            "selected_files": 1,
+            "skipped_files": 2,
+        }
+        return imported
+
+    monkeypatch.setattr("vibewiki.serve.import_github_workspace", fake_import)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = Request(
+        f"http://127.0.0.1:{server.server_address[1]}/api/import-github",
+        data=json.dumps(
+            {"url": "https://github.com/acme/demo", "ref": "main"}
+        ).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(request) as response:
+            imported = json.load(response)
+        with urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}/api/summary"
+        ) as response:
+            summary = json.load(response)
+    finally:
+        imported_workspace = server.imported_workspace
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        if imported_workspace is not None:
+            cleanup_workspace(imported_workspace)
+
+    assert imported["import_mode"] == "github"
+    assert imported["import_source"]["repository"] == "acme/demo"
+    assert imported["import_source"]["skipped_files"] == 2
+    assert summary["project"] == "github-source"
+    assert summary["counts"]["facts"] == 1
+
+
+def test_github_import_api_rejects_non_loopback_server(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, host="0.0.0.0", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = Request(
+        f"http://127.0.0.1:{server.server_address[1]}/api/import-github",
+        data=json.dumps({"url": "https://github.com/acme/demo"}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with pytest.raises(HTTPError) as raised:
+            urlopen(request)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert raised.value.code == 422
 
 
 def test_local_path_import_rejects_non_loopback_server(tmp_path: Path) -> None:

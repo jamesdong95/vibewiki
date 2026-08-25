@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,7 @@ from vibewiki.errors import ErrorCode, VibeWikiError
 from vibewiki.importer import (
     _multipart_files,
     cleanup_workspace,
+    import_github_workspace,
     import_local_workspace,
 )
 from vibewiki.scan import scan_repository
@@ -29,6 +32,37 @@ def _multipart(
         )
     body = ("".join(parts) + f"--{boundary}--\r\n").encode()
     return f"multipart/form-data; boundary={boundary}", body
+
+
+class _FakeArchiveResponse:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = io.BytesIO(payload)
+        self.headers: dict[str, str] = {}
+
+    def __enter__(self) -> "_FakeArchiveResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.payload.close()
+
+    def read(self, size: int = -1) -> bytes:
+        return self.payload.read(size)
+
+
+def _github_archive(files: dict[str, str], *, include_symlink: bool = False) -> bytes:
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for path, content in files.items():
+            payload = content.encode()
+            member = tarfile.TarInfo(f"demo-main-deadbeef/{path}")
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+        if include_symlink:
+            link = tarfile.TarInfo("demo-main-deadbeef/src/link.js")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "main.js"
+            archive.addfile(link)
+    return output.getvalue()
 
 
 def test_generic_javascript_repository_builds_without_app(tmp_path: Path) -> None:
@@ -78,6 +112,93 @@ def test_local_path_import_builds_bounded_snapshot(tmp_path: Path) -> None:
         assert not (imported.root / "image.png").exists()
     finally:
         cleanup_workspace(imported)
+
+
+def test_github_import_uses_public_archive_and_selects_web_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _github_archive(
+        {
+            "src/root.js": "export function root() { return true; }\n",
+            "packages/ui/src/Button.jsx": "export default function Button() {}\n",
+            "packages/web/app/page.tsx": (
+                "export default function Home() { return null; }\n"
+            ),
+            "packages/web/.env.local": "TOKEN=must-not-be-read\n",
+            "packages/web/node_modules/bad.js": "export const bad = true;\n",
+            "README.md": "# demo\n",
+        },
+        include_symlink=True,
+    )
+    requests: list[str] = []
+
+    def fake_urlopen(request: object, timeout: int) -> _FakeArchiveResponse:
+        requests.append(request.full_url)  # type: ignore[attr-defined]
+        assert timeout == 30
+        return _FakeArchiveResponse(archive)
+
+    monkeypatch.setattr("vibewiki.importer.urlopen", fake_urlopen)
+    imported = import_github_workspace(
+        "https://github.com/acme/demo.git", ref="main"
+    )
+    try:
+        source = imported.build_summary["import_source"]
+        assert source["provider"] == "github"
+        assert source["repository"] == "acme/demo"
+        assert source["ref"] == "main"
+        assert source["selected_files"] == 1
+        assert source["skipped_files"] >= 4
+        assert requests == [
+            "https://codeload.github.com/acme/demo/tar.gz/main"
+        ]
+        assert (imported.root / "app/page.tsx").is_file()
+        assert not (imported.root / "packages/web/.env.local").exists()
+        assert not (imported.root / "src/root.js").exists()
+        assert not (imported.root / "src/link.js").exists()
+    finally:
+        cleanup_workspace(imported)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://github.com/acme/demo",
+        "https://gitlab.com/acme/demo",
+        "https://github.com/acme/demo?download=1",
+        "https://github.com/acme/../demo",
+        "https://github.com/acme/demo/extra",
+    ],
+)
+def test_github_import_rejects_unsafe_repository_url(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "vibewiki.importer.urlopen",
+        lambda *args, **kwargs: pytest.fail("unsafe URL must not make a request"),
+    )
+
+    with pytest.raises(VibeWikiError, match="GitHub"):
+        import_github_workspace(url)
+
+
+def test_github_import_reports_archive_and_source_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _github_archive({"src/main.js": "export const value = 'large';\n"})
+    monkeypatch.setattr("vibewiki.importer.MAX_GITHUB_ARCHIVE_BYTES", 1)
+    monkeypatch.setattr(
+        "vibewiki.importer.urlopen",
+        lambda *args, **kwargs: _FakeArchiveResponse(archive),
+    )
+    with pytest.raises(VibeWikiError, match="download limit"):
+        import_github_workspace("https://github.com/acme/demo")
+
+    monkeypatch.setattr(
+        "vibewiki.importer.MAX_GITHUB_ARCHIVE_BYTES", len(archive) + 1
+    )
+    monkeypatch.setattr("vibewiki.importer.MAX_IMPORT_BYTES", 1)
+    with pytest.raises(VibeWikiError, match="byte limit"):
+        import_github_workspace("https://github.com/acme/demo")
 
 
 def test_vite_react_fixture_emits_router_objects_and_api_wrapper_edges(

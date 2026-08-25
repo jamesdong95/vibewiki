@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.27-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.27-preview) · scan a repository locally, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
+**Latest verified preview:** [`v0.1.28-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.28-preview) · scan a repository locally or import a public GitHub URL, build a reverse evidence graph, inspect source-linked facts, ask grounded questions, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -183,6 +183,12 @@ locally, and the temporary imported workspace is removed when the server exits.
 If the browser cannot open a directory picker, use **Use local path** in the
 viewer; the loopback server reads the path locally, applies the same limits and
 secret filters, and imports a temporary snapshot without mutating the source.
+For an explicit remote workflow, **Import GitHub** accepts a public HTTPS
+`github.com/owner/repo` URL and optional branch/tag. It downloads a bounded
+archive only after the user submits the form, applies the same supported-file,
+ignore, secret, package-scope, file-count, and byte limits, and removes the
+temporary snapshot when the server exits. Private repositories and authenticated
+GitHub access stay local: clone them first, then use Browse or Use local path.
 After the graph is open, **Rescan workspace** runs scan + build against the
 current local workspace. It snapshots `.vibewiki/` first and restores the last
 known-good artifact if the rescan fails, so a temporary source error does not
@@ -204,7 +210,7 @@ remain local.
 
 Every build also exposes `/api/profile`, `/api/files`, `/api/packages`, `/api/modules`,
 `/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/impact`,
-`/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
+`/api/import-github`, `/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
 optional grounded discussion. `/api/impact` accepts a node subject plus
 `direction=upstream|downstream|both`, and returns a bounded deterministic
 neighborhood with the original edge evidence. Use `vibewiki history

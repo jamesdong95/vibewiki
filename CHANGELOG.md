@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.28-preview] - 2026-08-25
+
+### Added
+
+- **Import GitHub** in the viewer for explicit public HTTPS repository imports,
+  with optional branch/tag selection and command-palette access.
+- Loopback-only `/api/import-github` with bounded archive download, safe tar
+  handling, supported-file filtering, secret/ignored path filtering, monorepo
+  package selection, and temporary workspace cleanup.
+- Clear GitHub URL/ref, network/HTTP, archive, file-limit, byte-limit, and
+  unsupported-source errors while preserving the current artifact on failure.
+- Regression coverage for archive security, package selection, limits, API
+  behavior, UI markers, and live modal/status/console behavior.
+
+### Changed
+
+- README and product plan now document public GitHub import and the intentional
+  private-repository/local-clone boundary.
+
 ## [0.1.27-preview] - 2026-08-25
 
 ### Changed

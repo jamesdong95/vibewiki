@@ -497,7 +497,8 @@
       .browse-wrap { gap: 5px; }
       .top-search { min-width: 150px; max-width: 360px; }
       .top-actions > .icon-button[aria-label="Notifications"],
-      .top-actions > #copy-link-button { display: none; }
+      .top-actions > #copy-link-button,
+      .top-actions > #github-button { display: none; }
     }
 
     @media (max-width: 1040px) {
@@ -614,6 +615,7 @@
             <span class="browse-hint">JS/TS · Python · Go · Rust · config/docs</span>
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
             <button class="text-button" type="button" id="local-path-button" title="Import a local repository path through the loopback server">Use local path</button>
+            <button class="text-button" type="button" id="github-button" title="Import a public GitHub repository">Import GitHub</button>
           </div>
           <button class="text-button" type="button" id="observe-button" title="Observe a local app with safe GET requests">Observe runtime</button>
           <button class="text-button" type="button" id="llm-settings-button" title="Configure local LLM">LLM setup</button>
@@ -649,6 +651,28 @@
         <div class="settings-actions">
           <button class="text-button" type="button" id="local-path-cancel">Cancel</button>
           <button class="text-button primary" type="submit">Import and scan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="github-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Import public GitHub repository">
+      <div class="command-input"><span>◉</span><strong>Import GitHub repository</strong></div>
+      <form class="settings-form" id="github-form">
+        <p class="settings-copy">Public repositories only. VibeWiki downloads a bounded archive after you submit, filters secrets and ignored paths, then scans a temporary local snapshot. For private repositories, clone locally and use Browse or Use local path.</p>
+        <div class="settings-field">
+          <label for="github-url">Public repository URL</label>
+          <input id="github-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://github.com/owner/repository" aria-label="Public GitHub repository URL" />
+        </div>
+        <div class="settings-field">
+          <label for="github-ref">Branch or tag (optional)</label>
+          <input id="github-ref" type="text" autocomplete="off" spellcheck="false" placeholder="main (default)" aria-label="GitHub branch or tag" />
+        </div>
+        <div class="settings-status" id="github-status" role="status" aria-live="polite">Only available when VibeWiki is bound to loopback.</div>
+        <div class="settings-actions">
+          <button class="text-button" type="button" id="github-cancel">Cancel</button>
+          <button class="text-button primary" type="submit">Download and scan</button>
         </div>
       </form>
     </div>
@@ -947,6 +971,7 @@
         <button class="command-item" type="button" data-command-key="scan" data-command="Scan latest"><span class="command-key">↻</span><span>Scan latest commit<small id="command-scan-meta">Update the local product graph</small></span></button>
         <button class="command-item" type="button" data-command-key="export" data-command="Export wiki"><span class="command-key">↓</span><span>Export wiki<small id="command-export-meta">Markdown + Mermaid bundle</small></span></button>
         <button class="command-item" type="button" data-command-key="copy-link" data-command="Copy local link"><span class="command-key">↗</span><span>Copy local link<small>Works while this local server is running</small></span></button>
+        <button class="command-item" type="button" data-command-key="github" data-command="Import GitHub repository"><span class="command-key">◉</span><span>Import GitHub repository<small>Public HTTPS archive · bounded local scan</small></span></button>
       </div>
     </div>
   </div>
@@ -1176,10 +1201,16 @@
     const sourcePicker = document.getElementById('source-picker');
     const browseButton = document.getElementById('browse-button');
     const localPathButton = document.getElementById('local-path-button');
+    const githubButton = document.getElementById('github-button');
     const localPathModal = document.getElementById('local-path-modal');
     const localPathForm = document.getElementById('local-path-form');
     const sourcePath = document.getElementById('source-path');
     const localPathStatus = document.getElementById('local-path-status');
+    const githubModal = document.getElementById('github-modal');
+    const githubForm = document.getElementById('github-form');
+    const githubUrl = document.getElementById('github-url');
+    const githubRef = document.getElementById('github-ref');
+    const githubStatus = document.getElementById('github-status');
     const scanButton = document.getElementById('scan-button');
     const browseStatus = document.getElementById('browse-status');
     const staleBanner = document.getElementById('stale-banner');
@@ -1233,6 +1264,17 @@
       localPathModal.classList.remove('open');
       localPathModal.setAttribute('aria-hidden', 'true');
     }
+    function openGitHubImport() {
+      githubModal.classList.add('open');
+      githubModal.setAttribute('aria-hidden', 'false');
+      githubStatus.className = 'settings-status';
+      githubStatus.textContent = 'Public HTTPS repositories only · archive is downloaded after submit.';
+      githubUrl.focus();
+    }
+    function closeGitHubImport() {
+      githubModal.classList.remove('open');
+      githubModal.setAttribute('aria-hidden', 'true');
+    }
     async function importLocalPath(event) {
       event.preventDefault();
       const path = sourcePath.value.trim();
@@ -1262,6 +1304,49 @@
         localPathStatus.textContent = message;
         setBrowseStatus(`Lỗi scan: ${message} Bạn có thể thử path khác.`, 'error');
         showToast(message);
+        localPathButton.disabled = false;
+        browseButton.disabled = false;
+        scanButton.disabled = false;
+      }
+    }
+    async function importGitHub(event) {
+      event.preventDefault();
+      const url = githubUrl.value.trim();
+      const ref = githubRef.value.trim();
+      if (!url) return githubUrl.focus();
+      githubStatus.className = 'settings-status';
+      githubStatus.textContent = 'Đang tải archive GitHub và scan snapshot local…';
+      githubButton.disabled = true;
+      localPathButton.disabled = true;
+      browseButton.disabled = true;
+      scanButton.disabled = true;
+      setBrowseStatus('Đang scan repository public từ GitHub…', 'busy');
+      showToast('Đang tải GitHub archive…');
+      const payload = {url};
+      if (ref) payload.ref = ref;
+      try {
+        const response = await fetch('/api/import-github', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(importErrorMessage(result));
+        const source = result.import_source || {};
+        const selected = Number(source.selected_files || result.counts?.scanned_files || 0);
+        const skipped = Number(source.skipped_files || 0);
+        githubStatus.className = 'settings-status success';
+        githubStatus.textContent = `Scan thành công: ${selected.toLocaleString()} supported · bỏ qua ${skipped.toLocaleString()} · ${result.counts?.facts || 0} facts.`;
+        setBrowseStatus(`Scan thành công GitHub ${source.repository || url}. Đang tải graph mới…`, 'success');
+        showToast('GitHub repository scanned successfully.');
+        window.setTimeout(() => window.location.reload(), 1400);
+      } catch (error) {
+        const message = error.message || 'Không thể tải GitHub repository.';
+        githubStatus.className = 'settings-status error';
+        githubStatus.textContent = `${message} Artifact hiện tại vẫn được giữ nguyên.`;
+        setBrowseStatus(`Lỗi GitHub import: ${message} Bạn có thể thử URL/ref khác.`, 'error');
+        showToast(message);
+        githubButton.disabled = false;
         localPathButton.disabled = false;
         browseButton.disabled = false;
         scanButton.disabled = false;
@@ -1510,6 +1595,12 @@
       if (event.target === localPathModal) closeLocalPathImport();
     });
     localPathForm.addEventListener('submit', importLocalPath);
+    githubButton.addEventListener('click', openGitHubImport);
+    document.getElementById('github-cancel').addEventListener('click', closeGitHubImport);
+    githubModal.addEventListener('click', event => {
+      if (event.target === githubModal) closeGitHubImport();
+    });
+    githubForm.addEventListener('submit', importGitHub);
     browseButton.addEventListener('click', chooseSourceFolder);
     sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
     scanButton.addEventListener('click', rescanCurrentWorkspace);
@@ -2284,6 +2375,7 @@
             if (command === 'scan') rescanCurrentWorkspace();
             if (command === 'export') exportWiki();
             if (command === 'copy-link') copyLocalLink();
+            if (command === 'github') openGitHubImport();
           }
         };
         canvas.onclick = event => {

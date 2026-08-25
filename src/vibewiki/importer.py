@@ -7,14 +7,19 @@ scanned, and removed when the server exits.
 
 from __future__ import annotations
 
+import io
 import re
 import shutil
+import tarfile
 import tempfile
 from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlsplit
+from urllib.request import Request, urlopen
 
 from .build import build_repository
 from .config import (
@@ -32,6 +37,7 @@ from .scan import scan_repository
 MAX_IMPORT_FILES = LOCAL_IMPORT_MAX_FILES
 MAX_IMPORT_BYTES = LOCAL_IMPORT_MAX_BYTES
 MAX_MULTIPART_PARTS = 50_000
+MAX_GITHUB_ARCHIVE_BYTES = MAX_IMPORT_BYTES + 8 * 1024 * 1024
 _SUPPORTED_IMPORT_SUFFIXES = frozenset(
     (*SUPPORTED_SUFFIXES, *GENERIC_SUFFIXES)
 )
@@ -40,6 +46,8 @@ _MONOREPO_ROOTS = frozenset(
     {"apps", "libs", "modules", "packages", "services", "workspaces"}
 )
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:($|/)")
+_GITHUB_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")
+_GITHUB_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +86,239 @@ def _is_supported_path(path: PurePosixPath) -> bool:
         path.suffix.casefold() in _SUPPORTED_IMPORT_SUFFIXES
         or path.parts[-2:] == PurePosixPath(PRISMA_SCHEMA_RELATIVE_PATH).parts
     )
+
+
+def _github_repository(url: str) -> tuple[str, str]:
+    if not isinstance(url, str) or not url.strip():
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub repository URL is required",
+        )
+    value = url.strip()
+    if len(value) > 2_048:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub repository URL is too long",
+        )
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub repository URL is invalid",
+        ) from error
+    if (
+        parsed.scheme.casefold() != "https"
+        or hostname is None
+        or hostname.casefold() not in {"github.com", "www.github.com"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub import accepts only a public https://github.com/owner/repo URL",
+        )
+    path = unquote(parsed.path).strip("/")
+    parts = path.split("/") if path else []
+    if len(parts) != 2:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub repository URL must look like https://github.com/owner/repo",
+        )
+    owner, repository = parts
+    if repository.casefold().endswith(".git"):
+        repository = repository[:-4]
+    if (
+        not _GITHUB_COMPONENT.fullmatch(owner)
+        or not _GITHUB_COMPONENT.fullmatch(repository)
+        or owner in {".", ".."}
+        or repository in {".", ".."}
+    ):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub repository URL contains an invalid owner or repository name",
+        )
+    return owner, repository
+
+
+def _github_ref(value: str | None) -> str:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return "HEAD"
+    if not isinstance(value, str):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub ref must be a branch or tag name",
+        )
+    ref = value.strip()
+    if (
+        len(ref) > 128
+        or not _GITHUB_REF.fullmatch(ref)
+        or ".." in ref
+        or "//" in ref
+        or ref.endswith("/")
+    ):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub ref must be a safe branch or tag name",
+        )
+    return ref
+
+
+def _download_github_archive(owner: str, repository: str, ref: str) -> bytes:
+    archive_url = (
+        "https://codeload.github.com/"
+        f"{quote(owner, safe='')}/{quote(repository, safe='')}/tar.gz/"
+        f"{quote(ref, safe='/')}"
+    )
+    request = Request(
+        archive_url,
+        headers={
+            "Accept": "application/octet-stream",
+            "User-Agent": "VibeWiki-local-import",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                try:
+                    declared_size = int(content_length)
+                except ValueError:
+                    declared_size = 0
+                if declared_size > MAX_GITHUB_ARCHIVE_BYTES:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub archive exceeds the local download limit "
+                        f"(limit: {MAX_GITHUB_ARCHIVE_BYTES} bytes)",
+                    )
+            chunks: list[bytes] = []
+            total = 0
+            while True:
+                chunk = response.read(
+                    min(1024 * 1024, MAX_GITHUB_ARCHIVE_BYTES - total + 1)
+                )
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_GITHUB_ARCHIVE_BYTES:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub archive exceeds the local download limit "
+                        f"(limit: {MAX_GITHUB_ARCHIVE_BYTES} bytes)",
+                    )
+                chunks.append(chunk)
+            return b"".join(chunks)
+    except VibeWikiError:
+        raise
+    except HTTPError as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub archive download failed "
+            f"(HTTP {error.code}); check the URL and ref",
+        ) from error
+    except (TimeoutError, URLError, OSError) as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub archive download failed; check the URL, ref, "
+            "and network connection",
+        ) from error
+
+
+def _github_archive_files(
+    archive_bytes: bytes,
+) -> tuple[list[tuple[str, str, bytes]], int]:
+    selected: list[tuple[str, str, bytes]] = []
+    total_bytes = 0
+    skipped_files = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+            for member in archive:
+                # Symlinks, hard links, devices, and directories are never copied.
+                if not member.isfile():
+                    continue
+                try:
+                    top, relative = _relative_filename(member.name)
+                except VibeWikiError:
+                    raise
+                path = PurePosixPath(relative)
+                if should_skip_path(path) or not _is_supported_path(path):
+                    skipped_files += 1
+                    continue
+                if member.size < 0:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub archive contains a file with an invalid size",
+                    )
+                if len(selected) >= MAX_IMPORT_FILES:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub repository contains too many supported files "
+                        f"(limit: {MAX_IMPORT_FILES})",
+                    )
+                if total_bytes + member.size > MAX_IMPORT_BYTES:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub repository exceeds the supported byte limit "
+                        f"(limit: {MAX_IMPORT_BYTES})",
+                    )
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub archive contains an unreadable source file",
+                    )
+                payload = extracted.read(member.size)
+                if len(payload) != member.size:
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "GitHub archive contains a truncated source file",
+                    )
+                total_bytes += len(payload)
+                selected.append((top, relative, payload))
+    except VibeWikiError:
+        raise
+    except (EOFError, OSError, tarfile.TarError) as error:
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT,
+            "GitHub archive is invalid or could not be read",
+        ) from error
+    if not selected:
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "GitHub repository has no supported source, config, or documentation files",
+        )
+    paths = [PurePosixPath(relative) for _, relative, _ in selected]
+    chosen_prefix = _choose_source_prefix(paths)
+    normalized: list[tuple[str, str, bytes]] = []
+    seen: set[str] = set()
+    for top, relative, payload in selected:
+        path = PurePosixPath(relative)
+        if path.parts[: len(chosen_prefix)] != chosen_prefix:
+            skipped_files += 1
+            continue
+        trimmed = path.parts[len(chosen_prefix) :]
+        if not trimmed:
+            skipped_files += 1
+            continue
+        normalized_path = PurePosixPath(*trimmed).as_posix()
+        if normalized_path in seen:
+            raise VibeWikiError(
+                ErrorCode.INVALID_OUTPUT,
+                "GitHub repository contains duplicate normalized source paths",
+            )
+        seen.add(normalized_path)
+        normalized.append((top, normalized_path, payload))
+    if not normalized:
+        raise VibeWikiError(
+            ErrorCode.UNSUPPORTED_STACK,
+            "GitHub repository package contains no supported source files",
+        )
+    return normalized, skipped_files
 
 
 def _prefix_candidates(paths: list[PurePosixPath]) -> set[tuple[str, ...]]:
@@ -317,6 +558,36 @@ def import_local_workspace(repository: str | Path) -> ImportedWorkspace:
     return _build_imported_workspace(selected, project_name or "local-source")
 
 
+def import_github_workspace(url: str, ref: str | None = None) -> ImportedWorkspace:
+    """Import a public GitHub repository archive into a temporary workspace.
+
+    Network access is deliberately limited to this explicit user-triggered
+    action. The downloaded archive is bounded before extraction, and only
+    regular supported files survive the same ignore/secret policy as local
+    Browse imports.
+    """
+
+    owner, repository = _github_repository(url)
+    selected_ref = _github_ref(ref)
+    archive_bytes = _download_github_archive(owner, repository, selected_ref)
+    selected, skipped_files = _github_archive_files(archive_bytes)
+    project_name = re.sub(
+        r"[^A-Za-z0-9._-]+", "-", f"{owner}-{repository}"
+    ).strip("-")
+    imported = _build_imported_workspace(
+        selected, project_name or "github-source"
+    )
+    imported.build_summary["import_source"] = {
+        "provider": "github",
+        "repository": f"{owner}/{repository}",
+        "ref": selected_ref,
+        "archive_bytes": len(archive_bytes),
+        "selected_files": len(selected),
+        "skipped_files": skipped_files,
+    }
+    return imported
+
+
 def cleanup_workspace(workspace: ImportedWorkspace) -> None:
     """Remove only the temporary workspace created by a browser import."""
 
@@ -328,7 +599,9 @@ __all__ = [
     "MAX_IMPORT_BYTES",
     "MAX_IMPORT_FILES",
     "MAX_MULTIPART_PARTS",
+    "MAX_GITHUB_ARCHIVE_BYTES",
     "cleanup_workspace",
+    "import_github_workspace",
     "import_local_workspace",
     "import_uploaded_workspace",
 ]

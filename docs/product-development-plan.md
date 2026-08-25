@@ -91,10 +91,16 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   thông báo rõ link chỉ hoạt động khi local server còn chạy.
 - Local server khóa workspace swap/read trong lúc Browse, rescan, Ask hoặc
   Observe để tránh graph và source root bị lệch khi request chạy đồng thời.
+- Viewer có **Import GitHub** explicit action cho public HTTPS repository URL và
+  branch/tag tùy chọn; archive bị giới hạn trước khi đọc, chỉ regular supported
+  files được copy, secrets/ignored paths bị loại, và private/authenticated
+  repositories vẫn dùng local clone/path để không đưa credential vào MVP.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
 - Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
+- GitHub private-repository OAuth, webhook sync và hosted multi-user workspace
+  chưa nằm trong local-first MVP; public archive import là boundary chủ động.
 
 ### Thứ tự implementation tự động tiếp theo
 
