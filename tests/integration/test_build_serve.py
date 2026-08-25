@@ -71,6 +71,8 @@ def test_serve_exposes_real_artifact_apis(
     try:
         with urlopen(f"{base}/api/summary") as response:
             summary = json.load(response)
+        with urlopen(f"{base}/api/profile") as response:
+            profile = json.load(response)
         with urlopen(f"{base}/api/nodes") as response:
             nodes = json.load(response)
         with urlopen(f"{base}/api/history") as response:
@@ -187,6 +189,11 @@ def test_serve_exposes_real_artifact_apis(
         thread.join(timeout=2)
 
     assert summary["project"] == "next-ts-demo"
+    assert summary["profile"]["scan_mode"] == "next-app-router"
+    assert summary["profile"]["package_scope"] == "single-package"
+    assert profile == summary["profile"]
+    assert "Next.js App Router" in profile["frameworks"]
+    assert any(item["language"] == "tsx" for item in profile["languages"])
     assert summary["counts"] == {
         "facts": 15,
         "relations": 10,
@@ -279,6 +286,8 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "Browse source" in html
     assert 'id="browse-picker"' in html
     assert 'id="source-package"' in html
+    assert 'id="profile-modal"' in html
+    assert 'id="profile-browse"' in html
     assert "function buildImportGroups" in html
 
 

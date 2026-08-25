@@ -10,6 +10,8 @@ from . import ANALYZER_VERSION, SCHEMA_VERSION
 MANIFEST_DIRECTORY: Final[str] = ".vibewiki"
 MANIFEST_RELATIVE_PATH: Final[str] = f"{MANIFEST_DIRECTORY}/manifest.json"
 PRISMA_SCHEMA_RELATIVE_PATH: Final[str] = "prisma/schema.prisma"
+LOCAL_IMPORT_MAX_FILES: Final[int] = 10_000
+LOCAL_IMPORT_MAX_BYTES: Final[int] = 200 * 1024 * 1024
 
 # The deterministic analyzer accepts the common JavaScript/TypeScript module
 # surface. The route and function patterns stay intentionally conservative.
@@ -79,6 +81,8 @@ GENERIC_SUFFIXES: Final[Mapping[str, str]] = MappingProxyType(
 __all__ = [
     "ANALYZER_VERSION",
     "GENERIC_SUFFIXES",
+    "LOCAL_IMPORT_MAX_BYTES",
+    "LOCAL_IMPORT_MAX_FILES",
     "MANIFEST_DIRECTORY",
     "MANIFEST_RELATIVE_PATH",
     "PRISMA_SCHEMA_RELATIVE_PATH",

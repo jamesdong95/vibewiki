@@ -510,9 +510,13 @@ def api_payload(
     intent = compare_product_intent(root, artifact)
     runtime = attach_runtime_links(_runtime(root), nodes)
     unknowns = artifact["unknowns"] + intent["gaps"] + runtime.get("unknowns", [])
+    profile = artifact.get("profile", {})
+    if path == "/api/profile":
+        return profile
     if path == "/api/summary":
         return {
             "project": artifact["fixture"],
+            "profile": profile,
             "analyzer_version": ANALYZER_VERSION,
             "schema_version": SCHEMA_VERSION,
             "counts": {

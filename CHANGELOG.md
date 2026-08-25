@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.17-preview] - 2026-08-25
+
+### Added
+
+- Deterministic project profile in the artifact and `/api/profile`, covering
+  scan mode, detected frameworks, source roots, package scope, language/byte
+  counts, analyzer version, and local import limits.
+- Real Project profile viewer opened from the project switcher, with a
+  Browse-another-scope action replacing the previous prototype control.
+- Profile API regression and live browser coverage for profile details,
+  Source files inventory, responsive layout, and console errors.
+
 ## [0.1.16-preview] - 2026-08-25
 
 ### Added

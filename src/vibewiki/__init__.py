@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.16-preview"
+__version__ = "0.1.17-preview"
 ANALYZER_VERSION = "0.6.0-preview"
 SCHEMA_VERSION = 1
 

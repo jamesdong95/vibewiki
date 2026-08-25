@@ -169,7 +169,7 @@ provider is explicitly enabled, only the bounded retrieved context for the
 current question is sent to that provider; source import and graph generation
 remain local.
 
-Every build also exposes `/api/files`, `/api/packages`, `/api/modules`,
+Every build also exposes `/api/profile`, `/api/files`, `/api/packages`, `/api/modules`,
 `/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/impact`,
 `/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
 optional grounded discussion. `/api/impact` accepts a node subject plus

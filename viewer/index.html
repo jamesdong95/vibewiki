@@ -458,6 +458,12 @@
     .command-item:hover { border-color: rgba(216,249,139,0.17); background: var(--lime-soft); }
     .command-key { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; color: var(--lime); font-family: var(--mono); font-size: 9px; }
     .command-item small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .profile-grid { display: grid; gap: 8px; padding: 0 16px 16px; }
+    .profile-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .profile-label { color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+    .profile-value { min-width: 0; color: var(--ink-soft); font-family: var(--mono); font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
+    .profile-languages { display: flex; flex-wrap: wrap; gap: 5px; }
+    .profile-language { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--cyan); }
 
     @media (max-width: 1240px) {
       .app-shell { grid-template-columns: 218px minmax(520px, 1fr) 286px; }
@@ -517,7 +523,7 @@
         </div>
       </div>
 
-      <button class="project-switcher" type="button" data-toast="Project switcher is a prototype control.">
+      <button class="project-switcher" type="button" id="project-switcher" title="Open project profile">
         <span>
           <strong id="project-name">PocketBudget</strong>
           <small id="project-meta">main · local workspace</small>
@@ -863,6 +869,18 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="profile-modal" aria-hidden="true">
+    <div class="command-modal" role="dialog" aria-modal="true" aria-label="Project profile">
+      <div class="command-input"><span>◈</span><strong>Project profile</strong></div>
+      <p class="settings-copy" id="profile-summary">Loading deterministic scan profile…</p>
+      <div class="profile-grid" id="profile-details"></div>
+      <div class="settings-actions">
+        <button class="text-button" type="button" id="profile-close">Close</button>
+        <button class="text-button primary" type="button" id="profile-browse">Browse another scope</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="command-modal" aria-hidden="true">
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Command palette">
       <div class="command-input"><span>⌘</span><input id="command-search" type="search" placeholder="Jump to a view or ask a question…" autocomplete="off" /></div>
@@ -1084,6 +1102,10 @@
     const sourcePackage = document.getElementById('source-package');
     const sourcePackageScan = document.getElementById('source-package-scan');
     const sourcePackageCancel = document.getElementById('source-package-cancel');
+    const profileModal = document.getElementById('profile-modal');
+    const profileSummary = document.getElementById('profile-summary');
+    const profileDetails = document.getElementById('profile-details');
+    let currentProjectProfile = null;
     const MAX_IMPORT_FILES = 10000;
     const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
     const GENERIC_SOURCE_PATTERN = /\.(ts|tsx|js|jsx|mjs|cjs|py|pyi|go|java|kt|kts|rs|rb|php|cs|c|h|cc|cpp|cxx|hpp|swift|dart|lua|ex|exs|scala|hs|sh|bash|zsh|fish|sql|css|scss|less|html|vue|svelte|md|mdx|json|jsonc|yaml|yml|toml|xml|ini|conf)$/;
@@ -1097,6 +1119,40 @@
     function chooseSourceFolder() {
       setBrowseStatus('Đang chờ chọn một thư mục source local…', 'busy');
       sourcePicker.click();
+    }
+    function formatProfileBytes(value) {
+      const bytes = Number(value || 0);
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+      return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    }
+    function renderProjectProfile(profile = {}) {
+      const languages = Array.isArray(profile.languages) ? profile.languages : [];
+      const frameworks = Array.isArray(profile.frameworks) && profile.frameworks.length
+        ? profile.frameworks.join(' · ')
+        : 'Generic / inventory-first';
+      profileSummary.textContent = profile.files
+        ? `${profile.scan_mode || 'generic'} · ${profile.package_scope || 'repository'} · ${Number(profile.files).toLocaleString()} source files · ${formatProfileBytes(profile.bytes)}`
+        : 'Profile sẽ xuất hiện sau khi local artifact được hydrate.';
+      profileDetails.innerHTML = [
+        ['Scan mode', profile.scan_mode || 'unavailable'],
+        ['Frameworks', frameworks],
+        ['Source roots', (profile.source_roots || []).join(', ') || 'none detected'],
+        ['Package scope', `${profile.package_scope || 'unknown'} · ${(profile.package_paths || []).join(', ') || '.'}`],
+        ['Languages', `<div class="profile-languages">${languages.map(item => `<span class="profile-language">${escapeHtml(item.language)} · ${Number(item.files || 0).toLocaleString()} · ${formatProfileBytes(item.bytes)}</span>`).join('') || '<span>none</span>'}</div>`],
+        ['Import limit', `${Number(profile.limits?.max_import_files || 0).toLocaleString()} files · ${formatProfileBytes(profile.limits?.max_import_bytes)}`],
+        ['Analyzer', `${profile.analyzer_version || 'unknown'} · schema ${profile.schema_version || '?'}`]
+      ].map(([label, value]) => `<div class="profile-row"><span class="profile-label">${escapeHtml(label)}</span><span class="profile-value">${typeof value === 'string' && value.startsWith('<div') ? value : escapeHtml(value)}</span></div>`).join('');
+    }
+    function openProjectProfile() {
+      renderProjectProfile(currentProjectProfile || {});
+      profileModal.classList.add('open');
+      profileModal.setAttribute('aria-hidden', 'false');
+    }
+    function closeProjectProfile() {
+      profileModal.classList.remove('open');
+      profileModal.setAttribute('aria-hidden', 'true');
     }
     function isSupportedSourceFile(file) {
       const path = (file.webkitRelativePath || file.name || '').replaceAll('\\', '/').toLowerCase();
@@ -1234,6 +1290,15 @@
       hidePackagePicker();
       sourcePicker.value = '';
       setBrowseStatus('Đã hủy chọn package. Bạn có thể Browse lại một thư mục hoặc package khác.', 'info');
+    });
+    document.getElementById('project-switcher').addEventListener('click', openProjectProfile);
+    document.getElementById('profile-close').addEventListener('click', closeProjectProfile);
+    document.getElementById('profile-browse').addEventListener('click', () => {
+      closeProjectProfile();
+      chooseSourceFolder();
+    });
+    profileModal.addEventListener('click', event => {
+      if (event.target === profileModal) closeProjectProfile();
     });
     browseButton.addEventListener('click', chooseSourceFolder);
     sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
@@ -1693,7 +1758,9 @@
 
         setText('brand-subtitle', 'local evidence graph');
         setText('project-name', summary.project);
-        setText('project-meta', 'built scan · local workspace');
+        currentProjectProfile = summary.profile || {};
+        renderProjectProfile(currentProjectProfile);
+        setText('project-meta', `${currentProjectProfile.scan_mode || 'generic'} · ${currentProjectProfile.package_scope || 'local workspace'}`);
         setText('crumb-project', summary.project.toUpperCase());
         setText('eyebrow', `Evidence graph / analyzer ${summary.analyzer_version}`);
         document.querySelector('.heading-copy').textContent = `A local, evidence-backed map of ${summary.project} — generated from the latest deterministic scan.`;

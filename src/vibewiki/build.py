@@ -14,6 +14,7 @@ from .discovery.hashing import hash_file
 from .discovery.manifest import canonical_json
 from .errors import ErrorCode, VibeWikiError
 from .intent import compare_product_intent
+from .profile import build_project_profile
 
 
 def _load_manifest(root: Path) -> dict[str, Any]:
@@ -265,6 +266,12 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
         **build_module_graph(root, manifest, inventory),
         "inventory": inventory,
     }
+    graph_artifact["profile"] = build_project_profile(
+        manifest,
+        inventory,
+        graph_artifact["facts"],
+        graph_artifact["packages"],
+    )
     intent = compare_product_intent(root, graph_artifact)
     graph_artifact["intent"] = intent
     output = root / MANIFEST_DIRECTORY

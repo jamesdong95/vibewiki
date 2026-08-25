@@ -17,13 +17,19 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .build import build_repository
-from .config import GENERIC_SUFFIXES, PRISMA_SCHEMA_RELATIVE_PATH, SUPPORTED_SUFFIXES
+from .config import (
+    GENERIC_SUFFIXES,
+    LOCAL_IMPORT_MAX_BYTES,
+    LOCAL_IMPORT_MAX_FILES,
+    PRISMA_SCHEMA_RELATIVE_PATH,
+    SUPPORTED_SUFFIXES,
+)
 from .discovery.ignore import should_skip_path
 from .errors import ErrorCode, VibeWikiError
 from .scan import scan_repository
 
-MAX_IMPORT_FILES = 10_000
-MAX_IMPORT_BYTES = 200 * 1024 * 1024
+MAX_IMPORT_FILES = LOCAL_IMPORT_MAX_FILES
+MAX_IMPORT_BYTES = LOCAL_IMPORT_MAX_BYTES
 MAX_MULTIPART_PARTS = 50_000
 _SUPPORTED_IMPORT_SUFFIXES = frozenset(
     (*SUPPORTED_SUFFIXES, *GENERIC_SUFFIXES)
