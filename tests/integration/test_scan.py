@@ -107,7 +107,7 @@ def test_strict_scan_rejects_pages_router_without_partial_output(
     assert not (tmp_path / ".vibewiki").exists()
 
 
-def test_scan_rejects_nested_app_surface_without_partial_output(tmp_path: Path) -> None:
+def test_scan_accepts_mixed_root_and_nested_app_surface(tmp_path: Path) -> None:
     (tmp_path / "app").mkdir()
     (tmp_path / "app/page.tsx").write_text("export default function Page() {}\n")
     nested_app = tmp_path / "packages/web/app"
@@ -116,11 +116,14 @@ def test_scan_rejects_nested_app_surface_without_partial_output(tmp_path: Path) 
         "export default function NestedPage() {}\n"
     )
 
-    with pytest.raises(VibeWikiError) as raised:
-        scan_repository(tmp_path)
+    result = scan_repository(tmp_path)
 
-    assert raised.value.code is ErrorCode.UNSUPPORTED_STACK
-    assert not (tmp_path / ".vibewiki").exists()
+    manifest = json.loads((tmp_path / ".vibewiki/manifest.json").read_text())
+    assert result["counts"]["scanned_files"] == 2
+    assert {item["path"] for item in manifest["files"]} == {
+        "app/page.tsx",
+        "packages/web/app/page.tsx",
+    }
 
 
 def test_scan_rejects_symlinked_output_directory_without_escape(tmp_path: Path) -> None:

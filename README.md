@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.34-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.34-preview) · scan a repository locally or import a public GitHub URL, detect nested package routes, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
+**Latest verified preview:** [`v0.1.35-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.35-preview) · scan a repository locally or import a public GitHub URL, accept mixed root/nested package routes, resolve workspace package imports, format grounded AI answers, show every graph edge in the summary, inspect source-linked facts, and observe a local runtime.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 

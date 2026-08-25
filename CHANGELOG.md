@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.35-preview] - 2026-08-25
+
+### Fixed
+
+- Generic scan no longer rejects a monorepo that has both a root `app/` and
+  nested package routers such as `packages/web/app/`.
+- Strict Next mode retains the original direct App Router contract and still
+  rejects nested layouts when explicitly requested.
+- Added regression coverage for mixed root/nested routes and collision-safe
+  package-scoped route keys.
+
 ## [0.1.34-preview] - 2026-08-25
 
 ### Fixed

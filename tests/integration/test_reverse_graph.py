@@ -186,6 +186,29 @@ def test_build_detects_nested_app_router_routes_without_losing_paths(
     assert handler["evidence"][0]["path"] == "packages/web/app/api/users/route.ts"
 
 
+def test_scan_accepts_root_and_nested_app_router_packages(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "packages/web/app").mkdir(parents=True)
+    (tmp_path / "app/page.tsx").write_text(
+        "export default function RootHome() { return null; }\n"
+    )
+    (tmp_path / "packages/web/app/page.tsx").write_text(
+        "export default function WebHome() { return null; }\n"
+    )
+
+    scan_repository(tmp_path)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    route_keys = {
+        item["semantic_key"] for item in graph["facts"] if item["kind"] == "route"
+    }
+    assert "route:page:/" in route_keys
+    assert "route:page:packages/web:/" in route_keys
+
+
 def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
     (tmp_path / "src/internal").mkdir(parents=True)
     (tmp_path / "src/main/java/com/demo").mkdir(parents=True)

@@ -83,7 +83,7 @@ def _app_files(files: tuple[DiscoveredFile, ...]) -> tuple[DiscoveredFile, ...]:
 
 
 def _has_nested_router_surface(files: tuple[DiscoveredFile, ...]) -> bool:
-    """Reject nested App Router layouts instead of guessing the app root."""
+    """Identify nested App Router layouts for strict-mode compatibility."""
 
     for item in files:
         parts = PurePosixPath(item.path).parts
@@ -195,17 +195,6 @@ def scan_repository(
             ErrorCode.UNSUPPORTED_STACK,
             "repository is not a direct Next App Router source tree",
         )
-    if (
-        effective_generic
-        and _has_direct_app(root)
-        and _has_nested_router_surface(discovered)
-    ):
-        raise VibeWikiError(
-            ErrorCode.UNSUPPORTED_STACK,
-            "repository contains a nested App Router package; import that "
-            "package explicitly",
-        )
-
     manifest = build_manifest(_manifest_files(discovered))
     output = write_manifest(root, manifest)
     write_inventory(root, inventory)

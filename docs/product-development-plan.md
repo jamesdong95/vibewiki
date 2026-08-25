@@ -113,6 +113,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Grounded answer normalization separates inline numbered step headings such as
   `**Bước 1 — ...**` before the viewer renders Markdown, keeping model output
   readable even when a provider returns one long line.
+- Generic scanning now accepts repositories that contain both a root `app/`
+  and nested package routers; strict Next mode keeps its legacy validation while
+  package-scoped route keys prevent collisions.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
