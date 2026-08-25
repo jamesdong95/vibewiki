@@ -163,6 +163,9 @@ Router contract; Browse uses the generic local import profile.
 After a build, **Source files** in the Knowledge sidebar opens the indexed
 inventory. Filter by path or language, see stale files, and click a file to
 preview bounded source lines without leaving the local viewer.
+From the project switcher, **Project profile** lists detected package scopes;
+choose a repository root or nested package to focus the graph, evidence, and
+inspector without importing the source again.
 
 The server remains offline when no LLM provider is configured. If a remote
 provider is explicitly enabled, only the bounded retrieved context for the

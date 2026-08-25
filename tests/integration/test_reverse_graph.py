@@ -137,6 +137,12 @@ def test_build_groups_nested_package_manifests(tmp_path: Path) -> None:
         "package:packages/api",
         "package:packages/web",
     ]
+    assert graph["profile"]["package_scope"] == "monorepo"
+    assert graph["profile"]["package_paths"] == [
+        "packages/api",
+        "packages/web",
+    ]
+    assert graph["profile"]["source_roots"] == ["packages"]
     contains = {
         (edge["source"], edge["target"])
         for edge in graph["package_edges"]

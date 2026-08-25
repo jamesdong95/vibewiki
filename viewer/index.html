@@ -464,6 +464,10 @@
     .profile-value { min-width: 0; color: var(--ink-soft); font-family: var(--mono); font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
     .profile-languages { display: flex; flex-wrap: wrap; gap: 5px; }
     .profile-language { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--cyan); }
+    .profile-scope-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin: 0 16px 16px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); }
+    .profile-scope-picker label { display: grid; gap: 5px; color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+    .profile-scope-picker select { min-width: 0; padding: 8px 9px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: var(--panel-2); font: inherit; }
+    .profile-scope-picker small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; line-height: 1.4; }
 
     @media (max-width: 1240px) {
       .app-shell { grid-template-columns: 218px minmax(520px, 1fr) 286px; }
@@ -873,6 +877,13 @@
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Project profile">
       <div class="command-input"><span>◈</span><strong>Project profile</strong></div>
       <p class="settings-copy" id="profile-summary">Loading deterministic scan profile…</p>
+      <div class="profile-scope-picker">
+        <label for="profile-scope">Focus graph scope
+          <select id="profile-scope" aria-label="Focus graph scope"></select>
+        </label>
+        <button class="text-button primary" type="button" id="profile-focus">Focus scope</button>
+        <small id="profile-scope-hint">Chọn repository root hoặc một package để lọc graph, evidence và inspector.</small>
+      </div>
       <div class="profile-grid" id="profile-details"></div>
       <div class="settings-actions">
         <button class="text-button" type="button" id="profile-close">Close</button>
@@ -1104,6 +1115,9 @@
     const sourcePackageCancel = document.getElementById('source-package-cancel');
     const profileModal = document.getElementById('profile-modal');
     const profileSummary = document.getElementById('profile-summary');
+    const profileScope = document.getElementById('profile-scope');
+    const profileFocus = document.getElementById('profile-focus');
+    const profileScopeHint = document.getElementById('profile-scope-hint');
     const profileDetails = document.getElementById('profile-details');
     let currentProjectProfile = null;
     const MAX_IMPORT_FILES = 10000;
@@ -1129,6 +1143,21 @@
     }
     function renderProjectProfile(profile = {}) {
       const languages = Array.isArray(profile.languages) ? profile.languages : [];
+      const packagePaths = Array.isArray(profile.package_paths) && profile.package_paths.length
+        ? [...new Set(profile.package_paths.map(String))].sort((left, right) => left.localeCompare(right))
+        : ['.'];
+      const previousScope = profileScope.value;
+      profileScope.replaceChildren();
+      packagePaths.forEach(path => {
+        const option = document.createElement('option');
+        option.value = path;
+        option.textContent = path === '.' ? 'Repository root (.)' : path;
+        profileScope.appendChild(option);
+      });
+      profileScope.value = packagePaths.includes(previousScope) ? previousScope : packagePaths[0];
+      profileScopeHint.textContent = packagePaths.length > 1
+        ? `${packagePaths.length} package scopes detected · filter the current graph without re-importing.`
+        : 'Repository root is the only detected package scope.';
       const frameworks = Array.isArray(profile.frameworks) && profile.frameworks.length
         ? profile.frameworks.join(' · ')
         : 'Generic / inventory-first';
@@ -1296,6 +1325,15 @@
     document.getElementById('profile-browse').addEventListener('click', () => {
       closeProjectProfile();
       chooseSourceFolder();
+    });
+    profileFocus.addEventListener('click', () => {
+      const scope = profileScope.value || '.';
+      closeProjectProfile();
+      if (window.realWorkspace?.setScope) {
+        window.realWorkspace.setScope(scope);
+      } else {
+        showToast('Graph scope will be available after the local artifact loads.');
+      }
     });
     profileModal.addEventListener('click', event => {
       if (event.target === profileModal) closeProjectProfile();
@@ -1797,7 +1835,7 @@
 
         const canvas = document.getElementById('graph-canvas');
         const nodeList = () => [...canvas.querySelectorAll('.node[data-real-node]')];
-        const state = { view: 'Product map', tab: 'Overview', query: '', selected: nodes[0]?.id };
+        const state = { view: 'Product map', tab: 'Overview', query: '', scope: '', selected: nodes[0]?.id };
         const viewFilters = {
           'Product map': node => true,
           'User flows': node => ['route', 'api_call', 'test'].includes(node.kind),
@@ -1813,6 +1851,24 @@
           'By implementation': node => ['function', 'symbol', 'package', 'module', 'file', 'data_entity', 'route', 'api_call'].includes(node.kind),
           Unverified: node => node.status !== 'verified'
         };
+
+        function nodeMatchesScope(node, scope) {
+          if (!scope || scope === '.') return true;
+          const attributes = node.attributes || {};
+          const paths = [
+            node.id,
+            attributes.file,
+            attributes.path,
+            attributes.module,
+            ...(node.evidence || []).map(item => item.path)
+          ].filter(Boolean).map(String);
+          return paths.some(value => (
+            value === `package:${scope}`
+            || value === scope
+            || value.startsWith(`${scope}/`)
+            || value.includes(`:${scope}/`)
+          ));
+        }
 
         function renderRuntimeInspector(runtime = {}) {
           const entries = [];
@@ -2009,7 +2065,7 @@
         function renderState() {
           const viewFilter = viewFilters[state.view] || viewFilters['Product map'];
           const tabFilter = tabFilters[state.tab] || tabFilters.Overview;
-          let displayNodes = nodes.filter(node => viewFilter(node) && tabFilter(node));
+          let displayNodes = nodes.filter(node => nodeMatchesScope(node, state.scope) && viewFilter(node) && tabFilter(node));
           if (state.query) displayNodes = displayNodes.filter(node => `${node.title} ${node.kind} ${node.meta}`.toLowerCase().includes(state.query));
           renderGraph(displayNodes);
           setText('current-view', state.view.toUpperCase());
@@ -2020,7 +2076,7 @@
             ? `${unknowns.length} unresolved findings · current build`
             : state.view === 'Scan history'
               ? `${historyRuns.length} scan runs · ${staleSources.length} stale sources`
-              : `${displayNodes.length} nodes · ${edges.filter(edge => displayNodes.some(node => node.id === edge.source) && displayNodes.some(node => node.id === edge.target)).length} edges · current view`;
+              : `${displayNodes.length} nodes · ${edges.filter(edge => displayNodes.some(node => node.id === edge.source) && displayNodes.some(node => node.id === edge.target)).length} edges · scope ${state.scope || 'repository'}`;
           setText('graph-caption-meta', caption);
           if (state.view === 'Scan history') renderHistoryInspector();
           else if (state.view === 'Unknowns' || (state.tab === 'Unverified' && !displayNodes.length)) renderUnknownInspector();
@@ -2031,6 +2087,14 @@
         window.realWorkspace = {
           setView(view) { state.view = view; state.tab = 'Overview'; renderState(); showToast(`${view} view loaded from the current artifact.`); },
           setTab(tab) { if (state.view === 'Unknowns') state.view = 'Product map'; state.tab = tab; renderState(); showToast(`${tab} filter applied to the current artifact.`); },
+          setScope(scope) {
+            state.scope = scope === '.' ? '' : String(scope || '');
+            state.view = 'Product map';
+            state.tab = 'Overview';
+            state.selected = undefined;
+            renderState();
+            showToast(`Focused scope: ${state.scope || 'repository root'}.`);
+          },
           runCommand(command) {
             if (command === 'ask') { document.getElementById('mini-question').focus(); showToast('Ask a question grounded in local evidence.'); }
             if (command === 'unknowns') this.setView('Unknowns');

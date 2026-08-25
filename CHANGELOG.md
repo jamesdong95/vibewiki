@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.18-preview] - 2026-08-25
+
+### Added
+
+- Project Profile package scope selector that focuses the graph, evidence, and
+  inspector on a detected package without re-importing the repository.
+- Monorepo scope regression coverage for deterministic package paths and the
+  viewer's scope controls.
+
 ## [0.1.17-preview] - 2026-08-25
 
 ### Added

@@ -288,6 +288,10 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="source-package"' in html
     assert 'id="profile-modal"' in html
     assert 'id="profile-browse"' in html
+    assert 'id="profile-scope"' in html
+    assert 'id="profile-focus"' in html
+    assert "function nodeMatchesScope" in html
+    assert "setScope(scope)" in html
     assert "function buildImportGroups" in html
 
 

@@ -71,7 +71,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   local imports; external dependencies vẫn được đánh dấu inferred.
 - Project profile deterministic có API `/api/profile`, hiển thị scan mode,
   framework/language coverage, package scope và giới hạn import trong viewer;
-  project switcher đã trở thành control Browse scope thật.
+  project switcher đã trở thành control Browse scope thật; selector package
+  focus graph/evidence/inspector mà không cần import lại.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
