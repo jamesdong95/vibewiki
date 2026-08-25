@@ -61,6 +61,7 @@ REQUIRED_HTML_MARKERS = (
     'function nodeMatchesScope',
     'setScope(scope)',
     'function importLocalPath',
+    'function rescanCurrentWorkspace',
     'function buildImportGroups',
     'function uploadSourceFiles',
     'function observeRuntime',
@@ -73,6 +74,7 @@ REQUIRED_HTML_MARKERS = (
     "/api/stale",
     "/api/files",
     "/api/import-path",
+    "/api/rescan",
     'window.realWorkspace',
     "renderInspector",
 )

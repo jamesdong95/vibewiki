@@ -80,6 +80,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   controller decorators với route evidence deterministic.
 - Browse có fallback **Use local path** qua loopback API cho môi trường không
   cung cấp folder picker; snapshot vẫn đi qua ignore, secret và size limits.
+- Viewer có **Rescan workspace** thật qua loopback API; rescan snapshot artifact
+  hiện tại, cập nhật graph sau khi source đổi, và rollback `.vibewiki/` nếu scan
+  hoặc build thất bại.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
@@ -601,6 +604,8 @@ Nếu dùng nhiều Hermes profiles, tạo toàn bộ task và links trước kh
 - Build wiki và compare snapshots đã normalize timestamp/path machine-specific.
 - Re-scan unchanged fixture và assert no duplicate rows.
 - Modify one fixture file, rescan và assert affected evidence/node updates.
+- Bấm Rescan workspace sau khi thêm source file và xác nhận graph cập nhật trên
+  browser thật, không có console error.
 - Start local server and test API response schemas.
 
 ### UI verification

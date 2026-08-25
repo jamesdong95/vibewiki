@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sysconfig
+import threading
 import zipfile
 from collections import deque
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -34,6 +35,7 @@ from .llm import (
     llm_status,
 )
 from .observe import observe_repository
+from .rescan import rescan_repository
 from .runtime_links import attach_runtime_links
 
 
@@ -799,6 +801,52 @@ def create_server(
                         {"error": "invalid_output", "message": str(error)},
                     )
                 return
+            if parsed.path == "/api/rescan":
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "workspace rescan is available only on a loopback server",
+                        )
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "rescan payload is too large",
+                        )
+                    if content_length:
+                        payload = json.loads(
+                            self.rfile.read(content_length).decode("utf-8")
+                        )
+                        if not isinstance(payload, dict):
+                            raise VibeWikiError(
+                                ErrorCode.INVALID_OUTPUT,
+                                "rescan payload is invalid",
+                            )
+                    if not self.server.rescan_lock.acquire(blocking=False):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "a workspace rescan is already in progress",
+                        )
+                    try:
+                        result = rescan_repository(self.server.workspace_root)
+                        self.server.workspace_artifact = _artifact(
+                            self.server.workspace_root
+                        )
+                    finally:
+                        self.server.rescan_lock.release()
+                    self._write_json(200, result)
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/llm/config":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))
@@ -926,6 +974,7 @@ def create_server(
     server.llm_settings: LLMSettings | None = None
     server.imported_workspace: ImportedWorkspace | None = None
     server.local_path_import_allowed = host in {"127.0.0.1", "localhost", "::1"}
+    server.rescan_lock = threading.Lock()
     return server
 
 

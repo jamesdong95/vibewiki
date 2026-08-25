@@ -14,6 +14,7 @@ import pytest
 from vibewiki.build import build_repository
 from vibewiki.errors import ErrorCode, VibeWikiError
 from vibewiki.importer import _multipart_files, cleanup_workspace
+from vibewiki.rescan import rescan_repository
 from vibewiki.scan import scan_repository
 from vibewiki.serve import create_server
 
@@ -298,6 +299,73 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="source-path"' in html
     assert "function importLocalPath" in html
     assert "function buildImportGroups" in html
+    assert "function rescanCurrentWorkspace" in html
+    assert "/api/rescan" in html
+    assert "Artifact hiện tại vẫn được giữ nguyên" in html
+
+
+def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    (root / "app/new/page.tsx").parent.mkdir(parents=True)
+    (root / "app/new/page.tsx").write_text(
+        "export default function NewPage() { return <main>New</main>; }\n",
+        encoding="utf-8",
+    )
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = Request(
+        f"http://127.0.0.1:{server.server_address[1]}/api/rescan",
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(request) as response:
+            result = json.load(response)
+        with urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}/api/summary"
+        ) as response:
+            summary = json.load(response)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert result["command"] == "rescan"
+    assert result["counts"]["scanned_files"] == 12
+    assert summary["counts"]["scanned_files"] == 12
+    assert summary["staleness"]["status"] == "current"
+
+
+def test_rescan_restores_previous_artifact_when_scan_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    artifact = root / ".vibewiki"
+    before = {
+        path.relative_to(artifact): path.read_bytes()
+        for path in artifact.rglob("*")
+        if path.is_file()
+    }
+
+    def fail_scan(*args, **kwargs):
+        raise VibeWikiError(ErrorCode.UNSUPPORTED_STACK, "fixture scan failed")
+
+    monkeypatch.setattr("vibewiki.rescan.scan_repository", fail_scan)
+    with pytest.raises(VibeWikiError, match="fixture scan failed"):
+        rescan_repository(root)
+
+    after = {
+        path.relative_to(artifact): path.read_bytes()
+        for path in artifact.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
 
 
 def test_serve_marks_source_evidence_stale_after_build(tmp_path: Path) -> None:

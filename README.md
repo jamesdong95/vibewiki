@@ -166,6 +166,10 @@ locally, and the temporary imported workspace is removed when the server exits.
 If the browser cannot open a directory picker, use **Use local path** in the
 viewer; the loopback server reads the path locally, applies the same limits and
 secret filters, and imports a temporary snapshot without mutating the source.
+After the graph is open, **Rescan workspace** runs scan + build against the
+current local workspace. It snapshots `.vibewiki/` first and restores the last
+known-good artifact if the rescan fails, so a temporary source error does not
+blank the current graph.
 The CLI keeps byte-compatible strict discovery for a direct Next.js App Router
 and auto-selects the generic local import profile for other repositories.
 

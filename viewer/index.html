@@ -652,7 +652,7 @@
             <button class="text-button" type="button" id="ask-button"><span>Ask your product</span><span style="color:var(--muted);font-family:var(--mono);font-size:10px;">↵</span></button>
             <button class="text-button primary" type="button" id="scan-button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12a8 8 0 0 1 14.5-4.7M20 12a8 8 0 0 1-14.5 4.7"/><path d="M18.5 4.5v3h-3M5.5 19.5v-3h3"/></svg>
-              <span>Scan latest</span>
+              <span>Rescan workspace</span>
             </button>
           </div>
         </div>
@@ -1212,6 +1212,39 @@
         scanButton.disabled = false;
       }
     }
+    async function rescanCurrentWorkspace() {
+      scanButton.disabled = true;
+      browseButton.disabled = true;
+      localPathButton.disabled = true;
+      setBrowseStatus('Đang scan lại workspace hiện tại…', 'busy');
+      showToast('Rescanning the current workspace…');
+      try {
+        const response = await fetch('/api/rescan', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: '{}'
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(importErrorMessage(result));
+        const counts = result.counts || {};
+        setBrowseStatus(
+          `Scan thành công: ${counts.scanned_files || 0} files · ${counts.facts || 0} facts. Đang tải graph mới…`,
+          'success'
+        );
+        showToast('Workspace rescanned successfully.');
+        window.setTimeout(() => window.location.reload(), 1200);
+      } catch (error) {
+        const message = error.message || 'Không thể scan lại workspace.';
+        setBrowseStatus(
+          `Rescan thất bại: ${message} Artifact hiện tại vẫn được giữ nguyên.`,
+          'error'
+        );
+        showToast(message);
+        scanButton.disabled = false;
+        browseButton.disabled = false;
+        localPathButton.disabled = false;
+      }
+    }
     function formatProfileBytes(value) {
       const bytes = Number(value || 0);
       if (bytes < 1024) return `${bytes} B`;
@@ -1424,7 +1457,7 @@
     localPathForm.addEventListener('submit', importLocalPath);
     browseButton.addEventListener('click', chooseSourceFolder);
     sourcePicker.addEventListener('change', event => importSourceFiles([...event.target.files]));
-    document.getElementById('scan-button').addEventListener('click', chooseSourceFolder);
+    scanButton.addEventListener('click', rescanCurrentWorkspace);
     document.getElementById('ask-button').addEventListener('click', () => {
       document.getElementById('mini-question').focus();
       showToast('Ask a question about this product or selected concept.');
@@ -2182,7 +2215,7 @@
           runCommand(command) {
             if (command === 'ask') { document.getElementById('mini-question').focus(); showToast('Ask a question grounded in local evidence.'); }
             if (command === 'unknowns') this.setView('Unknowns');
-            if (command === 'scan') chooseSourceFolder();
+            if (command === 'scan') rescanCurrentWorkspace();
             if (command === 'export') exportWiki();
           }
         };
@@ -2198,7 +2231,6 @@
           };
         });
         els.search.oninput = event => { state.query = event.target.value.trim().toLowerCase(); renderState(); };
-        document.getElementById('scan-button').onclick = chooseSourceFolder;
         renderState();
         document.documentElement.classList.remove('workspace-loading');
         showToast(`Loaded ${summary.counts.facts} facts from the local build.`);

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.21-preview] - 2026-08-25
+
+### Added
+
+- **Rescan workspace** thật trong viewer để scan + build lại source đang mở mà
+  không cần Browse hoặc nhập lại path.
+- Loopback-only `/api/rescan` với lock chống rescan đồng thời và response counts
+  cho trạng thái UI.
+- Artifact snapshot/rollback: graph `.vibewiki/` gần nhất được khôi phục nếu
+  scan hoặc build thất bại; UI giữ graph hiện tại và hiển thị lỗi rõ ràng.
+- Regression coverage cho rescan API, graph update, rollback, UI marker và
+  browser smoke sau khi source file được thêm vào workspace đang chạy.
+
 ## [0.1.20-preview] - 2026-08-25
 
 ### Added
