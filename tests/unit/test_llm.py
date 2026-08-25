@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from vibewiki.errors import ErrorCode, VibeWikiError
-from vibewiki.llm import LLMSettings, ask_repository, configure_llm
+from vibewiki.llm import LLMSettings, ask_repository, configure_llm, normalize_markdown
 from vibewiki.providers.http import OllamaProvider, OpenAICompatibleProvider
 
 
@@ -39,6 +39,23 @@ def test_question_tokens_ignore_natural_language_fillers() -> None:
     from vibewiki.llm import _tokens
 
     assert _tokens("Which files are connected to signup?") == {"signup"}
+
+
+def test_normalize_markdown_repairs_inline_provider_sections() -> None:
+    value = r"# Flow --- ## Bước 1\n- **Read source**"
+
+    normalized = normalize_markdown(value)
+
+    assert normalized == "# Flow\n\n---\n\n## Bước 1\n- **Read source**"
+
+
+def test_normalize_markdown_does_not_rewrite_code_fences() -> None:
+    value = "# Title --- ## Detail\n```text\n# literal --- ## code\n```"
+
+    normalized = normalize_markdown(value)
+
+    assert "## code" in normalized
+    assert "\n\n---\n\n## Detail" in normalized
 
 
 def test_openai_compatible_settings_require_key(

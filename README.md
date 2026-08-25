@@ -191,7 +191,8 @@ questions, **Explain flow** for graph-connected execution paths, **Impact
 analysis** for connected neighborhoods, and **Find unknowns** for gaps already
 recorded by the analyzer. With provider `none`, each mode still returns a
 deterministic evidence-only result, so the graph remains useful without a
-model.
+model. Provider Markdown is normalized for readable headings, separators, and
+escaped newlines; fenced code blocks are preserved.
 
 Use **Export wiki** in the top bar or command palette to download a ZIP of the
 current `.vibewiki` artifacts. The export includes Markdown/Mermaid wiki files,

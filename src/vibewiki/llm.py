@@ -209,6 +209,26 @@ def json_safe(value: object) -> str:
     return str(value)
 
 
+def normalize_markdown(value: str) -> str:
+    """Repair common provider formatting glitches without changing code fences."""
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    if "\n" not in text and "\\n" in text:
+        text = text.replace("\\n", "\n")
+    segments = text.split("```")
+    for index in range(0, len(segments), 2):
+        segment = segments[index]
+        segment = re.sub(
+            r"(?<!\n)[ \t]+(-{3,})[ \t]+",
+            r"\n\n\1\n\n",
+            segment,
+        )
+        segment = re.sub(r"[ \t]+(?=#{1,4}\s)", "\n\n", segment)
+        segment = re.sub(r"[ \t]+(?=[-*+]\s+(?:\*\*|[A-ZÀ-Ỹ]))", "\n", segment)
+        segment = re.sub(r"[ \t]+(?=\d+[.)]\s+\*\*)", "\n", segment)
+        segments[index] = segment
+    return "```".join(segments).strip()
+
+
 def _rank_nodes(
     nodes: Sequence[dict[str, Any]], query_tokens: set[str]
 ) -> list[dict[str, Any]]:
@@ -444,6 +464,7 @@ def ask_repository(
         if provider.name == "none"
         else response.text
     )
+    answer = normalize_markdown(answer)
     cited = [
         item
         for item in evidence

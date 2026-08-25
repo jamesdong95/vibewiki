@@ -1098,8 +1098,21 @@
     function isMarkdownTableDivider(line) {
       return /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(line);
     }
+    function normalizeMarkdown(value) {
+      let text = String(value || '').replace(/\r\n?/g, '\n');
+      if (!text.includes('\n') && text.includes('\\n')) text = text.replaceAll('\\n', '\n');
+      const segments = text.split('```');
+      for (let index = 0; index < segments.length; index += 2) {
+        segments[index] = segments[index]
+          .replace(/(?<!\n)[ \t]+(-{3,})[ \t]+/g, '\n\n$1\n\n')
+          .replace(/[ \t]+(?=#{1,4}\s)/g, '\n\n')
+          .replace(/[ \t]+(?=[-*+]\s+(?:\*\*|[A-ZÀ-Ỹ]))/g, '\n')
+          .replace(/[ \t]+(?=\d+[.)]\s+\*\*)/g, '\n');
+      }
+      return segments.join('```').trim();
+    }
     function renderMarkdown(value) {
-      const lines = String(value || '').replace(/\r\n?/g, '\n').split('\n');
+      const lines = normalizeMarkdown(value).split('\n');
       const output = [];
       let index = 0;
       while (index < lines.length) {

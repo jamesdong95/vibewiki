@@ -46,6 +46,7 @@ REQUIRED_HTML_MARKERS = (
     'function renderHistoryInspector',
     'function observeRuntime',
     'function renderRuntimeInspector',
+    'function normalizeMarkdown',
     'Browser JS · optional Playwright',
     '/api/runtime',
     "/api/stale",
