@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,32 @@ def test_generic_javascript_repository_builds_without_app(tmp_path: Path) -> Non
     )
 
 
+def test_vite_react_fixture_emits_router_objects_and_api_wrapper_edges(
+    tmp_path: Path,
+) -> None:
+    source = Path(__file__).parents[1] / "fixtures" / "vite-react-demo"
+    root = tmp_path / "vite-react-demo"
+    shutil.copytree(source, root)
+    scan_repository(root, allow_generic=True)
+    build_repository(root)
+    artifact = json.loads((root / ".vibewiki/graph.json").read_text())
+
+    route_keys = {
+        item["semantic_key"] for item in artifact["facts"] if item["kind"] == "route"
+    }
+    assert "route:generic:src/router.jsx:GET:/settings" in route_keys
+    assert "api_call:src/App.jsx:/api/health" in {
+        item["semantic_key"]
+        for item in artifact["facts"]
+        if item["kind"] == "api_call"
+    }
+    assert any(
+        edge["source"] == "api_call:src/App.jsx:/api/health"
+        and edge["target"] == "route:generic:server.js:GET:/api/health"
+        for edge in artifact["relations"]
+    )
+
+
 def test_generic_multi_language_repository_keeps_files_and_symbols(
     tmp_path: Path,
 ) -> None:
@@ -102,11 +129,18 @@ def test_generic_framework_routes_and_api_calls_build_reverse_graph(
     )
     (tmp_path / "src/router.jsx").write_text(
         "import { Route } from 'react-router-dom';\n"
+        "import { createBrowserRouter } from 'react-router-dom';\n"
+        "const router = createBrowserRouter([\n"
+        "  { path: '/settings', element: <div /> }\n"
+        "]);\n"
         "export function RouterView() { return "
         "<Route path='/dashboard' element={<div />} />; }\n"
     )
     (tmp_path / "src/client.js").write_text(
-        "export async function loadItems() { return fetch('/api/items'); }\n"
+        "export async function loadItems() {\n"
+        "  const health = await apiClient.get('/health');\n"
+        "  return fetch('/api/items');\n"
+        "}\n"
     )
     (tmp_path / "api.py").write_text(
         "@app.get('/users')\n"
@@ -133,12 +167,20 @@ def test_generic_framework_routes_and_api_calls_build_reverse_graph(
     assert "route:generic:server.js:GET:/health" in route_keys
     assert "route:generic:server.js:POST:/api/items" in route_keys
     assert "route:generic:src/router.jsx:GET:/dashboard" in route_keys
+    assert "route:generic:src/router.jsx:GET:/settings" in route_keys
     assert "route:generic:api.py:GET:/users" in route_keys
     assert "route:generic:main.go:ANY:/healthz" in route_keys
     assert "api_call:src/client.js:/api/items" in api_keys
+    assert "api_call:src/client.js:/health" in api_keys
     assert any(
         edge["source"] == "route:generic:server.js:GET:/health"
         and edge["target"] == "function:server.js:health"
+        and edge["relation"] == "calls"
+        for edge in artifact["relations"]
+    )
+    assert any(
+        edge["source"] == "api_call:src/client.js:/health"
+        and edge["target"] == "route:generic:server.js:GET:/health"
         and edge["relation"] == "calls"
         for edge in artifact["relations"]
     )

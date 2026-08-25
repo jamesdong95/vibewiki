@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.12-preview] - 2026-08-25
+
+### Added
+
+- Vite/React fixture-backed route facts for `createBrowserRouter`,
+  `createHashRouter`, and `createMemoryRouter` route objects.
+- Common `apiClient`, `client`, `httpClient`, and `request` wrapper call facts,
+  with deterministic API-call to generic-route graph edges when method and path
+  are literal.
+
 ## [0.1.11-preview] - 2026-08-25
 
 ### Added

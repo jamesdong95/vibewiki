@@ -40,8 +40,8 @@ def test_version_is_stable_and_reports_metadata(
 
     assert code == 0
     assert stdout == (
-        "vibewiki 0.1.11-preview "
-        "(analyzer 0.2.0-preview, schema 1)\n"
+        "vibewiki 0.1.12-preview "
+        "(analyzer 0.3.0-preview, schema 1)\n"
     )
     assert stderr == ""
 

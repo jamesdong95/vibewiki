@@ -134,8 +134,10 @@ uv run vibewiki serve /path/to/repository --port 4173
 ```
 
 Generic mode keeps every supported file in inventory and recognizes common
-route registrations in Express/Fastify/Hono-style JavaScript, React Router,
-Flask/FastAPI, and Go `HandleFunc` code, plus literal fetch/Axios API calls.
+route registrations in Express/Fastify/Hono-style JavaScript, React Router JSX
+and `createBrowserRouter` route objects, Flask/FastAPI, and Go `HandleFunc`
+code, plus literal fetch/Axios/common `apiClient` wrapper calls. Matching API
+calls are linked to generic route nodes when the method and path are literal.
 Unrecognized constructs remain source/module evidence rather than being
 presented as verified behavior.
 

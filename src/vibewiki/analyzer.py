@@ -45,7 +45,9 @@ _LANGUAGE_CLASS = re.compile(
 _CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
 _FETCH = re.compile(r"fetch\(\s*(['\"])(/[^'\"]+)\1")
 _GENERIC_API_CALL = re.compile(
-    r"\b(fetch|\$fetch|axios\.(?:get|post|put|patch|delete))\s*"
+    r"\b((?:fetch|\$fetch|axios\.(?:get|post|put|patch|delete)|"
+    r"(?:api|apiClient|client|http|httpClient|request)\."
+    r"(?:get|post|put|patch|delete)))\s*"
     r"\(\s*(['\"])([^'\"]+)\2"
 )
 _GENERIC_ROUTE_CALL = re.compile(
@@ -64,6 +66,10 @@ _GENERIC_HANDLE_FUNC = re.compile(
 _REACT_ROUTE = re.compile(
     r"<Route\b[^>]*\bpath\s*=\s*(['\"])(/[^'\"]*)\1"
 )
+_REACT_ROUTER_FACTORY = re.compile(
+    r"\b(?:createBrowserRouter|createHashRouter|createMemoryRouter)\s*\("
+)
+_REACT_ROUTER_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])(/[^'\"]*)\1")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
 _WRITE = re.compile(r"db\.(\w+)\.create\s*\(")
@@ -233,6 +239,17 @@ def _generic_route_matches(source: Source) -> list[dict[str, Any]]:
                     "path": match.group(2),
                 }
             )
+        if _REACT_ROUTER_FACTORY.search(source.text):
+            for match in _REACT_ROUTER_OBJECT.finditer(source.text):
+                matches.append(
+                    {
+                        "kind": "react_router_object",
+                        "handler": None,
+                        "method": "GET",
+                        "offset": match.start(),
+                        "path": match.group(2),
+                    }
+                )
     if source.path.endswith(".py"):
         for match in _GENERIC_ROUTE_DECORATOR.finditer(source.text):
             method = match.group(1).upper()
@@ -428,6 +445,18 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             )
 
     fact_keys = {item["semantic_key"] for item in facts}
+    generic_route_keys: dict[tuple[str, str], str] = {}
+    for item in facts:
+        if (
+            item["kind"] != "route"
+            or item["attributes"].get("framework") != "generic"
+        ):
+            continue
+        methods = item["attributes"].get("methods") or ["ANY"]
+        for method in methods:
+            generic_route_keys[(item["attributes"]["path"], method)] = item[
+                "semantic_key"
+            ]
     for source_path, route_key, handler_name, offset in generic_route_links:
         target = function_keys.get((source_path, handler_name))
         if target:
@@ -513,6 +542,24 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                         ],
                     )
                 )
+                target = generic_route_keys.get((endpoint, method))
+                if target is None:
+                    target = generic_route_keys.get((endpoint, "ANY"))
+                if target:
+                    relations.append(
+                        _relation(
+                            api_key,
+                            "calls",
+                            target,
+                            [
+                                _evidence(
+                                    path,
+                                    "api_call",
+                                    _line(source.text, match.start()),
+                                )
+                            ],
+                        )
+                    )
         if path in handler_keys:
             handler_key = handler_keys[path]
             post = next(

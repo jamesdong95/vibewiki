@@ -457,7 +457,7 @@ trả linked evidence; viewer inspector hiển thị status/error cho node đư�
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.11-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.12-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
@@ -467,6 +467,8 @@ trả linked evidence; viewer inspector hiển thị status/error cho node đư�
 - CI chạy unit/integration/golden tests trên macOS/Linux.
 - Demo repository không chứa secret và có screenshot/GIF tùy chọn.
 - Viewer có export ZIP thật cho wiki/graph/evidence mà không đóng gói source.
+- Generic analyzer có fixture Vite/React, nhận diện route-object của React Router
+  và nối các API wrapper literal vào generic route tương ứng.
 - Build/serve error messages có exit code ổn định.
 - Kiểm tra localhost binding và network-offline behavior.
 
