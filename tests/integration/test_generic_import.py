@@ -109,6 +109,54 @@ def test_next_pages_fixture_emits_page_and_api_routes(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_routes"),
+    [
+        (
+            "vue-router-demo",
+            {
+                "route:vue_router:src/router.js:GET:/",
+                "route:vue_router:src/router.js:GET:/settings",
+            },
+        ),
+        (
+            "sveltekit-demo",
+            {
+                "route:sveltekit:src/routes/+page.svelte:GET:/",
+                "route:sveltekit:src/routes/account/+page.svelte:GET:/account",
+                "route:sveltekit:src/routes/projects/[id]/+page.svelte:GET:/projects/:id",
+                "route:sveltekit:src/routes/api/health/+server.js:ANY:/api/health",
+            },
+        ),
+    ],
+)
+def test_frontend_framework_fixture_builds_routes_and_reverse_api_edge(
+    tmp_path: Path, fixture_name: str, expected_routes: set[str]
+) -> None:
+    source = Path(__file__).parents[1] / "fixtures" / fixture_name
+    root = tmp_path / fixture_name
+    shutil.copytree(source, root)
+    scan_repository(root, allow_generic=True)
+    build_repository(root)
+    artifact = json.loads((root / ".vibewiki/graph.json").read_text())
+
+    route_keys = {
+        item["semantic_key"] for item in artifact["facts"] if item["kind"] == "route"
+    }
+    assert expected_routes.issubset(route_keys)
+    assert any(
+        edge["source"] == "api_call:src/client.js:/api/health"
+        and edge["target"]
+        == (
+            "route:generic:server.js:GET:/api/health"
+            if fixture_name == "vue-router-demo"
+            else "route:sveltekit:src/routes/api/health/+server.js:ANY:/api/health"
+        )
+        and edge["relation"] == "calls"
+        for edge in artifact["relations"]
+    )
+
+
 def test_generic_multi_language_repository_keeps_files_and_symbols(
     tmp_path: Path,
 ) -> None:

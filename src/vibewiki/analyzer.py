@@ -70,7 +70,10 @@ _REACT_ROUTER_FACTORY = re.compile(
     r"\b(?:createBrowserRouter|createHashRouter|createMemoryRouter)\s*\("
 )
 _REACT_ROUTER_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])(/[^'\"]*)\1")
+_VUE_ROUTER_FACTORY = re.compile(r"\bcreateRouter\s*\(")
+_VUE_ROUTER_OBJECT = re.compile(r"\bpath\s*:\s*(['\"])(/[^'\"]*)\1")
 _PAGES_INTERNAL = {"_app", "_document", "_error"}
+_SVELTEKIT_ROUTE_SCRIPT_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
 _WRITE = re.compile(r"db\.(\w+)\.create\s*\(")
@@ -207,6 +210,63 @@ def _next_pages_route_matches(source: Source) -> list[dict[str, Any]]:
     ]
 
 
+def _sveltekit_route_for(path: str) -> str:
+    relative = path[len("src/routes/") :]
+    directory = relative.rsplit("/", 1)[0] if "/" in relative else ""
+    parts = [part for part in directory.split("/") if part and not part.startswith("(")]
+    route_parts = []
+    for part in parts:
+        if part.startswith("[...") and part.endswith("]"):
+            route_parts.append("*" + part[4:-1])
+        elif part.startswith("[") and part.endswith("]"):
+            route_parts.append(":" + part[1:-1])
+        else:
+            route_parts.append(part)
+    return "/" + "/".join(route_parts)
+
+
+def _sveltekit_route_matches(source: Source) -> list[dict[str, Any]]:
+    """Map SvelteKit filesystem routes to deterministic route facts."""
+    if not source.path.startswith("src/routes/"):
+        return []
+    relative = source.path[len("src/routes/") :]
+    leaf = relative.rsplit("/", 1)[-1]
+    if leaf == "+page.svelte":
+        return [
+            {
+                "kind": "sveltekit_page",
+                "framework": "sveltekit",
+                "handler": None,
+                "method": "GET",
+                "offset": 0,
+                "path": _sveltekit_route_for(source.path),
+            }
+        ]
+    if not any(
+        leaf == f"+server{suffix}" for suffix in _SVELTEKIT_ROUTE_SCRIPT_SUFFIXES
+    ):
+        return []
+    functions = _function_matches(source.path, source.text)
+    handler = next(
+        (
+            match.group(1)
+            for match in functions
+            if match.group(1).upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+        ),
+        None,
+    )
+    return [
+        {
+            "kind": "sveltekit_server",
+            "framework": "sveltekit",
+            "handler": handler,
+            "method": "ANY",
+            "offset": 0,
+            "path": _sveltekit_route_for(source.path),
+        }
+    ]
+
+
 def _resolve_import(source_path: str, imported: str, sources: set[str]) -> str | None:
     if not imported.startswith("."):
         return None
@@ -293,6 +353,19 @@ def _generic_route_matches(source: Source) -> list[dict[str, Any]]:
                         "path": match.group(2),
                     }
                 )
+        if _VUE_ROUTER_FACTORY.search(source.text):
+            for match in _VUE_ROUTER_OBJECT.finditer(source.text):
+                matches.append(
+                    {
+                        "kind": "vue_router_object",
+                        "framework": "vue_router",
+                        "handler": None,
+                        "method": "GET",
+                        "offset": match.start(),
+                        "path": match.group(2),
+                    }
+                )
+    matches.extend(_sveltekit_route_matches(source))
     if source.path.endswith(".py"):
         for match in _GENERIC_ROUTE_DECORATOR.finditer(source.text):
             method = match.group(1).upper()
@@ -496,7 +569,8 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     for item in facts:
         if (
             item["kind"] != "route"
-            or item["attributes"].get("framework") not in {"generic", "next_pages"}
+            or item["attributes"].get("framework")
+            not in {"generic", "next_pages", "vue_router", "sveltekit"}
         ):
             continue
         methods = item["attributes"].get("methods") or ["ANY"]

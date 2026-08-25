@@ -1,0 +1,5 @@
+{
+  "name": "sveltekit-demo",
+  "private": true,
+  "devDependencies": {"@sveltejs/kit": "latest", "svelte": "latest"}
+}

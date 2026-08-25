@@ -1,0 +1,6 @@
+{
+  "name": "vue-router-demo",
+  "private": true,
+  "scripts": {"dev": "vite"},
+  "dependencies": {"vue": "latest", "vue-router": "latest"}
+}

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-preview] - 2026-08-25
+
+### Added
+
+- Vue Router route-object facts from `createRouter` configurations in generic
+  Browse imports.
+- SvelteKit filesystem route facts for `src/routes/+page.svelte` and
+  `+server` endpoints, including dynamic segments and API-call reverse edges.
+- Permanent Vue Router and SvelteKit fixtures with deterministic route/path
+  evidence and regression coverage.
+
 ## [0.1.13-preview] - 2026-08-25
 
 ### Added
