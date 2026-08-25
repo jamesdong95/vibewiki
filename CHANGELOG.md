@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.26-preview] - 2026-08-25
+
+### Fixed
+
+- Added a workspace lock around artifact reads and workspace swaps in the
+  threaded local server.
+- Browse/import, rescan, Ask, Observe, export, and graph APIs now see a
+  consistent source root and artifact while another workspace is being loaded.
+- Added a concurrency regression that blocks API readers until an imported
+  workspace has a complete artifact.
+
 ## [0.1.25-preview] - 2026-08-25
 
 ### Changed

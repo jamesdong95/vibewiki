@@ -4,6 +4,7 @@ import json
 import shutil
 import threading
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from io import BytesIO
 from pathlib import Path
 from urllib.error import HTTPError
@@ -16,7 +17,7 @@ from vibewiki.errors import ErrorCode, VibeWikiError
 from vibewiki.importer import _multipart_files, cleanup_workspace
 from vibewiki.rescan import rescan_repository
 from vibewiki.scan import scan_repository
-from vibewiki.serve import create_server
+from vibewiki.serve import _artifact, create_server
 
 
 def _fixture_copy(tmp_path: Path) -> Path:
@@ -296,6 +297,67 @@ def test_serve_exposes_real_artifact_apis(
         exported_names = set(exported.namelist())
         assert "vibewiki-export/runtime.json" in exported_names
         assert "vibewiki-export/runtime-screenshots/route-01.png" in exported_names
+
+
+def test_workspace_swap_blocks_api_readers_until_artifact_is_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _fixture_copy(tmp_path)
+    source = tmp_path / "local-path-source"
+    (source / "src").mkdir(parents=True)
+    (source / "src/main.js").write_text(
+        "export function start() { return true; }\n", encoding="utf-8"
+    )
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_artifact(path: Path) -> dict[str, object]:
+        if Path(path).name == source.name:
+            entered.set()
+            assert release.wait(timeout=3)
+        return _artifact(path)
+
+    monkeypatch.setattr("vibewiki.serve._artifact", slow_artifact)
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def import_path() -> dict:
+        request = Request(
+            f"{base}/api/import-path",
+            data=json.dumps({"path": str(source)}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(request) as response:
+            return json.load(response)
+
+    def read_summary() -> dict:
+        with urlopen(f"{base}/api/summary") as response:
+            return json.load(response)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            import_future = pool.submit(import_path)
+            assert entered.wait(timeout=3)
+            summary_future = pool.submit(read_summary)
+            with pytest.raises(TimeoutError):
+                summary_future.result(timeout=0.15)
+            release.set()
+            imported = import_future.result(timeout=5)
+            summary = summary_future.result(timeout=5)
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert imported["import_mode"] == "local-path"
+    assert summary["project"] == "local-path-source"
+    assert summary["counts"]["scanned_files"] == 1
 
 
 def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:

@@ -89,6 +89,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   chỉ rescan khi người dùng bấm xác nhận.
 - Placeholder Share đã được thay bằng Copy local link, có clipboard fallback và
   thông báo rõ link chỉ hoạt động khi local server còn chạy.
+- Local server khóa workspace swap/read trong lúc Browse, rescan, Ask hoặc
+  Observe để tránh graph và source root bị lệch khi request chạy đồng thời.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

@@ -671,9 +671,11 @@ def create_server(
             parsed = urlparse(self.path)
             if parsed.path == "/api/export":
                 try:
-                    body, filename = _export_archive(
-                        self.server.workspace_root, self.server.workspace_artifact
-                    )
+                    with self.server.workspace_lock:
+                        body, filename = _export_archive(
+                            self.server.workspace_root,
+                            self.server.workspace_artifact,
+                        )
                 except (OSError, ValueError, zipfile.BadZipFile) as error:
                     self._write_json(
                         500,
@@ -694,13 +696,14 @@ def create_server(
                     if parsed.path == "/api/llm/status":
                         payload = llm_status(self.server.llm_settings)
                     else:
-                        payload = api_payload(
-                            self.server.workspace_root,
-                            self.server.workspace_artifact,
-                            parsed.path,
-                            parse_qs(parsed.query).get("q", [""])[0],
-                            parse_qs(parsed.query),
-                        )
+                        with self.server.workspace_lock:
+                            payload = api_payload(
+                                self.server.workspace_root,
+                                self.server.workspace_artifact,
+                                parsed.path,
+                                parse_qs(parsed.query).get("q", [""])[0],
+                                parse_qs(parsed.query),
+                            )
                 except KeyError:
                     self.send_error(404, "not found")
                     return
@@ -750,12 +753,13 @@ def create_server(
                             ErrorCode.INVALID_OUTPUT,
                             "runtime observation mode must be http or browser",
                         )
-                    result = observe_repository(
-                        self.server.workspace_root,
-                        target.strip(),
-                        mode=mode,
-                        screenshots=bool(payload.get("screenshots", False)),
-                    )
+                    with self.server.workspace_lock:
+                        result = observe_repository(
+                            self.server.workspace_root,
+                            target.strip(),
+                            mode=mode,
+                            screenshots=bool(payload.get("screenshots", False)),
+                        )
                     self._write_json(200, result)
                 except VibeWikiError as error:
                     self._write_json(
@@ -792,12 +796,13 @@ def create_server(
                             "local repository path is required",
                         )
                     imported = import_local_workspace(payload["path"].strip())
-                    old_workspace = self.server.imported_workspace
-                    self.server.workspace_root = imported.root
-                    self.server.workspace_artifact = _artifact(imported.root)
-                    self.server.imported_workspace = imported
-                    if old_workspace is not None:
-                        cleanup_workspace(old_workspace)
+                    with self.server.workspace_lock:
+                        old_workspace = self.server.imported_workspace
+                        self.server.workspace_root = imported.root
+                        self.server.workspace_artifact = _artifact(imported.root)
+                        self.server.imported_workspace = imported
+                        if old_workspace is not None:
+                            cleanup_workspace(old_workspace)
                     self._write_json(
                         200, {**imported.build_summary, "import_mode": "local-path"}
                     )
@@ -840,10 +845,11 @@ def create_server(
                             "a workspace rescan is already in progress",
                         )
                     try:
-                        result = rescan_repository(self.server.workspace_root)
-                        self.server.workspace_artifact = _artifact(
-                            self.server.workspace_root
-                        )
+                        with self.server.workspace_lock:
+                            result = rescan_repository(self.server.workspace_root)
+                            self.server.workspace_artifact = _artifact(
+                                self.server.workspace_root
+                            )
                     finally:
                         self.server.rescan_lock.release()
                     self._write_json(200, result)
@@ -909,12 +915,13 @@ def create_server(
                         raise VibeWikiError(
                             ErrorCode.INVALID_OUTPUT, "question payload is invalid"
                         )
-                    result = ask_repository(
-                        self.server.workspace_root,
-                        self.server.workspace_artifact,
-                        payload,
-                        getattr(self.server, "llm_settings", None),
-                    )
+                    with self.server.workspace_lock:
+                        result = ask_repository(
+                            self.server.workspace_root,
+                            self.server.workspace_artifact,
+                            payload,
+                            getattr(self.server, "llm_settings", None),
+                        )
                     self._write_json(200, result)
                 except VibeWikiError as error:
                     self._write_json(
@@ -945,12 +952,13 @@ def create_server(
                 imported = import_uploaded_workspace(
                     self.headers.get("Content-Type", ""), body
                 )
-                old_workspace = self.server.imported_workspace
-                self.server.workspace_root = imported.root
-                self.server.workspace_artifact = _artifact(imported.root)
-                self.server.imported_workspace = imported
-                if old_workspace is not None:
-                    cleanup_workspace(old_workspace)
+                with self.server.workspace_lock:
+                    old_workspace = self.server.imported_workspace
+                    self.server.workspace_root = imported.root
+                    self.server.workspace_artifact = _artifact(imported.root)
+                    self.server.imported_workspace = imported
+                    if old_workspace is not None:
+                        cleanup_workspace(old_workspace)
                 payload = imported.build_summary
                 self._write_json(200, payload)
             except VibeWikiError as error:
@@ -985,6 +993,7 @@ def create_server(
     server.llm_settings: LLMSettings | None = None
     server.imported_workspace: ImportedWorkspace | None = None
     server.local_path_import_allowed = host in {"127.0.0.1", "localhost", "::1"}
+    server.workspace_lock = threading.RLock()
     server.rescan_lock = threading.Lock()
     server.auto_analyzed = auto_analyzed
     return server
