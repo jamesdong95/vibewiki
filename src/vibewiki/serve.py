@@ -37,7 +37,13 @@ from .llm import (
 )
 from .observe import observe_repository
 from .rescan import rescan_repository
-from .reviews import REVIEWS_FILENAME, load_reviews, review_counts, set_review
+from .reviews import (
+    REVIEWS_FILENAME,
+    load_reviews,
+    review_counts,
+    set_review,
+    set_reviews,
+)
 from .runtime_links import attach_runtime_links
 
 
@@ -766,6 +772,52 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == "/api/reviews/batch":
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "review state is available only on a loopback server",
+                        )
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "review batch payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "review batch payload is invalid",
+                        )
+                    with self.server.workspace_lock:
+                        reviews, state = set_reviews(
+                            self.server.workspace_root,
+                            payload.get("items"),
+                        )
+                    self._write_json(
+                        200,
+                        {
+                            "counts": review_counts(state),
+                            "reviews": reviews,
+                            "state": state,
+                            "saved": True,
+                        },
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422,
+                        {"error": error.code.value, "message": error.message},
+                    )
+                except (OSError, UnicodeDecodeError, ValueError, TypeError) as error:
+                    self._write_json(
+                        400,
+                        {"error": "invalid_output", "message": str(error)},
+                    )
+                return
             if parsed.path == "/api/reviews":
                 try:
                     if not self.server.local_path_import_allowed:

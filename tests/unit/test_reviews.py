@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from vibewiki.errors import ErrorCode, VibeWikiError
-from vibewiki.reviews import load_reviews, review_counts, set_review
+from vibewiki.reviews import load_reviews, review_counts, set_review, set_reviews
 
 
 def test_review_state_round_trips_atomically_and_counts_statuses(
@@ -64,3 +64,32 @@ def test_review_state_rejects_corrupt_artifact(tmp_path: Path) -> None:
 
     with pytest.raises(VibeWikiError, match="reviews artifact is invalid"):
         load_reviews(tmp_path)
+
+
+def test_review_batch_is_atomic_and_preserves_existing_notes(tmp_path: Path) -> None:
+    set_review(tmp_path, "unknown:first", "reviewed", "Keep this note.")
+
+    updated, state = set_reviews(
+        tmp_path,
+        [
+            {"subject": "unknown:first", "status": "open"},
+            {"subject": "unknown:second", "status": "reviewed"},
+        ],
+    )
+
+    assert [item["subject"] for item in updated] == [
+        "unknown:first",
+        "unknown:second",
+    ]
+    assert state["items"]["unknown:first"]["note"] == "Keep this note."
+    assert review_counts(state) == {"open": 1, "reviewed": 1, "total": 2}
+
+    with pytest.raises(VibeWikiError, match="duplicate subject"):
+        set_reviews(
+            tmp_path,
+            [
+                {"subject": "unknown:third", "status": "reviewed"},
+                {"subject": "unknown:third", "status": "open"},
+            ],
+        )
+    assert "unknown:third" not in load_reviews(tmp_path)["items"]

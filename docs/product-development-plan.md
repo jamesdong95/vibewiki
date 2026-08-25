@@ -136,6 +136,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   deterministic graph.
 - Unknowns now have a selectable Open/All queue so a repository with multiple
   findings can be triaged without losing the source-linked inspector context.
+- Bulk review actions now validate and persist up to 100 selected findings in
+  one atomic local batch, preserving existing notes and preventing partial
+  updates.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

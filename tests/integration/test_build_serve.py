@@ -146,6 +146,23 @@ def test_serve_exposes_real_artifact_apis(
             saved_review = json.load(response)
         with urlopen(f"{base}/api/reviews") as response:
             persisted_reviews = json.load(response)
+        batch_request = Request(
+            f"{base}/api/reviews/batch",
+            data=json.dumps(
+                {
+                    "items": [
+                        {"subject": "unknown:missing-test", "status": "open"},
+                        {"subject": "unknown:second", "status": "reviewed"},
+                    ]
+                }
+            ).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(batch_request) as response:
+            batch_review = json.load(response)
+        with urlopen(f"{base}/api/reviews") as response:
+            batch_persisted = json.load(response)
         with urlopen(f"{base}/api/export") as response:
             export_headers = dict(response.headers)
             export_bytes = response.read()
@@ -298,6 +315,10 @@ def test_serve_exposes_real_artifact_apis(
     assert persisted_reviews["items"]["unknown:missing-test"]["note"] == (
         "Confirmed during the local review pass."
     )
+    assert batch_review["saved"] is True
+    assert batch_review["counts"] == {"open": 1, "reviewed": 1, "total": 2}
+    assert batch_persisted["items"]["unknown:missing-test"]["status"] == "open"
+    assert batch_persisted["items"]["unknown:second"]["status"] == "reviewed"
     assert {item["path"] for item in files["files"]} >= {
         "app/page.tsx",
         "app/api/users/route.ts",
@@ -554,6 +575,9 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "function renderUnknownQueue" in html
     assert "data-unknown-filter" in html
     assert "data-unknown-subject" in html
+    assert "function saveReviewBatch" in html
+    assert "data-unknown-select" in html
+    assert "/api/reviews/batch" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:

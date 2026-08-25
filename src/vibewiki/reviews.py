@@ -17,6 +17,7 @@ from .errors import ErrorCode, VibeWikiError
 REVIEWS_FILENAME = "reviews.json"
 REVIEWS_SCHEMA_VERSION = 1
 MAX_REVIEW_ITEMS = 5_000
+MAX_REVIEW_BATCH_ITEMS = 100
 MAX_REVIEW_SUBJECT_CHARS = 256
 MAX_REVIEW_NOTE_CHARS = 2_000
 REVIEW_STATUSES = frozenset({"open", "reviewed"})
@@ -152,31 +153,59 @@ def set_review(
     note: Any = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     """Set or reopen one review item and return the item plus full state."""
+    item: dict[str, Any] = {"status": status, "subject": subject}
+    if note is not None:
+        item["note"] = note
+    reviews, value = set_reviews(root, [item])
+    return reviews[0], value
 
+
+def set_reviews(
+    root: Path,
+    items: Any,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Atomically set a bounded batch of review items."""
+
+    if not isinstance(items, list) or not items:
+        raise _invalid("batch items are required")
+    if len(items) > MAX_REVIEW_BATCH_ITEMS:
+        raise _invalid(f"batch is limited to {MAX_REVIEW_BATCH_ITEMS} items")
     value = load_reviews(root)
-    clean_subject = _validate_subject(subject)
-    if status not in REVIEW_STATUSES:
-        raise _invalid("review status must be open or reviewed")
-    existing = value["items"].get(clean_subject)
-    clean_note = (
-        _validate_note(note)
-        if note is not None
-        else (existing.get("note", "") if existing else "")
-    )
+    prepared: list[dict[str, str]] = []
+    subjects: set[str] = set()
     now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
         "+00:00", "Z"
     )
-    review = {
-        "note": clean_note,
-        "status": status,
-        "subject": clean_subject,
-        "updated_at": now,
-    }
-    if existing is None and len(value["items"]) >= MAX_REVIEW_ITEMS:
+    for item in items:
+        if not isinstance(item, dict):
+            raise _invalid("batch item is invalid")
+        clean_subject = _validate_subject(item.get("subject"))
+        status = item.get("status")
+        if not isinstance(status, str) or status not in REVIEW_STATUSES:
+            raise _invalid("review status must be open or reviewed")
+        if clean_subject in subjects:
+            raise _invalid("batch contains a duplicate subject")
+        subjects.add(clean_subject)
+        existing = value["items"].get(clean_subject)
+        clean_note = (
+            _validate_note(item["note"])
+            if "note" in item
+            else (existing.get("note", "") if existing else "")
+        )
+        prepared.append(
+            {
+                "note": clean_note,
+                "status": status,
+                "subject": clean_subject,
+                "updated_at": now,
+            }
+        )
+    new_subjects = subjects - value["items"].keys()
+    if len(value["items"]) + len(new_subjects) > MAX_REVIEW_ITEMS:
         raise _invalid(f"review queue is limited to {MAX_REVIEW_ITEMS} items")
-    value["items"][clean_subject] = review
+    value["items"].update({item["subject"]: item for item in prepared})
     _write_reviews(root, value)
-    return review, value
+    return prepared, value
 
 
 def review_counts(value: dict[str, Any]) -> dict[str, int]:
@@ -190,6 +219,7 @@ def review_counts(value: dict[str, Any]) -> dict[str, int]:
 
 __all__ = [
     "MAX_REVIEW_ITEMS",
+    "MAX_REVIEW_BATCH_ITEMS",
     "MAX_REVIEW_NOTE_CHARS",
     "MAX_REVIEW_SUBJECT_CHARS",
     "REVIEWS_FILENAME",
@@ -197,4 +227,5 @@ __all__ = [
     "load_reviews",
     "review_counts",
     "set_review",
+    "set_reviews",
 ]
