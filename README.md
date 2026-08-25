@@ -102,6 +102,20 @@ uv run vibewiki build /path/to/next-app
 uv run vibewiki serve /path/to/next-app --port 4173
 ```
 
+For a non-Next repository, opt into the conservative generic analyzer:
+
+```bash
+uv run vibewiki scan /path/to/repository --generic
+uv run vibewiki build /path/to/repository
+uv run vibewiki serve /path/to/repository --port 4173
+```
+
+Generic mode keeps every supported file in inventory and recognizes common
+route registrations in Express/Fastify/Hono-style JavaScript, React Router,
+Flask/FastAPI, and Go `HandleFunc` code, plus literal fetch/Axios API calls.
+Unrecognized constructs remain source/module evidence rather than being
+presented as verified behavior.
+
 Open `http://127.0.0.1:4173/` to inspect the generated graph, evidence and
 unknowns. By default the server binds to loopback and does not contact
 external services.

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.8-preview] - 2026-08-25
+
+### Added
+
+- `vibewiki scan --generic` for non-Next repositories.
+- Conservative route facts for Express/Fastify/Hono-style JavaScript,
+  React Router JSX, Flask/FastAPI decorators, and Go `HandleFunc` calls.
+- Generic `fetch`, `$fetch`, and Axios API-call facts with deterministic source
+  evidence, while the existing Next.js golden output remains unchanged.
+
 ## [0.1.7-preview] - 2026-08-25
 
 ### Fixed

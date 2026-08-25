@@ -53,6 +53,13 @@ The MVP commits to this narrow stack:
 A fixture or repository may contain other files, but only the supported
 patterns are candidates for verified MVP facts.
 
+The generic analyzer expansion in `0.1.8-preview` adds conservative route and
+API facts for common Express/Fastify/Hono-style JavaScript, React Router JSX,
+Flask/FastAPI decorators, and Go `HandleFunc` registrations when the user opts
+into `scan --generic`. It is pattern-based rather than a language compiler:
+unrecognized constructs remain inventory/module evidence and are never promoted
+to verified behavior by filename alone.
+
 ### Unsupported behavior
 
 When the repository is outside this supported surface, or a construct cannot be

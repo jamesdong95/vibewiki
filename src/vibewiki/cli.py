@@ -37,6 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="scan a supported repository locally and offline",
     )
     scan_parser.add_argument("repository", help="repository directory to scan")
+    scan_parser.add_argument(
+        "--generic",
+        action="store_true",
+        help="include generic source/config/docs and nested repository layouts",
+    )
     build_parser = commands.add_parser(
         "build",
         help="build deterministic facts and wiki artifacts from a scan",
@@ -110,7 +115,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     """
     arguments = build_parser().parse_args(argv)
     if arguments.command == "scan":
-        summary = scan_repository(arguments.repository)
+        summary = scan_repository(arguments.repository, allow_generic=arguments.generic)
         print(canonical_json(summary), end="")
     elif arguments.command == "build":
         print(canonical_json(build_repository(arguments.repository)), end="")

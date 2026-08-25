@@ -1,4 +1,4 @@
-"""Small deterministic static analyzer for the supported M0 fixture surface."""
+"""Deterministic static analyzer with Next and conservative generic adapters."""
 
 from __future__ import annotations
 
@@ -44,6 +44,26 @@ _LANGUAGE_CLASS = re.compile(
 )
 _CALL = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
 _FETCH = re.compile(r"fetch\(\s*(['\"])(/[^'\"]+)\1")
+_GENERIC_API_CALL = re.compile(
+    r"\b(fetch|\$fetch|axios\.(?:get|post|put|patch|delete))\s*"
+    r"\(\s*(['\"])([^'\"]+)\2"
+)
+_GENERIC_ROUTE_CALL = re.compile(
+    r"\b(?:app|router|server|fastify|api|http|r|mux)\."
+    r"(get|post|put|patch|delete|options|head|route)\s*"
+    r"\(\s*(['\"])(/[^'\"]*)\2(?:\s*,\s*([A-Za-z_]\w*))?"
+)
+_GENERIC_ROUTE_DECORATOR = re.compile(
+    r"@(?:app|router|api)\.(get|post|put|patch|delete|route)\s*"
+    r"\(\s*(['\"])(/[^'\"]*)\2"
+)
+_GENERIC_HANDLE_FUNC = re.compile(
+    r"\b(?:http|mux|router)\.HandleFunc\s*"
+    r"\(\s*(['\"])(/[^'\"]*)\1(?:\s*,\s*([A-Za-z_]\w*))?"
+)
+_REACT_ROUTE = re.compile(
+    r"<Route\b[^>]*\bpath\s*=\s*(['\"])(/[^'\"]*)\1"
+)
 _DESCRIBE = re.compile(r"describe\(\s*(['\"])(.*?)\1")
 _MODEL = re.compile(r"^[ \t]*model\s+(\w+)\s*\{", re.MULTILINE)
 _WRITE = re.compile(r"db\.(\w+)\.create\s*\(")
@@ -188,6 +208,69 @@ def _function_matches(path: str, text: str) -> list[re.Match[str]]:
     return matches
 
 
+def _generic_route_matches(source: Source) -> list[dict[str, Any]]:
+    """Find conservative route registrations outside Next App Router files."""
+    matches: list[dict[str, Any]] = []
+    if source.path.endswith((".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")):
+        for match in _GENERIC_ROUTE_CALL.finditer(source.text):
+            method = match.group(1).upper()
+            matches.append(
+                {
+                    "kind": "route_registration",
+                    "handler": match.group(4),
+                    "method": "ANY" if method == "ROUTE" else method,
+                    "offset": match.start(),
+                    "path": match.group(3),
+                }
+            )
+        for match in _REACT_ROUTE.finditer(source.text):
+            matches.append(
+                {
+                    "kind": "react_route",
+                    "handler": None,
+                    "method": "GET",
+                    "offset": match.start(),
+                    "path": match.group(2),
+                }
+            )
+    if source.path.endswith(".py"):
+        for match in _GENERIC_ROUTE_DECORATOR.finditer(source.text):
+            method = match.group(1).upper()
+            matches.append(
+                {
+                    "kind": "route_decorator",
+                    "handler": None,
+                    "method": "ANY" if method == "ROUTE" else method,
+                    "offset": match.start(),
+                    "path": match.group(3),
+                }
+            )
+    if source.path.endswith(".go"):
+        for match in _GENERIC_HANDLE_FUNC.finditer(source.text):
+            matches.append(
+                {
+                    "kind": "route_registration",
+                    "handler": match.group(3),
+                    "method": "ANY",
+                    "offset": match.start(),
+                    "path": match.group(2),
+                }
+            )
+    for item in matches:
+        if item["handler"] or item["kind"] == "react_route":
+            continue
+        next_function = next(
+            (
+                match.group(1)
+                for match in _function_matches(source.path, source.text)
+                if match.start() > item["offset"]
+            ),
+            None,
+        )
+        item["handler"] = next_function
+    return sorted(matches, key=lambda item: (item["offset"], item["path"]))
+
+
 def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     sources = _load_sources(root, manifest)
     source_paths = set(sources)
@@ -200,6 +283,8 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     model_keys: dict[str, str] = {}
     model_evidence: dict[str, dict[str, Any]] = {}
     test_imports: dict[str, list[dict[str, Any]]] = {}
+    api_call_keys: set[str] = set()
+    generic_route_links: list[tuple[str, str, str, int]] = []
 
     for path in sorted(sources):
         source = sources[path]
@@ -247,6 +332,35 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                 )
             )
         elif path.endswith(_ANALYZABLE_SUFFIXES) and not path.startswith("tests/"):
+            for route in _generic_route_matches(source):
+                method = route["method"]
+                key = f"route:generic:{path}:{method}:{route['path']}"
+                if key in {item["semantic_key"] for item in facts}:
+                    continue
+                methods = [] if method == "ANY" else [method]
+                facts.append(
+                    _fact(
+                        "route",
+                        key,
+                        {
+                            "file": path,
+                            "framework": "generic",
+                            "methods": methods,
+                            "path": route["path"],
+                        },
+                        [
+                            _evidence(
+                                path,
+                                route["kind"],
+                                _line(source.text, route["offset"]),
+                            )
+                        ],
+                    )
+                )
+                if route["handler"]:
+                    generic_route_links.append(
+                        (path, key, route["handler"], route["offset"])
+                    )
             for match in _function_matches(path, source.text):
                 name = match.group(1)
                 key = f"function:{path}:{name}"
@@ -314,6 +428,23 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             )
 
     fact_keys = {item["semantic_key"] for item in facts}
+    for source_path, route_key, handler_name, offset in generic_route_links:
+        target = function_keys.get((source_path, handler_name))
+        if target:
+            relations.append(
+                _relation(
+                    route_key,
+                    "calls",
+                    target,
+                    [
+                        _evidence(
+                            source_path,
+                            "route_handler",
+                            _line(sources[source_path].text, offset),
+                        )
+                    ],
+                )
+            )
     for path, source in sorted(sources.items()):
         if path in page_keys:
             page_key = page_keys[path]
@@ -325,10 +456,12 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                 )
                 method = method_match.group(1) if method_match else "GET"
                 line = _line(source.text, match.start())
+                api_key = f"api_call:{path}:{endpoint}"
+                api_call_keys.add(api_key)
                 facts.append(
                     _fact(
                         "api_call",
-                        f"api_call:{path}:{endpoint}",
+                        api_key,
                         {"file": path, "method": method, "path": endpoint},
                         [_evidence(path, "api_call", line)],
                     )
@@ -343,6 +476,43 @@ def analyze_repository(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
                             [_evidence(path, "api_call", line)],
                         )
                     )
+        elif (
+            path.endswith(_ANALYZABLE_SUFFIXES)
+            and not path.startswith("tests/")
+        ):
+            for match in _GENERIC_API_CALL.finditer(source.text):
+                endpoint = match.group(3)
+                if not endpoint.startswith(("/", "http://", "https://")):
+                    continue
+                call_name = match.group(1)
+                method = (
+                    "GET"
+                    if call_name in {"fetch", "$fetch"}
+                    else call_name.rsplit(".", 1)[-1].upper()
+                )
+                method_match = re.search(
+                    r"method\s*:\s*[\"'](GET|POST|PUT|PATCH|DELETE)[\"']",
+                    source.text[match.start() : match.start() + 400],
+                )
+                method = method_match.group(1) if method_match else method
+                api_key = f"api_call:{path}:{endpoint}"
+                if api_key in api_call_keys:
+                    continue
+                api_call_keys.add(api_key)
+                facts.append(
+                    _fact(
+                        "api_call",
+                        api_key,
+                        {"file": path, "method": method, "path": endpoint},
+                        [
+                            _evidence(
+                                path,
+                                "api_call",
+                                _line(source.text, match.start()),
+                            )
+                        ],
+                    )
+                )
         if path in handler_keys:
             handler_key = handler_keys[path]
             post = next(

@@ -88,6 +88,62 @@ def test_generic_multi_language_repository_keeps_files_and_symbols(
     assert {"README.md", "config.yaml"}.issubset(inventory_paths)
 
 
+def test_generic_framework_routes_and_api_calls_build_reverse_graph(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "server.js").write_text(
+        "const express = require('express');\n"
+        "const app = express();\n"
+        "app.get('/health', health);\n"
+        "app.post('/api/items', createItem);\n"
+        "function health(req, res) { res.send('ok'); }\n"
+        "function createItem(req, res) { res.json({ok: true}); }\n"
+    )
+    (tmp_path / "src/router.jsx").write_text(
+        "import { Route } from 'react-router-dom';\n"
+        "export function RouterView() { return "
+        "<Route path='/dashboard' element={<div />} />; }\n"
+    )
+    (tmp_path / "src/client.js").write_text(
+        "export async function loadItems() { return fetch('/api/items'); }\n"
+    )
+    (tmp_path / "api.py").write_text(
+        "@app.get('/users')\n"
+        "def users():\n"
+        "    return []\n"
+    )
+    (tmp_path / "main.go").write_text(
+        'package main\nimport "net/http"\n'
+        'func main() { http.HandleFunc("/healthz", health) }\n'
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    artifact = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    route_keys = {
+        item["semantic_key"] for item in artifact["facts"] if item["kind"] == "route"
+    }
+    api_keys = {
+        item["semantic_key"]
+        for item in artifact["facts"]
+        if item["kind"] == "api_call"
+    }
+    assert "route:generic:server.js:GET:/health" in route_keys
+    assert "route:generic:server.js:POST:/api/items" in route_keys
+    assert "route:generic:src/router.jsx:GET:/dashboard" in route_keys
+    assert "route:generic:api.py:GET:/users" in route_keys
+    assert "route:generic:main.go:ANY:/healthz" in route_keys
+    assert "api_call:src/client.js:/api/items" in api_keys
+    assert any(
+        edge["source"] == "route:generic:server.js:GET:/health"
+        and edge["target"] == "function:server.js:health"
+        and edge["relation"] == "calls"
+        for edge in artifact["relations"]
+    )
+
+
 def test_importer_selects_nested_web_package_deterministically() -> None:
     content_type, body = _multipart(
         {

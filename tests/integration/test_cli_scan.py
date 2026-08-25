@@ -53,6 +53,20 @@ def test_cli_scan_uses_stable_unsupported_stack_exit_code(
     assert not (tmp_path / ".vibewiki").exists()
 
 
+def test_cli_scan_generic_accepts_non_next_repository(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/main.py").write_text("def main():\n    return True\n")
+
+    assert main(["scan", str(tmp_path), "--generic"]) == 0
+    summary = json.loads(capsys.readouterr().out)
+
+    assert summary["status"] == "ok"
+    assert summary["counts"]["scanned_files"] == 1
+
+
 def test_cli_history_returns_runs_for_a_source_path(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
