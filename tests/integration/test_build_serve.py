@@ -389,6 +389,42 @@ def test_serve_configures_product_intent_from_local_ui(tmp_path: Path) -> None:
         "observed": 1,
         "partial": 0,
     }
+
+
+def test_nodes_expose_multiple_unknowns_for_review_queue(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    (root / "product.seed.yaml").write_text(
+        "product: Review queue demo\n"
+        "flows:\n"
+        "  - id: coverage\n"
+        "    name: Coverage\n"
+        "    expected:\n"
+        "      - route: /missing\n"
+        "      - api: /api/missing\n",
+        encoding="utf-8",
+    )
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}/api/nodes"
+        ) as response:
+            payload = json.load(response)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    subjects = {item["subject"] for item in payload["unknowns"]}
+    assert {
+        "intent:coverage:route:/missing",
+        "intent:coverage:api:/api/missing",
+    } <= subjects
+
+
 def test_workspace_swap_blocks_api_readers_until_artifact_is_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -515,6 +551,9 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="review-reopen"' in html
     assert "fetch('/api/reviews'" in html
     assert "function saveReview" in html
+    assert "function renderUnknownQueue" in html
+    assert "data-unknown-filter" in html
+    assert "data-unknown-subject" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:

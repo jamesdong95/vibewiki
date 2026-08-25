@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.41-preview] - 2026-08-25
+
+### Added
+
+- Unknowns now render as a selectable review queue instead of exposing only
+  the first finding.
+- Open/All filters show the exact local review status for every finding, while
+  selecting a row keeps its evidence and review actions in the inspector.
+- Regression coverage includes a fixture with multiple intent gaps and a real
+  browser smoke for selection, review, and filtering.
+
 ## [0.1.40-preview] - 2026-08-25
 
 ### Added

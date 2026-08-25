@@ -134,6 +134,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   `.vibewiki/reviews.json`; Unknowns and change subjects can be marked
   `reviewed`, annotated, and reopened from the inspector without mutating the
   deterministic graph.
+- Unknowns now have a selectable Open/All queue so a repository with multiple
+  findings can be triaged without losing the source-linked inspector context.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 

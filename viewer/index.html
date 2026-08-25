@@ -332,6 +332,22 @@
       background-size: 20px 20px;
       mask-image: linear-gradient(to bottom, black, transparent 92%);
     }
+    .unknown-queue { position: absolute; z-index: 2; inset: 59px 18px 16px; overflow: auto; padding: 13px 2px 4px; }
+    .unknown-queue-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .unknown-queue-title { color: var(--ink); font-size: 13px; font-weight: 650; }
+    .unknown-queue-copy { margin-top: 4px; color: var(--muted-2); font: 9px/1.45 var(--mono); }
+    .unknown-queue-filters { display: flex; flex: 0 0 auto; gap: 5px; }
+    .unknown-filter { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: rgba(13,17,18,0.78); cursor: pointer; font: 9px var(--mono); }
+    .unknown-filter:hover, .unknown-filter.active { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
+    .unknown-queue-list { display: grid; gap: 8px; }
+    .unknown-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink-soft); background: rgba(16,22,24,0.88); cursor: pointer; text-align: left; }
+    .unknown-item:hover, .unknown-item.selected { border-color: rgba(216,249,139,0.5); background: rgba(216,249,139,0.08); }
+    .unknown-item-subject { overflow: hidden; color: var(--ink); font: 11px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .unknown-item-reason { overflow: hidden; margin-top: 5px; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .unknown-item-meta { display: flex; align-items: center; gap: 8px; color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; }
+    .unknown-item-status { color: var(--orange); }
+    .unknown-item-status.reviewed { color: var(--lime); }
+    .unknown-queue-empty { padding: 28px 16px; border: 1px dashed var(--line-strong); border-radius: 9px; color: var(--muted); font: 10px/1.5 var(--mono); text-align: center; }
     .graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.9; }
     .graph-lines line { fill: none; stroke: rgba(166,233,239,0.34); stroke-width: 1.4; stroke-dasharray: 4 5; }
     .graph-lines line.active-line { stroke: rgba(216,249,139,0.78); stroke-width: 1.8; stroke-dasharray: none; }
@@ -2287,7 +2303,15 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
 
         const canvas = document.getElementById('graph-canvas');
         const nodeList = () => [...canvas.querySelectorAll('.node[data-real-node]')];
-        const state = { view: 'Product map', tab: 'Overview', query: '', scope: '', selected: nodes[0]?.id };
+        const state = {
+          view: 'Product map',
+          tab: 'Overview',
+          query: '',
+          scope: '',
+          selected: nodes[0]?.id,
+          selectedUnknown: unknowns[0]?.subject,
+          unknownFilter: 'open'
+        };
         let currentReviewSubject = '';
         const viewFilters = {
           'Product map': node => true,
@@ -2365,7 +2389,13 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
             if (!response.ok) throw new Error(payload.message || 'Could not save local review state.');
             reviewItems = payload.reviews?.items || reviewItems;
             renderReviewControls(subject, status);
-            if (state.view === 'Scan history') renderHistoryInspector();
+            if (state.view === 'Unknowns') {
+              state.selectedUnknown = subject;
+              if (status === 'reviewed') state.unknownFilter = 'all';
+              renderState();
+            } else if (state.view === 'Scan history') {
+              renderHistoryInspector();
+            }
             showToast(status === 'reviewed' ? 'Marked reviewed locally.' : 'Review reopened locally.');
           } catch (error) {
             showToast(error.message || 'Could not save local review state.');
@@ -2475,8 +2505,55 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           renderReverseGraph(id);
         }
 
-        function renderUnknownInspector() {
-          const unknown = unknowns[0];
+        function unknownQueueItems() {
+          const filtered = unknowns.filter(item => {
+            const review = reviewFor(item.subject);
+            const matchesStatus = state.unknownFilter === 'all' || review?.status !== 'reviewed';
+            const haystack = `${item.subject || ''} ${item.reason || ''} ${item.type || ''}`.toLowerCase();
+            return matchesStatus && (!state.query || haystack.includes(state.query));
+          });
+          return filtered;
+        }
+
+        function renderUnknownQueue(items) {
+          const reviewedCount = unknowns.filter(item => reviewFor(item.subject)?.status === 'reviewed').length;
+          const openCount = unknowns.length - reviewedCount;
+          canvas.innerHTML = `<div class="unknown-queue">
+            <div class="unknown-queue-header">
+              <div><div class="unknown-queue-title">Review queue</div><div class="unknown-queue-copy">${openCount} open · ${reviewedCount} reviewed · ${unknowns.length} total findings</div></div>
+              <div class="unknown-queue-filters" role="group" aria-label="Unknown review filter">
+                <button class="unknown-filter ${state.unknownFilter === 'open' ? 'active' : ''}" type="button" data-unknown-filter="open">Open</button>
+                <button class="unknown-filter ${state.unknownFilter === 'all' ? 'active' : ''}" type="button" data-unknown-filter="all">All</button>
+              </div>
+            </div>
+            <div class="unknown-queue-list">${items.length ? items.map(item => {
+              const review = reviewFor(item.subject);
+              const status = review?.status || 'open';
+              const selected = item.subject === state.selectedUnknown ? ' selected' : '';
+              return `<button class="unknown-item${selected}" type="button" data-unknown-subject="${escapeHtml(item.subject || '')}">
+                <span><span class="unknown-item-subject">${escapeHtml(item.subject || 'Unknown finding')}</span><span class="unknown-item-reason">${escapeHtml((item.reason || 'Needs human context').replaceAll('_', ' '))}</span></span>
+                <span class="unknown-item-meta"><span class="unknown-item-status ${status === 'reviewed' ? 'reviewed' : ''}">${status}</span><span>${(item.evidence || []).length} evidence</span></span>
+              </button>`;
+            }).join('') : '<div class="unknown-queue-empty">No findings match this filter. Choose All to reopen or inspect reviewed items.</div>'}</div>
+          </div>`;
+          canvas.querySelectorAll('[data-unknown-filter]').forEach(button => {
+            button.onclick = () => {
+              state.unknownFilter = button.dataset.unknownFilter;
+              renderState();
+            };
+          });
+          canvas.querySelectorAll('[data-unknown-subject]').forEach(button => {
+            button.onclick = () => {
+              state.selectedUnknown = button.dataset.unknownSubject;
+              renderState();
+            };
+          });
+        }
+
+        function renderUnknownInspector(subject = state.selectedUnknown) {
+          const unknown = unknowns.find(item => item.subject === subject)
+            || unknowns[0];
+          state.selectedUnknown = unknown?.subject;
           els.reverseGraphSection.hidden = true;
           els.reverseGraphList.innerHTML = '';
           const intentGap = unknown?.type === 'intent_gap';
@@ -2621,19 +2698,29 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           const tabFilter = tabFilters[state.tab] || tabFilters.Overview;
           let displayNodes = nodes.filter(node => nodeMatchesScope(node, state.scope) && viewFilter(node) && tabFilter(node));
           if (state.query) displayNodes = displayNodes.filter(node => `${node.title} ${node.kind} ${node.meta}`.toLowerCase().includes(state.query));
-          renderGraph(displayNodes);
+          const unknownItems = state.view === 'Unknowns' ? unknownQueueItems() : [];
+          if (state.view === 'Unknowns') renderUnknownQueue(unknownItems);
+          else renderGraph(displayNodes);
           setText('current-view', state.view.toUpperCase());
           setText('page-title', state.view === 'Product map' ? 'See what your app actually does.' : `${state.view} is ready to explore.`);
           document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === state.view));
           document.querySelectorAll('.workspace-tab').forEach(tab => tab.classList.toggle('active', (tab.dataset.tab || tab.textContent) === state.tab));
-          const caption = state.view === 'Unknowns' || state.tab === 'Unverified'
-            ? `${unknowns.length} unresolved findings · current build`
+          const reviewedUnknowns = unknowns.filter(item => reviewFor(item.subject)?.status === 'reviewed').length;
+          const caption = state.view === 'Unknowns'
+            ? `${unknowns.length - reviewedUnknowns} open · ${reviewedUnknowns} reviewed · current build`
+            : state.tab === 'Unverified'
+              ? `${unknowns.length} unresolved findings · current build`
             : state.view === 'Scan history'
               ? `${historyRuns.length} scan runs · ${staleSources.length} stale sources`
               : `${displayNodes.length} nodes · ${edges.filter(edge => displayNodes.some(node => node.id === edge.source) && displayNodes.some(node => node.id === edge.target)).length} edges · scope ${state.scope || 'repository'}`;
           setText('graph-caption-meta', caption);
           if (state.view === 'Scan history') renderHistoryInspector();
-          else if (state.view === 'Unknowns' || (state.tab === 'Unverified' && !displayNodes.length)) renderUnknownInspector();
+          else if (state.view === 'Unknowns') {
+            const selected = unknownItems.some(item => item.subject === state.selectedUnknown)
+              ? state.selectedUnknown
+              : (unknownItems[0]?.subject || unknowns[0]?.subject);
+            renderUnknownInspector(selected);
+          } else if (state.tab === 'Unverified' && !displayNodes.length) renderUnknownInspector();
           else if (displayNodes.length) renderRealInspector(displayNodes.some(node => node.id === state.selected) ? state.selected : displayNodes[0].id);
           else renderUnknownInspector();
         }
