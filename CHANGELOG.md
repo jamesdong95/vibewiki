@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.11-preview] - 2026-08-25
+
+### Added
+
+- Real browser runtime acceptance fixture with client JavaScript, local route
+  navigation, GET API traffic, and a captured console error.
+- Playwright/Chromium CI job that verifies runtime route, network, and console
+  records link to the static graph without persisting query secrets.
+
 ## [0.1.10-preview] - 2026-08-25
 
 ### Added

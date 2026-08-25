@@ -35,7 +35,7 @@ jobs:
       - name: Run Ruff
         run: uv run ruff check src tests scripts
       - name: Run tests
-        run: uv run pytest -q
+        run: uv run pytest -q -m "not runtime"
       - name: Verify viewer JavaScript syntax
         run: >-
           node -e 'const fs=require("fs"); const html=fs.readFileSync("viewer/index.html","utf8");
@@ -75,3 +75,25 @@ jobs:
         run: python3 scripts/verify_preview.py
       - name: Check whitespace
         run: git diff --check
+
+  runtime-acceptance:
+    name: Browser runtime acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+      - name: Install runtime dependencies
+        run: uv sync --locked --dev --extra runtime
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+      - name: Run browser runtime acceptance
+        run: uv run pytest -q -m runtime

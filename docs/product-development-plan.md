@@ -59,19 +59,17 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - README, changelog, screenshot live preview, release metadata và draft PR đã có.
 - Packaging baseline đã hoàn tất: wheel chứa viewer asset, clean-install
   quickstart và CI smoke gate chạy trên Python 3.11–3.13 ở Ubuntu/macOS.
+- Runtime acceptance baseline đã hoàn tất: fixture browser local, Playwright /
+  Chromium smoke, route/API/console graph linkage và CI runtime job.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
 - Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
-- Runtime browser observation vẫn cần một acceptance fixture thực thi JavaScript
-  thật trong CI; HTTP observer và local browser smoke đã có.
 
 ### Thứ tự implementation tự động tiếp theo
 
 1. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
-2. **Runtime acceptance:** thêm fixture app có route/API/client JavaScript để
-   kiểm chứng liên kết runtime-to-static trong browser mode.
-3. **User workflow:** thêm project profile/scan selection và bounded large-repo
+2. **User workflow:** thêm project profile/scan selection và bounded large-repo
    import khi nhu cầu người dùng thật chứng minh giới hạn hiện tại chưa đủ.
 
 ### Giả định để triển khai
@@ -459,7 +457,7 @@ trả linked evidence; viewer inspector hiển thị status/error cho node đư�
 
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.10-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.11-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
