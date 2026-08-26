@@ -531,6 +531,10 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="profile-browse"' in html
     assert 'id="profile-scope"' in html
     assert 'id="profile-focus"' in html
+    assert 'id="recent-workspaces"' in html
+    assert "/api/workspaces" in html
+    assert "Supports JS/JSX/TS/TSX" in html
+    assert "TypeScript only" not in html
     assert 'id="intent-button"' in html
     assert 'id="intent-modal"' in html
     assert 'id="intent-flows"' in html

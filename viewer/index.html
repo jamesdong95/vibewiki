@@ -555,6 +555,15 @@
     .profile-scope-picker label { display: grid; gap: 5px; color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
     .profile-scope-picker select { min-width: 0; padding: 8px 9px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: var(--panel-2); font: inherit; }
     .profile-scope-picker small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; line-height: 1.4; }
+    .recent-workspaces { display: grid; gap: 7px; max-height: 190px; overflow: auto; padding: 0 16px 16px; }
+    .recent-workspace { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,0.02); }
+    .recent-workspace-copy { min-width: 0; }
+    .recent-workspace-copy strong, .recent-workspace-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .recent-workspace-copy strong { color: var(--ink-soft); font-size: 10px; }
+    .recent-workspace-copy small { margin-top: 3px; color: var(--muted); font: 8px/1.3 var(--mono); }
+    .recent-workspace-actions { display: flex; gap: 5px; }
+    .recent-workspace-actions .text-button { padding: 5px 7px; font-size: 8px; }
+    .recent-workspaces-status { margin: 0; padding: 0 16px 16px; color: var(--muted); font: 9px/1.4 var(--mono); }
 
     @media (max-width: 1240px) {
       .app-shell { grid-template-columns: 218px minmax(520px, 1fr) 286px; }
@@ -699,7 +708,7 @@ vibewiki serve /path/to/repository</pre>
         </div>
         <div class="top-actions">
           <div class="browse-wrap">
-            <span class="browse-hint">JS/TS · Python · Go · Rust · config/docs</span>
+            <span class="browse-hint">Supports JS/JSX/TS/TSX in local repositories.</span>
             <button class="text-button" type="button" id="browse-button" title="Choose a local source folder">Browse source</button>
             <button class="text-button" type="button" id="local-path-button" title="Import a local repository path through the loopback server">Use local path</button>
             <button class="text-button" type="button" id="github-button" title="Import a public GitHub repository">Import GitHub</button>
@@ -748,7 +757,7 @@ vibewiki serve /path/to/repository</pre>
     <div class="command-modal" role="dialog" aria-modal="true" aria-label="Import public GitHub repository">
       <div class="command-input"><span>◉</span><strong>Import GitHub repository</strong></div>
       <form class="settings-form" id="github-form">
-        <p class="settings-copy">Public repositories only. VibeWiki downloads a bounded archive after you submit, filters secrets and ignored paths, then scans a temporary local snapshot. For private repositories, clone locally and use Browse or Use local path.</p>
+        <p class="settings-copy">Public repositories only. VibeWiki downloads a bounded archive after you submit, filters secrets and ignored paths, then saves a private local snapshot. For private repositories, clone locally and use Browse or Use local path.</p>
         <div class="settings-field">
           <label for="github-url">Public repository URL</label>
           <input id="github-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://github.com/owner/repository" aria-label="Public GitHub repository URL" />
@@ -1064,6 +1073,9 @@ vibewiki serve /path/to/repository</pre>
         <small id="profile-scope-hint">Chọn repository root hoặc một package để lọc graph, evidence và inspector.</small>
       </div>
       <div class="profile-grid" id="profile-details"></div>
+      <div class="inspector-label" style="padding: 0 16px 8px;">Recent local workspaces</div>
+      <div class="recent-workspaces" id="recent-workspaces" aria-live="polite"></div>
+      <p class="recent-workspaces-status" id="recent-workspaces-status">Loading saved workspaces…</p>
       <div class="settings-actions">
         <button class="text-button" type="button" id="profile-close">Close</button>
         <button class="text-button primary" type="button" id="profile-browse">Browse another scope</button>
@@ -1434,6 +1446,8 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     const profileFocus = document.getElementById('profile-focus');
     const profileScopeHint = document.getElementById('profile-scope-hint');
     const profileDetails = document.getElementById('profile-details');
+    const recentWorkspaces = document.getElementById('recent-workspaces');
+    const recentWorkspacesStatus = document.getElementById('recent-workspaces-status');
     const intentButton = document.getElementById('intent-button');
     const intentModal = document.getElementById('intent-modal');
     const intentForm = document.getElementById('intent-form');
@@ -1454,6 +1468,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     }
     function showWorkspaceUnavailable(message = '') {
       document.documentElement.classList.remove('workspace-loading');
+      document.documentElement.classList.remove('workspace-onboarding');
       document.documentElement.classList.add('workspace-unavailable');
       document.getElementById('graph-canvas')?.replaceChildren();
       document.getElementById('evidence-list')?.replaceChildren();
@@ -1466,8 +1481,25 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       }
       if (workspaceErrorStatus) workspaceErrorStatus.textContent = 'Artifact load failed · retry is safe';
     }
+    function showWorkspaceOnboarding(workspaces = []) {
+      document.documentElement.classList.remove('workspace-loading');
+      document.documentElement.classList.add('workspace-unavailable', 'workspace-onboarding');
+      document.getElementById('graph-canvas')?.replaceChildren();
+      if (workspaceError) workspaceError.hidden = false;
+      if (workspaceErrorCopy) {
+        workspaceErrorCopy.textContent = workspaces.length
+          ? 'Choose a saved local workspace below, or Browse source to import another repository.'
+          : 'No local workspace is open yet. Browse source to create a private, bounded snapshot and build the evidence graph.';
+      }
+      const retry = document.getElementById('workspace-retry');
+      if (retry) retry.textContent = 'Browse source';
+      if (workspaceErrorStatus) workspaceErrorStatus.textContent = `${workspaces.length} saved workspace${workspaces.length === 1 ? '' : 's'} available`;
+    }
     function beginWorkspaceLoad() {
+      document.documentElement.classList.remove('workspace-unavailable', 'workspace-onboarding');
       document.documentElement.classList.add('workspace-loading');
+      const retry = document.getElementById('workspace-retry');
+      if (retry) retry.textContent = 'Retry loading artifact';
       document.documentElement.classList.remove('workspace-unavailable');
       if (workspaceError) workspaceError.hidden = true;
       if (workspaceErrorStatus) workspaceErrorStatus.textContent = 'Loading local artifact…';
@@ -1659,10 +1691,97 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         ['Analyzer', `${profile.analyzer_version || 'unknown'} · schema ${profile.schema_version || '?'}`]
       ].map(([label, value]) => `<div class="profile-row"><span class="profile-label">${escapeHtml(label)}</span><span class="profile-value">${typeof value === 'string' && value.startsWith('<div') ? value : escapeHtml(value)}</span></div>`).join('');
     }
+    function workspaceStatusLabel(workspace) {
+      const state = workspace.state || 'available';
+      return `${workspace.provider || 'local'} · ${state.replaceAll('_', ' ')}${workspace.can_refresh ? ' · refresh available' : ''}`;
+    }
+    function renderRecentWorkspaces(items = []) {
+      recentWorkspaces.replaceChildren();
+      if (!items.length) {
+        const empty = document.createElement('span');
+        empty.textContent = 'No saved imports yet. Browse a local repository to create one.';
+        recentWorkspaces.appendChild(empty);
+        return;
+      }
+      items.forEach(workspace => {
+        const row = document.createElement('div');
+        row.className = 'recent-workspace';
+        const copy = document.createElement('div');
+        copy.className = 'recent-workspace-copy';
+        const label = document.createElement('strong');
+        label.textContent = workspace.label || workspace.id;
+        const meta = document.createElement('small');
+        meta.textContent = workspaceStatusLabel(workspace);
+        copy.append(label, meta);
+        const actions = document.createElement('div');
+        actions.className = 'recent-workspace-actions';
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'text-button primary';
+        open.textContent = 'Open';
+        open.addEventListener('click', () => changeWorkspace('/api/workspaces/open', workspace.id, 'POST'));
+        actions.appendChild(open);
+        if (workspace.can_refresh) {
+          const refresh = document.createElement('button');
+          refresh.type = 'button';
+          refresh.className = 'text-button';
+          refresh.textContent = 'Refresh';
+          refresh.addEventListener('click', () => changeWorkspace('/api/workspaces/refresh', workspace.id, 'POST'));
+          actions.appendChild(refresh);
+        }
+        const forget = document.createElement('button');
+        forget.type = 'button';
+        forget.className = 'text-button';
+        forget.textContent = 'Forget';
+        forget.title = workspace.id === window.currentWorkspaceId ? 'Open another workspace first' : 'Remove only the managed snapshot';
+        forget.disabled = workspace.id === window.currentWorkspaceId;
+        forget.addEventListener('click', () => changeWorkspace(`/api/workspaces/${encodeURIComponent(workspace.id)}`, workspace.id, 'DELETE'));
+        actions.appendChild(forget);
+        row.append(copy, actions);
+        recentWorkspaces.appendChild(row);
+      });
+    }
+    async function loadRecentWorkspaces() {
+      recentWorkspacesStatus.textContent = 'Loading saved workspaces…';
+      try {
+        const response = await fetch('/api/workspaces', { cache: 'no-store' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Workspace registry is unavailable.');
+        renderRecentWorkspaces(Array.isArray(result.workspaces) ? result.workspaces : []);
+        recentWorkspacesStatus.textContent = 'Snapshots stay local. Forget removes only VibeWiki’s managed copy.';
+      } catch (error) {
+        renderRecentWorkspaces([]);
+        recentWorkspacesStatus.textContent = error.message || 'Workspace registry is unavailable.';
+      }
+    }
+    async function changeWorkspace(path, workspaceId, method) {
+      recentWorkspacesStatus.textContent = `${method === 'DELETE' ? 'Forgetting' : 'Updating'} ${workspaceId}…`;
+      document.querySelectorAll('.recent-workspace-actions button').forEach(button => { button.disabled = true; });
+      try {
+        const response = await fetch(path, {
+          method,
+          headers: method === 'DELETE' ? {} : {'Content-Type': 'application/json'},
+          body: method === 'DELETE' ? undefined : JSON.stringify({id: workspaceId})
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Workspace action failed.');
+        if (method === 'DELETE') {
+          showToast(`Forgot managed workspace ${workspaceId}.`);
+          await loadRecentWorkspaces();
+        } else {
+          showToast(method === 'POST' && path.endsWith('/refresh') ? 'Workspace refreshed.' : 'Workspace opened.');
+          window.setTimeout(() => window.location.reload(), 120);
+        }
+      } catch (error) {
+        recentWorkspacesStatus.textContent = error.message || 'Workspace action failed.';
+        document.querySelectorAll('.recent-workspace-actions button').forEach(button => { button.disabled = false; });
+      }
+    }
     function openProjectProfile() {
       renderProjectProfile(currentProjectProfile || {});
       profileModal.classList.add('open');
       profileModal.setAttribute('aria-hidden', 'false');
+      loadRecentWorkspaces();
     }
     function closeProjectProfile() {
       profileModal.classList.remove('open');
@@ -2388,11 +2507,21 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     async function bootRealWorkspace() {
       beginWorkspaceLoad();
       try {
-        const response = await fetch('/api/summary', { cache: 'no-store' });
+        const [response, workspaceResponse] = await Promise.all([
+          fetch('/api/summary', { cache: 'no-store' }),
+          fetch('/api/workspaces', { cache: 'no-store' })
+        ]);
+        const workspaceIndex = workspaceResponse.ok
+          ? await workspaceResponse.json()
+          : { workspaces: [] };
         if (!response.ok) {
           throw new Error(`Local artifact request failed (HTTP ${response.status}).`);
         }
         const summary = await response.json();
+        if (summary.workspace_available === false || summary.status === 'onboarding') {
+          showWorkspaceOnboarding(Array.isArray(workspaceIndex.workspaces) ? workspaceIndex.workspaces : []);
+          return;
+        }
         const [nodeResponse, edgeResponse, historyResponse, changesResponse, staleResponse, runtimeResponse, reviewsResponse] = await Promise.all([
           fetch('/api/nodes', { cache: 'no-store' }),
           fetch('/api/edges', { cache: 'no-store' }),
@@ -2425,6 +2554,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const sourceLabel = workspaceSource.provider === 'github'
           ? `GitHub · ${workspaceSource.repository || workspaceSource.label}${workspaceSource.ref ? `@${workspaceSource.ref}` : ''}`
           : `${workspaceSource.provider || 'local'} · ${workspaceSource.label || summary.project}`;
+        window.currentWorkspaceId = workspaceSource.workspace_id || null;
         const nodeById = new Map(nodes.map(node => [node.id, node]));
         const realData = new Map(nodes.map(node => [node.id, {
           title: node.title,
@@ -3035,7 +3165,11 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       }
     }
     document.getElementById('workspace-retry')?.addEventListener('click', () => {
-      bootRealWorkspace();
+      if (document.documentElement.classList.contains('workspace-onboarding')) {
+        chooseSourceFolder();
+      } else {
+        bootRealWorkspace();
+      }
     });
     bootRealWorkspace();
   </script>

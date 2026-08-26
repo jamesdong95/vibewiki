@@ -14,6 +14,7 @@ from .history import history_for_subject
 from .observe import observe_repository
 from .scan import scan_repository
 from .serve import serve_repository
+from .workspaces import WorkspaceStore
 
 _VERSION_TEXT = (
     f"vibewiki {__version__} (analyzer {ANALYZER_VERSION}, schema {SCHEMA_VERSION})"
@@ -105,17 +106,35 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="save local PNG screenshots in browser mode",
     )
+    projects_parser = commands.add_parser(
+        "projects", help="list or forget saved local workspaces"
+    )
+    projects_parser.add_argument(
+        "--state-dir", help="private local workspace state directory"
+    )
+    project_commands = projects_parser.add_subparsers(dest="projects_command")
+    project_commands.add_parser("list", help="list saved local workspaces")
+    forget_parser = project_commands.add_parser(
+        "forget", help="forget a saved workspace and remove only its cache"
+    )
+    forget_parser.add_argument("workspace_id", help="workspace id from projects list")
     serve_parser = commands.add_parser(
         "serve",
         help="serve the built local viewer on loopback",
     )
-    serve_parser.add_argument("repository", help="repository directory to serve")
+    serve_parser.add_argument(
+        "repository", nargs="?", help="repository directory to serve or reopen"
+    )
     serve_parser.add_argument(
         "--host",
         default="127.0.0.1",
         help="bind address (non-loopback requires --share)",
     )
     serve_parser.add_argument("--port", default=4173, type=int, help="bind port")
+    serve_parser.add_argument(
+        "--state-dir",
+        help="private local workspace state directory (defaults to user data)",
+    )
     serve_parser.add_argument(
         "--share",
         action="store_true",
@@ -195,6 +214,18 @@ def run(argv: Sequence[str] | None = None) -> int:
             ),
             end="",
         )
+    elif arguments.command == "projects":
+        store = WorkspaceStore(arguments.state_dir)
+        if arguments.projects_command == "forget":
+            store.forget(arguments.workspace_id)
+            print(
+                canonical_json(
+                    {"forgotten": True, "workspace_id": arguments.workspace_id}
+                ),
+                end="",
+            )
+        else:
+            print(canonical_json({"workspaces": store.public()}), end="")
     elif arguments.command == "serve":
         serve_repository(
             arguments.repository,
@@ -204,6 +235,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             llm_provider=arguments.llm_provider,
             llm_model=arguments.llm_model,
             llm_base_url=arguments.llm_base_url,
+            state_dir=arguments.state_dir,
         )
     return 0
 

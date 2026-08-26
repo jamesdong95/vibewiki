@@ -54,6 +54,7 @@ from .reviews import (
     set_reviews,
 )
 from .runtime_links import attach_runtime_links
+from .workspaces import WorkspaceStore
 
 
 def _viewer_directory() -> Path:
@@ -204,10 +205,13 @@ def _export_archive(root: Path, artifact: dict[str, Any]) -> tuple[bytes, str]:
             canonical_json({"files": stale_files(root, artifact)}),
         )
     project = str(artifact.get("fixture", "workspace"))
-    safe_project = "".join(
-        character if character.isalnum() or character in "-_" else "-"
-        for character in project
-    ).strip("-") or "workspace"
+    safe_project = (
+        "".join(
+            character if character.isalnum() or character in "-_" else "-"
+            for character in project
+        ).strip("-")
+        or "workspace"
+    )
     return buffer.getvalue(), f"{safe_project}-vibewiki-export.zip"
 
 
@@ -266,17 +270,17 @@ def _artifact_nodes(
         nodes.append(
             _mark_stale(
                 {
-                "id": module["id"],
-                "kind": module["kind"],
-                "status": module["status"],
-                "title": (
-                    attributes.get("path")
-                    or attributes.get("module")
-                    or module["id"]
-                ),
-                "meta": attributes.get("file") or attributes.get("module", ""),
-                "attributes": attributes,
-                "evidence": module["evidence"],
+                    "id": module["id"],
+                    "kind": module["kind"],
+                    "status": module["status"],
+                    "title": (
+                        attributes.get("path")
+                        or attributes.get("module")
+                        or module["id"]
+                    ),
+                    "meta": attributes.get("file") or attributes.get("module", ""),
+                    "attributes": attributes,
+                    "evidence": module["evidence"],
                 },
                 stale_by_path,
             )
@@ -290,18 +294,18 @@ def _artifact_nodes(
             nodes.append(
                 _mark_stale(
                     {
-                    "id": item["id"],
-                    "kind": item["kind"],
-                    "status": item["status"],
-                    "title": (
-                        attributes.get("name")
-                        or attributes.get("path")
-                        or attributes.get("module")
-                        or item["id"]
-                    ),
-                    "meta": attributes.get("file") or attributes.get("path", ""),
-                    "attributes": attributes,
-                    "evidence": item["evidence"],
+                        "id": item["id"],
+                        "kind": item["kind"],
+                        "status": item["status"],
+                        "title": (
+                            attributes.get("name")
+                            or attributes.get("path")
+                            or attributes.get("module")
+                            or item["id"]
+                        ),
+                        "meta": attributes.get("file") or attributes.get("path", ""),
+                        "attributes": attributes,
+                        "evidence": item["evidence"],
                     },
                     stale_by_path,
                 )
@@ -317,21 +321,21 @@ def _artifact_nodes(
         nodes.append(
             _mark_stale(
                 {
-                "id": node_id,
-                "kind": "file",
-                "status": "verified",
-                "title": item["path"],
-                "meta": f"{item['language']} · {item['size']} bytes",
-                "attributes": item,
-                "evidence": [
-                    {
-                        "kind": "file_inventory",
-                        "line_end": 1,
-                        "line_start": 1,
-                        "path": item["path"],
-                        "status": "verified",
-                    }
-                ],
+                    "id": node_id,
+                    "kind": "file",
+                    "status": "verified",
+                    "title": item["path"],
+                    "meta": f"{item['language']} · {item['size']} bytes",
+                    "attributes": item,
+                    "evidence": [
+                        {
+                            "kind": "file_inventory",
+                            "line_end": 1,
+                            "line_start": 1,
+                            "path": item["path"],
+                            "status": "verified",
+                        }
+                    ],
                 },
                 stale_by_path,
             )
@@ -747,17 +751,105 @@ def api_payload(
     raise KeyError(path)
 
 
+def _persist_imported_workspace(
+    server: ThreadingHTTPServer,
+    imported: ImportedWorkspace,
+    *,
+    provider: str,
+    label: str,
+    origin: dict[str, Any] | None = None,
+    workspace_id: str | None = None,
+) -> ImportedWorkspace:
+    """Promote an import into the private managed workspace cache."""
+
+    record, destination = server.workspace_store.save_snapshot(
+        imported.root,
+        label=label,
+        provider=provider,
+        origin=origin,
+        workspace_id=workspace_id,
+    )
+    cleanup_workspace(imported)
+    summary = dict(imported.build_summary)
+    source = {
+        **summary.get("import_source", {}),
+        "provider": provider,
+        "label": label,
+        "workspace_id": record.id,
+        "persistence": "saved-snapshot",
+        "source_state": "snapshot",
+    }
+    summary["import_source"] = source
+    return ImportedWorkspace(root=destination, build_summary=summary)
+
+
+def _initial_llm_settings(store: WorkspaceStore) -> LLMSettings | None:
+    """Restore non-secret LLM preferences while keeping keys process-local."""
+
+    try:
+        settings = LLMSettings.from_environment()
+    except VibeWikiError:
+        settings = None
+    preferences = store.load_llm_preferences()
+    if not preferences:
+        return settings
+    payload = {
+        "provider": preferences.get(
+            "provider", settings.provider if settings else "none"
+        ),
+        "model": preferences.get(
+            "model", settings.model if settings else "qwen2.5:7b"
+        ),
+        "base_url": preferences.get(
+            "base_url",
+            settings.base_url if settings else "https://api.openai.com",
+        ),
+    }
+    try:
+        return configure_llm(payload, settings)
+    except VibeWikiError:
+        # A persisted remote provider without an environment key is still a
+        # valid preference; the UI can ask for the key again without exposing
+        # or writing it to disk.
+        return settings
+
+
 def create_server(
-    repository: str | Path,
+    repository: str | Path | None,
     host: str = "127.0.0.1",
     port: int = 0,
     *,
     share: bool = False,
+    state_dir: str | Path | None = None,
 ) -> ThreadingHTTPServer:
     loopback_host = _validate_bind_host(host, share)
-    root = Path(repository).absolute()
-    auto_analyzed = _ensure_artifact(root)
-    artifact = _artifact(root)
+    workspace_store = WorkspaceStore(state_dir)
+    workspace_id: str | None = None
+    onboarding = False
+    if repository is None:
+        root: Path | None = None
+        artifact: dict[str, Any] | None = None
+        for item in workspace_store.public():
+            try:
+                record, candidate = workspace_store.get(item["id"])
+                candidate_artifact = _artifact(candidate)
+            except VibeWikiError:
+                continue
+            root, artifact, workspace_id = candidate, candidate_artifact, record.id
+            workspace_store.touch(record.id)
+            break
+        if root is None or artifact is None:
+            # Keep the server alive for a first-run viewer. Browse/import can
+            # then create the first durable snapshot without requiring a
+            # repository argument on the command line.
+            root = workspace_store.root / "onboarding"
+            root.mkdir(parents=True, exist_ok=True)
+            onboarding = True
+        auto_analyzed = False
+    else:
+        root = Path(repository).absolute()
+        auto_analyzed = _ensure_artifact(root)
+        artifact = _artifact(root)
     viewer = _viewer_directory()
 
     class Handler(SimpleHTTPRequestHandler):
@@ -827,6 +919,11 @@ def create_server(
                 return
             if parsed.path == "/api/export":
                 try:
+                    if not self.server.workspace_available:
+                        raise VibeWikiError(
+                            ErrorCode.PATH_NOT_FOUND,
+                            "no workspace is open; Browse a local repository first",
+                        )
                     with self.server.workspace_lock:
                         body, filename = _export_archive(
                             self.server.workspace_root,
@@ -847,10 +944,43 @@ def create_server(
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if parsed.path == "/api/workspaces":
+                self._write_json(
+                    200,
+                    {
+                        "schema_version": 1,
+                        "workspaces": self.server.workspace_store.public(),
+                    },
+                )
+                return
+            if parsed.path == "/api/summary" and not self.server.workspace_available:
+                self._write_json(
+                    200,
+                    {
+                        "status": "onboarding",
+                        "workspace_available": False,
+                        "project": None,
+                        "source": {"provider": "onboarding", "label": "No workspace"},
+                        "workspaces": self.server.workspace_store.public(),
+                    },
+                )
+                return
             if parsed.path.startswith("/api/"):
                 try:
                     if parsed.path == "/api/llm/status":
                         payload = llm_status(self.server.llm_settings)
+                    elif not self.server.workspace_available:
+                        self._write_json(
+                            409,
+                            {
+                                "error": "workspace_unavailable",
+                                "message": (
+                                    "no workspace is open; Browse a local repository "
+                                    "first"
+                                ),
+                            },
+                        )
+                        return
                     else:
                         with self.server.workspace_lock:
                             payload = api_payload(
@@ -884,6 +1014,154 @@ def create_server(
             if not self._require_authorization():
                 return
             parsed = urlparse(self.path)
+            if parsed.path == "/api/workspaces/open":
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "workspace open payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    workspace_id = (
+                        payload.get("id") if isinstance(payload, dict) else None
+                    )
+                    if not isinstance(workspace_id, str):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "workspace id is required",
+                        )
+                    record, root = self.server.workspace_store.get(workspace_id)
+                    artifact = _artifact(root)
+                    self.server.workspace_store.touch(workspace_id)
+                    with self.server.workspace_lock:
+                        self.server.workspace_root = root
+                        self.server.workspace_artifact = artifact
+                        self.server.workspace_available = True
+                        self.server.workspace_id = record.id
+                        self.server.imported_workspace = None
+                        self.server.workspace_source = {
+                            **next(
+                                item
+                                for item in self.server.workspace_store.public()
+                                if item["id"] == record.id
+                            ),
+                            "workspace_id": record.id,
+                        }
+                    self._write_json(
+                        200,
+                        {
+                            "opened": True,
+                            "workspace_id": record.id,
+                            "source": self.server.workspace_source,
+                        },
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                except (
+                    OSError,
+                    UnicodeDecodeError,
+                    ValueError,
+                    AttributeError,
+                ) as error:
+                    self._write_json(
+                        400, {"error": "invalid_output", "message": str(error)}
+                    )
+                return
+            if parsed.path == "/api/workspaces/refresh":
+                refreshed: ImportedWorkspace | None = None
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "workspace refresh payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    workspace_id = (
+                        payload.get("id") if isinstance(payload, dict) else None
+                    )
+                    if not isinstance(workspace_id, str):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "workspace id is required",
+                        )
+                    record, _ = self.server.workspace_store.get(workspace_id)
+                    if record.provider == "local-path":
+                        local_path = record.origin.get("local_path")
+                        if (
+                            not isinstance(local_path, str)
+                            or not Path(local_path).is_dir()
+                        ):
+                            raise VibeWikiError(
+                                ErrorCode.PATH_NOT_FOUND,
+                                "the original local source path is unavailable",
+                            )
+                        refreshed = import_local_workspace(local_path)
+                    elif record.provider == "github":
+                        url = record.origin.get("url")
+                        ref = record.origin.get("ref")
+                        if not isinstance(url, str):
+                            raise VibeWikiError(
+                                ErrorCode.INVALID_OUTPUT,
+                                "the original GitHub source metadata is unavailable",
+                            )
+                        refreshed = import_github_workspace(
+                            url, ref if isinstance(ref, str) else None
+                        )
+                    else:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "browser-folder snapshots must be updated with Browse "
+                            "source",
+                        )
+                    with self.server.workspace_lock:
+                        refreshed_artifact = _artifact(refreshed.root)
+                        refreshed = _persist_imported_workspace(
+                            self.server,
+                            refreshed,
+                            provider=record.provider,
+                            label=record.label,
+                            origin=record.origin,
+                            workspace_id=workspace_id,
+                        )
+                        self.server.workspace_root = refreshed.root
+                        self.server.workspace_artifact = refreshed_artifact
+                        self.server.workspace_available = True
+                        self.server.workspace_id = workspace_id
+                        self.server.imported_workspace = refreshed
+                        self.server.workspace_source = {
+                            **refreshed.build_summary.get("import_source", {}),
+                            "workspace_id": workspace_id,
+                            "label": record.label,
+                        }
+                    self._write_json(
+                        200,
+                        {
+                            **refreshed.build_summary,
+                            "refreshed": True,
+                            "workspace_id": workspace_id,
+                        },
+                    )
+                except VibeWikiError as error:
+                    if refreshed is not None:
+                        cleanup_workspace(refreshed)
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                except (OSError, UnicodeDecodeError, ValueError) as error:
+                    if refreshed is not None:
+                        cleanup_workspace(refreshed)
+                    self._write_json(
+                        400, {"error": "invalid_output", "message": str(error)}
+                    )
+                return
             if parsed.path == "/api/reviews/batch":
                 try:
                     if not self.server.local_path_import_allowed:
@@ -1012,12 +1290,8 @@ def create_server(
                                 seed_path.read_bytes() if seed_path.is_file() else None
                             )
                             try:
-                                write_product_seed(
-                                    self.server.workspace_root, payload
-                                )
-                                result = rescan_repository(
-                                    self.server.workspace_root
-                                )
+                                write_product_seed(self.server.workspace_root, payload)
+                                result = rescan_repository(self.server.workspace_root)
                             except Exception:
                                 if previous_seed is None:
                                     try:
@@ -1131,11 +1405,29 @@ def create_server(
                             "GitHub import requires a repository URL and optional ref",
                         )
                     imported = import_github_workspace(repository_url, ref)
+                    imported = _persist_imported_workspace(
+                        self.server,
+                        imported,
+                        provider="github",
+                        label=(
+                            imported.build_summary.get("import_source", {}).get(
+                                "repository", "github-source"
+                            )
+                        ),
+                        origin={
+                            "url": repository_url,
+                            "ref": ref or "HEAD",
+                        },
+                    )
                     with self.server.workspace_lock:
                         old_workspace = self.server.imported_workspace
                         self.server.workspace_root = imported.root
                         self.server.workspace_artifact = _artifact(imported.root)
+                        self.server.workspace_available = True
                         self.server.imported_workspace = imported
+                        self.server.workspace_id = imported.build_summary.get(
+                            "import_source", {}
+                        ).get("workspace_id")
                         self.server.workspace_source = imported.build_summary.get(
                             "import_source",
                             {
@@ -1187,12 +1479,33 @@ def create_server(
                             ErrorCode.INVALID_OUTPUT,
                             "local repository path is required",
                         )
-                    imported = import_local_workspace(payload["path"].strip())
+                    local_path = payload["path"].strip()
+                    imported = import_local_workspace(local_path)
                     with self.server.workspace_lock:
+                        # Validate and promote while the workspace lock is
+                        # held. Readers therefore keep seeing the previous
+                        # artifact until the complete replacement is ready.
+                        _artifact(imported.root)
+                        imported = _persist_imported_workspace(
+                            self.server,
+                            imported,
+                            provider="local-path",
+                            label=Path(local_path).expanduser().name
+                            or imported.root.name,
+                            origin={
+                                "local_path": str(
+                                    Path(local_path).expanduser().absolute()
+                                )
+                            },
+                        )
                         old_workspace = self.server.imported_workspace
                         self.server.workspace_root = imported.root
                         self.server.workspace_artifact = _artifact(imported.root)
+                        self.server.workspace_available = True
                         self.server.imported_workspace = imported
+                        self.server.workspace_id = imported.build_summary.get(
+                            "import_source", {}
+                        ).get("workspace_id")
                         self.server.workspace_source = {
                             **imported.build_summary.get("import_source", {}),
                             "provider": "local-path",
@@ -1282,6 +1595,11 @@ def create_server(
                         payload, getattr(self.server, "llm_settings", None)
                     )
                     self.server.llm_settings = settings
+                    self.server.workspace_store.save_llm_preferences(
+                        provider=settings.provider,
+                        model=settings.model,
+                        base_url=settings.base_url,
+                    )
                     self._write_json(200, {"saved": True, **llm_status(settings)})
                 except VibeWikiError as error:
                     self._write_json(
@@ -1350,11 +1668,22 @@ def create_server(
                 imported = import_uploaded_workspace(
                     self.headers.get("Content-Type", ""), body
                 )
+                imported = _persist_imported_workspace(
+                    self.server,
+                    imported,
+                    provider="browser-folder",
+                    label=imported.root.name,
+                    origin={},
+                )
                 with self.server.workspace_lock:
                     old_workspace = self.server.imported_workspace
                     self.server.workspace_root = imported.root
                     self.server.workspace_artifact = _artifact(imported.root)
+                    self.server.workspace_available = True
                     self.server.imported_workspace = imported
+                    self.server.workspace_id = imported.build_summary.get(
+                        "import_source", {}
+                    ).get("workspace_id")
                     self.server.workspace_source = {
                         **imported.build_summary.get("import_source", {}),
                         "provider": "browser-folder",
@@ -1379,6 +1708,28 @@ def create_server(
             if not self._require_authorization():
                 return
             super().do_HEAD()
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            if not self._require_authorization():
+                return
+            parsed = urlparse(self.path)
+            prefix = "/api/workspaces/"
+            if not parsed.path.startswith(prefix):
+                self.send_error(404, "not found")
+                return
+            workspace_id = unquote(parsed.path.removeprefix(prefix))
+            try:
+                if workspace_id == getattr(self.server, "workspace_id", None):
+                    raise VibeWikiError(
+                        ErrorCode.INVALID_OUTPUT,
+                        "open another workspace before forgetting the active one",
+                    )
+                self.server.workspace_store.forget(workspace_id)
+                self._write_json(200, {"forgotten": True, "workspace_id": workspace_id})
+            except VibeWikiError as error:
+                self._write_json(
+                    422, {"error": error.code.value, "message": error.message}
+                )
 
         def do_OPTIONS(self) -> None:  # noqa: N802
             if not self._require_authorization():
@@ -1409,12 +1760,22 @@ def create_server(
     server = ThreadingHTTPServer((host, port), Handler)
     server.workspace_root = root
     server.workspace_artifact = artifact
-    server.llm_settings: LLMSettings | None = None
+    server.workspace_available = not onboarding
+    server.llm_settings = _initial_llm_settings(workspace_store)
     server.imported_workspace: ImportedWorkspace | None = None
+    server.workspace_store = workspace_store
+    server.workspace_id = workspace_id
     server.workspace_source = {
         "provider": "local-workspace",
         "label": root.name,
     }
+    if workspace_id is not None:
+        server.workspace_source.update(
+            next(
+                item for item in workspace_store.public() if item["id"] == workspace_id
+            )
+        )
+        server.workspace_source["workspace_id"] = workspace_id
     server.bind_is_loopback = loopback_host
     server.share_mode = bool(share)
     server.auth_required = bool(share and not loopback_host)
@@ -1428,7 +1789,7 @@ def create_server(
 
 
 def serve_repository(
-    repository: str | Path,
+    repository: str | Path | None,
     host: str = "127.0.0.1",
     port: int = 4173,
     *,
@@ -1436,6 +1797,7 @@ def serve_repository(
     llm_provider: str | None = None,
     llm_model: str | None = None,
     llm_base_url: str | None = None,
+    state_dir: str | Path | None = None,
 ) -> None:
     overrides = {
         "VIBEWIKI_LLM_PROVIDER": llm_provider,
@@ -1448,7 +1810,7 @@ def serve_repository(
             os.environ[key] = value
     server: ThreadingHTTPServer | None = None
     try:
-        server = create_server(repository, host, port, share=share)
+        server = create_server(repository, host, port, share=share, state_dir=state_dir)
         actual_port = server.server_address[1]
         ready = {
             "bind": host,

@@ -1011,7 +1011,9 @@ def import_github_workspace(url: str, ref: str | None = None) -> ImportedWorkspa
 def cleanup_workspace(workspace: ImportedWorkspace) -> None:
     """Remove only the temporary workspace created by a browser import."""
 
-    shutil.rmtree(workspace.root.parent, ignore_errors=True)
+    parent = workspace.root.parent
+    if parent.name.startswith("vibewiki-import-"):
+        shutil.rmtree(parent, ignore_errors=True)
 
 
 __all__ = [

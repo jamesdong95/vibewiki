@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.46-preview] - 2026-08-26
+
+### Added
+
+- Imported Browse, local-path, and GitHub workspaces now persist as private,
+  bounded local snapshots and survive server restarts.
+- Added first-run onboarding, recent workspace Open/Refresh/Forget actions,
+  `vibewiki projects list`, `vibewiki projects forget`, and `serve --state-dir`.
+- Refresh replaces a saved workspace in place after a complete scan; the old
+  artifact remains readable if refresh fails, and original repositories are
+  never deleted.
+- LLM provider/model/base URL preferences persist without API keys, remote
+  confirmation, source excerpts, or chat history.
+- Added restart, atomic-refresh, registry-safety, onboarding, and browser UI
+  regression coverage.
+
 ## [0.1.45-preview] - 2026-08-26
 
 ### Added
