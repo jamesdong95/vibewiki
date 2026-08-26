@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .config import MANIFEST_DIRECTORY
 from .discovery.manifest import canonical_json
+from .discussions import DiscussionStore, artifact_fingerprint, discussion_scope_id
 from .errors import ErrorCode, VibeWikiError
 from .history import (
     history_for_subject,
@@ -812,6 +813,14 @@ def _initial_llm_settings(store: WorkspaceStore) -> LLMSettings | None:
         return settings
 
 
+def _set_discussion_store(server: ThreadingHTTPServer) -> None:
+    scope_id = discussion_scope_id(
+        getattr(server, "workspace_id", None), server.workspace_root
+    )
+    server.discussion_scope_id = scope_id
+    server.discussion_store = DiscussionStore(server.workspace_store.root, scope_id)
+
+
 def create_server(
     repository: str | Path | None,
     host: str = "127.0.0.1",
@@ -951,6 +960,31 @@ def create_server(
                     },
                 )
                 return
+            if parsed.path == "/api/discussions":
+                if not self.server.workspace_available:
+                    self._write_json(
+                        409,
+                        {
+                            "error": "workspace_unavailable",
+                            "message": (
+                                "no workspace is open; Browse a local "
+                                "repository first"
+                            ),
+                        },
+                    )
+                    return
+                with self.server.workspace_lock:
+                    fingerprint = artifact_fingerprint(self.server.workspace_root)
+                    self._write_json(
+                        200,
+                        {
+                            "schema_version": 1,
+                            "scope_id": self.server.discussion_scope_id,
+                            "artifact_fingerprint": fingerprint,
+                            "threads": self.server.discussion_store.list(fingerprint),
+                        },
+                    )
+                return
             if parsed.path == "/api/summary" and not self.server.workspace_available:
                 self._write_json(
                     200,
@@ -1017,6 +1051,97 @@ def create_server(
             if not self._require_authorization():
                 return
             parsed = urlparse(self.path)
+            if parsed.path == "/api/discussions":
+                try:
+                    if not self.server.workspace_available:
+                        self._write_json(
+                            409,
+                            {
+                                "error": "workspace_unavailable",
+                                "message": (
+                                    "no workspace is open; Browse a local "
+                                    "repository first"
+                                ),
+                            },
+                        )
+                        return
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "discussion payload is too large",
+                        )
+                    payload = {}
+                    if content_length:
+                        payload = json.loads(
+                            self.rfile.read(content_length).decode("utf-8")
+                        )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "discussion payload is invalid",
+                        )
+                    with self.server.workspace_lock:
+                        thread = self.server.discussion_store.create(
+                            payload.get("title")
+                        )
+                        fingerprint = artifact_fingerprint(self.server.workspace_root)
+                        public = next(
+                            item
+                            for item in self.server.discussion_store.list(fingerprint)
+                            if item["id"] == thread["id"]
+                        )
+                    self._write_json(200, {"saved": True, "thread": public})
+                except VibeWikiError as error:
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                except (OSError, UnicodeDecodeError, ValueError, TypeError) as error:
+                    self._write_json(
+                        400, {"error": "invalid_output", "message": str(error)}
+                    )
+                return
+            feedback_suffix = "/feedback"
+            discussion_prefix = "/api/discussions/"
+            if parsed.path.startswith(discussion_prefix) and parsed.path.endswith(
+                feedback_suffix
+            ):
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 16 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "feedback payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    if not isinstance(payload, dict):
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "feedback payload is invalid",
+                        )
+                    discussion_id = unquote(
+                        parsed.path[len(discussion_prefix) : -len(feedback_suffix)]
+                    ).strip("/")
+                    with self.server.workspace_lock:
+                        saved = self.server.discussion_store.feedback(
+                            discussion_id,
+                            message_id=payload.get("message_id"),
+                            rating=payload.get("rating"),
+                            note=payload.get("note"),
+                            citation=payload.get("citation"),
+                        )
+                    self._write_json(200, {"saved": True, "feedback": saved})
+                except VibeWikiError as error:
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                except (OSError, UnicodeDecodeError, ValueError, TypeError) as error:
+                    self._write_json(
+                        400, {"error": "invalid_output", "message": str(error)}
+                    )
+                return
             if parsed.path == "/api/workspaces/open":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))
@@ -1044,6 +1169,7 @@ def create_server(
                         self.server.workspace_artifact = artifact
                         self.server.workspace_available = True
                         self.server.workspace_id = record.id
+                        _set_discussion_store(self.server)
                         self.server.imported_workspace = None
                         self.server.workspace_source = {
                             **next(
@@ -1138,6 +1264,7 @@ def create_server(
                         self.server.workspace_artifact = refreshed_artifact
                         self.server.workspace_available = True
                         self.server.workspace_id = workspace_id
+                        _set_discussion_store(self.server)
                         self.server.imported_workspace = refreshed
                         self.server.workspace_source = {
                             **refreshed.build_summary.get("import_source", {}),
@@ -1431,6 +1558,7 @@ def create_server(
                         self.server.workspace_id = imported.build_summary.get(
                             "import_source", {}
                         ).get("workspace_id")
+                        _set_discussion_store(self.server)
                         self.server.workspace_source = imported.build_summary.get(
                             "import_source",
                             {
@@ -1509,6 +1637,7 @@ def create_server(
                         self.server.workspace_id = imported.build_summary.get(
                             "import_source", {}
                         ).get("workspace_id")
+                        _set_discussion_store(self.server)
                         self.server.workspace_source = {
                             **imported.build_summary.get("import_source", {}),
                             "provider": "local-path",
@@ -1635,12 +1764,64 @@ def create_server(
                             ErrorCode.INVALID_OUTPUT, "question payload is invalid"
                         )
                     with self.server.workspace_lock:
-                        result = ask_repository(
-                            self.server.workspace_root,
-                            self.server.workspace_artifact,
-                            payload,
-                            getattr(self.server, "llm_settings", None),
-                        )
+                        remember = payload.get("remember") is True
+                        discussion_id = payload.get("discussion_id")
+                        if discussion_id is not None and not isinstance(
+                            discussion_id, str
+                        ):
+                            raise VibeWikiError(
+                                ErrorCode.INVALID_OUTPUT,
+                                "discussion id is invalid",
+                            )
+                        if remember:
+                            question = payload.get("question")
+                            if not isinstance(question, str) or not question.strip():
+                                raise VibeWikiError(
+                                    ErrorCode.INVALID_OUTPUT, "question is required"
+                                )
+                            if discussion_id is None:
+                                thread = self.server.discussion_store.create(
+                                    question[:160]
+                                )
+                                discussion_id = thread["id"]
+                            fingerprint = artifact_fingerprint(
+                                self.server.workspace_root
+                            )
+                            history, stale = self.server.discussion_store.history(
+                                discussion_id,
+                                fingerprint,
+                                allow_stale=payload.get("stale_confirmed") is True,
+                            )
+                            ask_payload = {
+                                **payload,
+                                "history": history,
+                            }
+                            result = ask_repository(
+                                self.server.workspace_root,
+                                self.server.workspace_artifact,
+                                ask_payload,
+                                getattr(self.server, "llm_settings", None),
+                            )
+                            saved = self.server.discussion_store.append(
+                                discussion_id,
+                                question=question,
+                                answer=result.get("answer", ""),
+                                fingerprint=fingerprint,
+                            )
+                            result = {
+                                **result,
+                                "discussion_id": discussion_id,
+                                "message_id": saved["message_id"],
+                                "discussion_stale": stale,
+                                "discussion_persisted": True,
+                            }
+                        else:
+                            result = ask_repository(
+                                self.server.workspace_root,
+                                self.server.workspace_artifact,
+                                payload,
+                                getattr(self.server, "llm_settings", None),
+                            )
                     self._write_json(200, result)
                 except VibeWikiError as error:
                     self._write_json(
@@ -1692,6 +1873,7 @@ def create_server(
                     self.server.workspace_id = imported.build_summary.get(
                         "import_source", {}
                     ).get("workspace_id")
+                    _set_discussion_store(self.server)
                     self.server.workspace_source = {
                         **imported.build_summary.get("import_source", {}),
                         "provider": "browser-folder",
@@ -1721,6 +1903,22 @@ def create_server(
             if not self._require_authorization():
                 return
             parsed = urlparse(self.path)
+            discussion_prefix = "/api/discussions/"
+            if parsed.path.startswith(discussion_prefix):
+                discussion_id = unquote(
+                    parsed.path.removeprefix(discussion_prefix)
+                ).strip("/")
+                try:
+                    with self.server.workspace_lock:
+                        self.server.discussion_store.clear(discussion_id)
+                    self._write_json(
+                        200, {"cleared": True, "discussion_id": discussion_id}
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                return
             prefix = "/api/workspaces/"
             if not parsed.path.startswith(prefix):
                 self.send_error(404, "not found")
@@ -1773,6 +1971,7 @@ def create_server(
     server.imported_workspace: ImportedWorkspace | None = None
     server.workspace_store = workspace_store
     server.workspace_id = workspace_id
+    _set_discussion_store(server)
     server.workspace_source = {
         "provider": "local-workspace",
         "label": root.name,

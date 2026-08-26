@@ -359,6 +359,121 @@ def test_serve_exposes_real_artifact_apis(
         assert "vibewiki-export/runtime-screenshots/route-01.png" in exported_names
 
 
+def test_discussion_memory_is_opt_in_persistent_and_stale_safe(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    state_dir = tmp_path / "state"
+
+    def start_server() -> tuple[object, threading.Thread, str]:
+        server = create_server(root, port=0, state_dir=state_dir)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread, f"http://127.0.0.1:{server.server_address[1]}"
+
+    server, thread, base = start_server()
+    try:
+        with urlopen(f"{base}/api/discussions") as response:
+            assert json.load(response)["threads"] == []
+        create_request = Request(
+            f"{base}/api/discussions",
+            data=json.dumps({"title": "Signup discussion"}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(create_request) as response:
+            thread_payload = json.load(response)
+        discussion_id = thread_payload["thread"]["id"]
+        ask_request = Request(
+            f"{base}/api/ask",
+            data=json.dumps(
+                {
+                    "question": "How does signup work?",
+                    "mode": "flow",
+                    "remember": True,
+                    "discussion_id": discussion_id,
+                }
+            ).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(ask_request) as response:
+            answer = json.load(response)
+        assert answer["discussion_persisted"] is True
+        assert answer["message_id"]
+        feedback_request = Request(
+            f"{base}/api/discussions/{quote(discussion_id)}/feedback",
+            data=json.dumps(
+                {
+                    "message_id": answer["message_id"],
+                    "rating": "up",
+                    "citation": {"path": "app/signup/page.tsx", "line_start": 9},
+                }
+            ).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(feedback_request) as response:
+            assert json.load(response)["saved"] is True
+        with urlopen(f"{base}/api/discussions") as response:
+            listed = json.load(response)
+        assert listed["threads"][0]["feedback"][0]["rating"] == "up"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    server, thread, base = start_server()
+    try:
+        with urlopen(f"{base}/api/discussions") as response:
+            assert len(json.load(response)["threads"]) == 1
+        source_path = root / "app/signup/page.tsx"
+        source_path.write_text(
+            source_path.read_text(encoding="utf-8") + "\n// changed\n",
+            encoding="utf-8",
+        )
+        rescan_request = Request(
+            f"{base}/api/rescan",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(rescan_request):
+            pass
+        with urlopen(f"{base}/api/discussions") as response:
+            assert json.load(response)["threads"][0]["stale"] is True
+        stale_ask = Request(
+            f"{base}/api/ask",
+            data=json.dumps(
+                {
+                    "question": "Continue",
+                    "remember": True,
+                    "discussion_id": discussion_id,
+                }
+            ).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with pytest.raises(HTTPError) as raised:
+            urlopen(stale_ask)
+        assert raised.value.code == 422
+        assert "stale" in raised.value.read().decode()
+        confirmed_payload = json.loads(stale_ask.data.decode())
+        confirmed_payload["stale_confirmed"] = True
+        confirmed = Request(
+            f"{base}/api/ask",
+            data=json.dumps(confirmed_payload).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(confirmed) as response:
+            assert json.load(response)["discussion_persisted"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_serve_configures_product_intent_from_local_ui(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     scan_repository(root)
@@ -1068,6 +1183,7 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
         "/api/nodes",
         "/api/source?path=app%2Fpage.tsx",
         "/api/export",
+        "/api/discussions",
     )
     protected_posts = (
         ("/api/llm/config", {"provider": "none"}),
@@ -1080,6 +1196,11 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
         ("/api/reviews", {"subject": "x", "status": "reviewed"}),
         ("/api/reviews/batch", {"items": []}),
         ("/api/intent", {"product": {"name": "x"}}),
+        ("/api/discussions", {"title": "x"}),
+        (
+            "/api/discussions/d_missing/feedback",
+            {"message_id": "d_missing", "rating": "up"},
+        ),
     )
     try:
         for path in protected_gets:
@@ -1140,6 +1261,8 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
             )
         ) as response:
             assert json.load(response)["provider"] == "none"
+        with urlopen(request("/api/discussions", authorized=True)) as response:
+            assert json.load(response)["threads"] == []
     finally:
         server.shutdown()
         server.server_close()

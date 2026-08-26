@@ -511,6 +511,26 @@
     .ask-markdown th { color: var(--ink); background: rgba(255,255,255,0.04); font-weight: 650; }
     .ask-markdown a { color: var(--cyan); }
     .ask-citations { margin-top: 8px; color: var(--lime); font-family: var(--mono); font-size: 9px; }
+    .ask-discussion { display: grid; gap: 7px; margin-top: 9px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,0.02); color: var(--muted); font: 9px/1.45 var(--mono); }
+    .ask-discussion-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+    .ask-discussion label { display: inline-flex; align-items: center; gap: 5px; }
+    .ask-discussion input[type="checkbox"] { accent-color: var(--lime); }
+    .ask-discussion select { min-width: 0; max-width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink-soft); background: rgba(255,255,255,0.035); font: inherit; }
+    .ask-discussion .text-button { padding: 4px 7px; font-size: 8px; }
+    .ask-discussion-status { min-height: 13px; color: var(--muted-2); }
+    .ask-discussion-status.stale, .ask-stale-warning { color: var(--orange); }
+    .ask-stale-warning { margin-top: 7px; padding: 7px 8px; border: 1px solid rgba(255,177,111,0.3); border-radius: 5px; background: rgba(255,177,111,0.06); }
+    .ask-stale-warning button { margin-top: 5px; }
+    .ask-feedback { display: grid; gap: 6px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .ask-feedback-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .ask-feedback button, .ask-citation-button { border: 1px solid var(--line); border-radius: 4px; color: var(--cyan); background: transparent; cursor: pointer; font: 8px var(--mono); }
+    .ask-feedback button { padding: 4px 7px; }
+    .ask-feedback button.selected { color: var(--ink); border-color: var(--lime); background: rgba(213,255,107,0.12); }
+    .ask-feedback textarea { min-height: 38px; resize: vertical; padding: 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink-soft); background: rgba(255,255,255,0.025); font: 9px/1.4 var(--mono); }
+    .ask-feedback-status { min-height: 13px; color: var(--muted-2); }
+    .ask-feedback-status.success { color: var(--lime); }
+    .ask-feedback-status.error { color: #ffb4a8; }
+    .ask-citation-button { padding: 0 3px; margin: 0 3px 3px 0; word-break: break-all; }
 
     .toast { position: fixed; z-index: 20; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 12px 14px; border: 1px solid rgba(216,249,139,0.25); border-radius: 9px; color: var(--ink); background: #1a2521; box-shadow: var(--shadow); opacity: 0; transform: translateY(9px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
     .browse-status { display: none; margin: 0 30px 16px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(16,22,24,0.72); font-family: var(--mono); font-size: 9px; line-height: 1.4; }
@@ -990,6 +1010,21 @@ vibewiki serve /path/to/repository</pre>
             <option value="impact">Impact analysis</option>
             <option value="unknowns">Find unknowns</option>
           </select>
+        </div>
+        <div class="ask-discussion" id="ask-discussion" hidden>
+          <div class="ask-discussion-row">
+            <label><input id="ask-remember" type="checkbox" /> Save discussion locally</label>
+            <select id="ask-thread" aria-label="Saved discussion" disabled>
+              <option value="">New local thread</option>
+            </select>
+            <button class="text-button" type="button" id="ask-new-thread">New</button>
+            <button class="text-button" type="button" id="ask-clear-thread" disabled>Clear</button>
+          </div>
+          <div class="ask-discussion-status" id="ask-discussion-status" role="status">Local discussion memory is off.</div>
+          <div class="ask-stale-warning" id="ask-stale-warning" hidden>
+            This discussion includes answers from an older scan. Confirm before sending that context to the model.
+            <button class="text-button" type="button" id="ask-stale-confirm">Use stale context once</button>
+          </div>
         </div>
         <div class="ask-result" id="ask-result" role="status" aria-live="polite"></div>
       </div>
@@ -2116,6 +2151,154 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     const askResult = document.getElementById('ask-result');
     const askMode = document.getElementById('ask-mode');
     const questionHistory = [];
+    const askDiscussion = document.getElementById('ask-discussion');
+    const askRemember = document.getElementById('ask-remember');
+    const askThread = document.getElementById('ask-thread');
+    const askNewThread = document.getElementById('ask-new-thread');
+    const askClearThread = document.getElementById('ask-clear-thread');
+    const askDiscussionStatus = document.getElementById('ask-discussion-status');
+    const askStaleWarning = document.getElementById('ask-stale-warning');
+    const askStaleConfirm = document.getElementById('ask-stale-confirm');
+    let discussionThreads = [];
+    let selectedDiscussionId = '';
+    let discussionStaleConfirmed = false;
+    let currentDiscussionMessageId = '';
+    let feedbackDraftRating = '';
+    let feedbackDraftCitation = null;
+
+    function selectedDiscussion() {
+      return discussionThreads.find(item => item.id === selectedDiscussionId) || null;
+    }
+    function renderDiscussionControls() {
+      if (!askDiscussion) return;
+      askDiscussion.hidden = false;
+      const remember = askRemember.checked;
+      askThread.disabled = !remember;
+      askNewThread.disabled = !remember;
+      askClearThread.disabled = !remember || !selectedDiscussionId;
+      askThread.replaceChildren();
+      const fresh = document.createElement('option');
+      fresh.value = '';
+      fresh.textContent = 'New local thread';
+      askThread.appendChild(fresh);
+      discussionThreads.forEach(thread => {
+        const option = document.createElement('option');
+        option.value = thread.id;
+        option.textContent = `${thread.title}${thread.stale ? ' · stale' : ''}`;
+        askThread.appendChild(option);
+      });
+      askThread.value = selectedDiscussionId;
+      const thread = selectedDiscussion();
+      askStaleWarning.hidden = !remember || !thread?.stale || discussionStaleConfirmed;
+      if (!remember) {
+        askDiscussionStatus.textContent = 'Local discussion memory is off. Chat history stays in this tab only.';
+        askDiscussionStatus.className = 'ask-discussion-status';
+      } else if (!thread) {
+        askDiscussionStatus.textContent = 'Opt-in enabled · a new local thread will be created on the next question.';
+        askDiscussionStatus.className = 'ask-discussion-status';
+      } else if (thread.stale) {
+        askDiscussionStatus.textContent = discussionStaleConfirmed
+          ? 'Stale context confirmed for this tab; new answers use the current scan fingerprint.'
+          : 'Stale context detected after rescan · confirmation required.';
+        askDiscussionStatus.className = 'ask-discussion-status stale';
+      } else {
+        askDiscussionStatus.textContent = `${thread.messages.length} local messages · current scan`;
+        askDiscussionStatus.className = 'ask-discussion-status';
+      }
+    }
+    async function loadDiscussions() {
+      if (!askDiscussion) return;
+      try {
+        const response = await fetch('/api/discussions', {cache: 'no-store'});
+        if (!response.ok) {
+          askDiscussion.hidden = true;
+          return;
+        }
+        const result = await response.json();
+        discussionThreads = Array.isArray(result.threads) ? result.threads : [];
+        if (selectedDiscussionId && !discussionThreads.some(item => item.id === selectedDiscussionId)) selectedDiscussionId = '';
+        renderDiscussionControls();
+      } catch (error) {
+        askDiscussion.hidden = true;
+      }
+    }
+    async function createDiscussionThread(title = '') {
+      const response = await fetch('/api/discussions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(title ? {title} : {})
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Không thể tạo discussion local.');
+      selectedDiscussionId = result.thread.id;
+      discussionStaleConfirmed = false;
+      await loadDiscussions();
+      return selectedDiscussionId;
+    }
+    async function clearDiscussionThread() {
+      if (!selectedDiscussionId) return;
+      const response = await fetch(`/api/discussions/${encodeURIComponent(selectedDiscussionId)}`, {method: 'DELETE'});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Không thể xóa discussion local.');
+      selectedDiscussionId = '';
+      discussionStaleConfirmed = false;
+      await loadDiscussions();
+      showToast('Local discussion cleared.');
+    }
+    async function submitFeedback(rating) {
+      const status = document.getElementById('ask-feedback-status');
+      const note = document.getElementById('ask-feedback-note');
+      if (!selectedDiscussionId || !currentDiscussionMessageId || !rating) return;
+      feedbackDraftRating = rating;
+      document.querySelectorAll('[data-feedback-rating]').forEach(button => button.classList.toggle('selected', button.dataset.feedbackRating === rating));
+      if (status) status.textContent = `${rating === 'up' ? 'Helpful' : 'Needs work'} selected · press Save feedback.`;
+      if (note) note.focus();
+    }
+    async function saveFeedback() {
+      const status = document.getElementById('ask-feedback-status');
+      if (!feedbackDraftRating || !selectedDiscussionId || !currentDiscussionMessageId) {
+        if (status) status.textContent = 'Choose Helpful or Needs work first.';
+        return;
+      }
+      try {
+        const response = await fetch(`/api/discussions/${encodeURIComponent(selectedDiscussionId)}/feedback`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            message_id: currentDiscussionMessageId,
+            rating: feedbackDraftRating,
+            note: document.getElementById('ask-feedback-note')?.value || '',
+            citation: feedbackDraftCitation
+          })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể lưu feedback local.');
+        if (status) { status.textContent = 'Feedback saved locally.'; status.className = 'ask-feedback-status success'; }
+        showToast('Answer feedback saved locally.');
+        await loadDiscussions();
+      } catch (error) {
+        if (status) { status.textContent = error.message || 'Không thể lưu feedback local.'; status.className = 'ask-feedback-status error'; }
+      }
+    }
+    askRemember?.addEventListener('change', () => {
+      if (!askRemember.checked) { selectedDiscussionId = ''; discussionStaleConfirmed = false; }
+      renderDiscussionControls();
+    });
+    askThread?.addEventListener('change', () => {
+      selectedDiscussionId = askThread.value;
+      discussionStaleConfirmed = false;
+      renderDiscussionControls();
+    });
+    askNewThread?.addEventListener('click', async () => {
+      try { await createDiscussionThread(); } catch (error) { showToast(error.message || 'Không thể tạo discussion local.'); }
+    });
+    askClearThread?.addEventListener('click', async () => {
+      try { await clearDiscussionThread(); } catch (error) { showToast(error.message || 'Không thể xóa discussion local.'); }
+    });
+    askStaleConfirm?.addEventListener('click', () => {
+      discussionStaleConfirmed = true;
+      renderDiscussionControls();
+    });
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
     }
@@ -2225,6 +2408,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     function renderAskResult(result, kind = '') {
       askResult.className = `ask-result show ${kind}`.trim();
       if (kind === 'busy') {
+        currentDiscussionMessageId = '';
         askResult.textContent = 'Đang tìm evidence và thảo luận với model…';
         return;
       }
@@ -2232,22 +2416,54 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         askResult.textContent = result;
         return;
       }
-      const citations = (result.citations || []).map(item => `${item.path}:${item.line_start}`).join(' · ');
+      currentDiscussionMessageId = result.message_id || '';
+      feedbackDraftRating = '';
+      feedbackDraftCitation = null;
+      const citationItems = (result.citations || []).slice(0, 8);
+      const citations = citationItems.map(item => `<button class="ask-citation-button" type="button" data-feedback-citation-path="${escapeHtml(item.path || '')}" data-feedback-citation-start="${Number(item.line_start || 1)}" data-feedback-citation-end="${Number(item.line_end || item.line_start || 1)}">${escapeHtml(item.path || '')}:${Number(item.line_start || 1)}</button>`).join('');
       const modeLabel = escapeHtml(result.mode_label || 'Grounded discussion');
       const providerLabel = `${modeLabel} · ${result.provider === 'none' ? 'Evidence-only' : `${escapeHtml(result.provider)} · ${escapeHtml(result.model || '')}`}`;
       const confidence = String(result.confidence || 'unknown').toLowerCase();
       const unknowns = Array.isArray(result.unknowns) && result.unknowns.length
         ? result.unknowns.join(' ')
         : 'None recorded in the current evidence scope.';
+      const feedback = result.discussion_persisted && result.message_id
+        ? `<section class="ask-feedback"><span class="ask-section-label">Answer feedback · local only</span><div class="ask-feedback-row"><button type="button" data-feedback-rating="up">Helpful</button><button type="button" data-feedback-rating="down">Needs work</button><button type="button" id="ask-feedback-save">Save feedback</button></div><textarea id="ask-feedback-note" maxlength="1000" placeholder="Optional note for your next review pass…"></textarea><div class="ask-feedback-status" id="ask-feedback-status" role="status">Choose a rating. You can attach a citation above.</div></section>`
+        : '';
       askResult.innerHTML = `<strong class="ask-provider">${providerLabel}</strong>`
         + `<section class="ask-section"><span class="ask-section-label">Answer</span><div class="ask-markdown">${renderMarkdown(result.answer || '')}</div></section>`
-        + `<section class="ask-section"><span class="ask-section-label">Evidence</span><div class="ask-section-value ask-citation-list">${escapeHtml(citations || 'No direct citation returned.')}</div></section>`
+        + `<section class="ask-section"><span class="ask-section-label">Evidence</span><div class="ask-section-value ask-citation-list">${citations || 'No direct citation returned.'}</div></section>`
         + `<section class="ask-section"><span class="ask-section-label">Confidence</span><div class="ask-section-value ask-confidence ${confidence === 'low' ? 'low' : ''}"><i class="legend-dot ${confidence === 'low' ? 'inferred' : 'verified'}"></i>${escapeHtml(confidence)}</div></section>`
-        + `<section class="ask-section"><span class="ask-section-label">Unknowns</span><div class="ask-section-value ask-unknowns">${escapeHtml(unknowns)}</div></section>`;
+        + `<section class="ask-section"><span class="ask-section-label">Unknowns</span><div class="ask-section-value ask-unknowns">${escapeHtml(unknowns)}</div></section>`
+        + feedback;
+      document.querySelectorAll('[data-feedback-rating]').forEach(button => button.addEventListener('click', () => submitFeedback(button.dataset.feedbackRating)));
+      document.querySelectorAll('[data-feedback-citation-path]').forEach(button => button.addEventListener('click', () => {
+        feedbackDraftCitation = {path: button.dataset.feedbackCitationPath, line_start: Number(button.dataset.feedbackCitationStart || 1), line_end: Number(button.dataset.feedbackCitationEnd || 1)};
+        openSourceEvidence(feedbackDraftCitation.path, feedbackDraftCitation.line_start, feedbackDraftCitation.line_end);
+        const status = document.getElementById('ask-feedback-status');
+        if (status) status.textContent = `Citation attached: ${feedbackDraftCitation.path}:${feedbackDraftCitation.line_start}`;
+      }));
+      document.getElementById('ask-feedback-save')?.addEventListener('click', saveFeedback);
     }
     async function submitQuestion(input) {
       const question = input.value.trim();
       if (!question) return input.focus();
+      let rememberedDiscussion = false;
+      if (askRemember?.checked) {
+        try {
+          if (!selectedDiscussionId) await createDiscussionThread(question);
+          const thread = selectedDiscussion();
+          if (thread?.stale && !discussionStaleConfirmed) {
+            renderDiscussionControls();
+            renderAskResult('This discussion is stale after a rescan. Confirm “Use stale context once” before continuing.', 'error');
+            return;
+          }
+          rememberedDiscussion = true;
+        } catch (error) {
+          renderAskResult(error.message || 'Không thể mở discussion local.', 'error');
+          return;
+        }
+      }
       const status = await refreshLLMStatus();
       if (status?.remote_confirmation_required && !remoteLLMConfirmed) {
         renderAskResult('Remote LLM confirmation is required before any source excerpt is sent. Review and confirm the data boundary in LLM setup.', 'error');
@@ -2260,12 +2476,25 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const response = await fetch('/api/ask', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({question, mode: askMode.value, history: questionHistory.slice(-6), remote_confirmed: remoteLLMConfirmed})
+          body: JSON.stringify({
+            question,
+            mode: askMode.value,
+            history: rememberedDiscussion ? [] : questionHistory.slice(-6),
+            remote_confirmed: remoteLLMConfirmed,
+            remember: rememberedDiscussion,
+            ...(rememberedDiscussion ? {discussion_id: selectedDiscussionId, stale_confirmed: discussionStaleConfirmed} : {})
+          })
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.message || 'Không thể gọi LLM local.');
         renderAskResult(result);
-        questionHistory.push({role: 'user', content: question}, {role: 'assistant', content: result.answer || ''});
+        if (rememberedDiscussion) {
+          selectedDiscussionId = result.discussion_id || selectedDiscussionId;
+          discussionStaleConfirmed = discussionStaleConfirmed || result.discussion_stale === true;
+          await loadDiscussions();
+        } else {
+          questionHistory.push({role: 'user', content: question}, {role: 'assistant', content: result.answer || ''});
+        }
         input.value = '';
       } catch (error) {
         renderAskResult(error.message || 'Không thể phân tích source local.', 'error');
@@ -2601,6 +2830,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           ? `GitHub · ${workspaceSource.repository || workspaceSource.label}${workspaceSource.ref ? `@${workspaceSource.ref}` : ''}`
           : `${workspaceSource.provider || 'local'} · ${workspaceSource.label || summary.project}`;
         window.currentWorkspaceId = workspaceSource.workspace_id || null;
+        await loadDiscussions();
         const nodeById = new Map(nodes.map(node => [node.id, node]));
         const realData = new Map(nodes.map(node => [node.id, {
           title: node.title,

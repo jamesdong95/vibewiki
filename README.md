@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.47-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.47-preview) · scan a repository locally or import a public GitHub URL, preserve nested monorepo paths, select a primary package, retain only its transitive workspace dependency closure, build a reverse graph, review file and graph changes after every rescan, inspect bounded inline source diffs with line numbers, triage every Unknown through an Open/All queue, bulk-review selected findings atomically, mark findings reviewed with local notes and reopen them later, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, browse common source/config formats, resolve workspace package imports and path aliases, persist imported snapshots across restarts, reopen or refresh recent workspaces, forget only managed cache copies, restore non-secret LLM preferences, format grounded AI answers, inspect source-linked facts, observe a local runtime, and keep shared binds behind bearer authentication with remote-LLM source redaction.
+**Latest verified preview:** [`v0.1.48-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.48-preview) · scan a repository locally or import a public GitHub URL, preserve nested monorepo paths, select a primary package, retain only its transitive workspace dependency closure, build a reverse graph, review file and graph changes after every rescan, inspect bounded inline source diffs with line numbers, triage every Unknown through an Open/All queue, bulk-review selected findings atomically, mark findings reviewed with local notes and reopen them later, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, browse common source/config formats, resolve workspace package imports and path aliases, persist imported snapshots across restarts, reopen or refresh recent workspaces, forget only managed cache copies, restore non-secret LLM preferences, format grounded AI answers, inspect source-linked facts, observe a local runtime, keep opt-in grounded discussion memory per workspace, capture local answer/source feedback, and keep shared binds behind bearer authentication with remote-LLM source redaction.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -317,6 +317,14 @@ recorded by the analyzer. With provider `none`, each mode still returns a
 deterministic evidence-only result, so the graph remains useful without a
 model. Provider Markdown is normalized for readable headings, separators, and
 escaped newlines; fenced code blocks are preserved.
+
+Ask starts with discussion memory **off**. Enable **Save discussion locally**
+only when you want a bounded thread persisted in the private state directory;
+the server stores questions, bounded model answers, scan fingerprints, and
+optional feedback, never API keys, bearer tokens, raw retrieved excerpts, or
+request headers. A rescan marks older context stale and requires an explicit
+confirmation before it can be sent back to a model. Clear removes only that
+managed discussion thread.
 
 Use **Export wiki** in the top bar or command palette to download a ZIP of the
 current `.vibewiki` artifacts. The export includes Markdown/Mermaid wiki files,

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.48-preview] - 2026-08-26
+
+### Added
+
+- Added opt-in, bounded per-workspace grounded discussion memory with atomic
+  local state, restart recovery, workspace isolation, and stale-scan detection.
+- Added local answer/source feedback with optional notes and citation links.
+- Added explicit stale-context confirmation before old discussion context can
+  be sent back to a model.
+- Added unit, API, restart, isolation, corruption, and viewer regression tests.
+
+### Privacy
+
+- Discussion state never stores API keys, bearer/session tokens, raw retrieved
+  excerpts, request headers, or remote confirmation state.
+- Memory is off by default; clearing a thread removes only VibeWiki-managed
+  discussion state.
+
 ## [0.1.47-preview] - 2026-08-26
 
 ### Added

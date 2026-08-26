@@ -144,6 +144,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
   restarts. First-run onboarding exposes Browse, local-path, and public GitHub
   entry points; Recent Workspaces supports Open, Refresh, and managed-cache-only
   Forget, with atomic refresh rollback and non-secret LLM preference storage.
+- Ask now supports opt-in bounded discussion memory per workspace, stale-context
+  confirmation after rescan, and local answer/source feedback without persisting
+  credentials, raw retrieval excerpts, or remote request metadata.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
