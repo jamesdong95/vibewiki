@@ -47,6 +47,7 @@
       letter-spacing: -0.01em;
     }
     html.workspace-loading .app-shell { visibility: hidden; }
+    html.workspace-unavailable .app-shell { visibility: hidden; pointer-events: none; }
     html.workspace-loading::after {
       content: "Loading local evidence graph…";
       position: fixed;
@@ -59,6 +60,30 @@
       font-size: 11px;
       letter-spacing: 0.04em;
     }
+
+    .workspace-error[hidden] { display: none; }
+    .workspace-error {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(13, 17, 18, 0.94);
+    }
+    .workspace-error-card {
+      width: min(620px, 100%);
+      padding: 28px;
+      border: 1px solid rgba(255, 140, 136, 0.32);
+      border-radius: var(--radius);
+      background: rgba(19, 26, 29, 0.96);
+      box-shadow: var(--shadow);
+    }
+    .workspace-error-card h1 { margin: 8px 0 10px; font-size: 24px; letter-spacing: -0.04em; }
+    .workspace-error-copy { margin: 0 0 16px; color: var(--ink-soft); line-height: 1.6; }
+    .workspace-error-command { overflow: auto; margin: 0 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--cyan); background: rgba(3, 7, 8, 0.72); font: 10px/1.65 var(--mono); white-space: pre-wrap; }
+    .workspace-error-actions { display: flex; align-items: center; gap: 10px; }
+    .workspace-error-status { min-height: 16px; color: var(--muted); font: 9px/1.4 var(--mono); }
 
     body::before {
       content: "";
@@ -507,6 +532,10 @@
     .settings-status { min-height: 16px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
     .settings-status.success { color: var(--lime); }
     .settings-status.error { color: #ffb4a8; }
+    .llm-boundary { margin: 4px 0 2px; padding: 10px 11px; border: 1px solid rgba(166, 233, 239, 0.22); border-radius: 8px; color: var(--ink-soft); background: rgba(166, 233, 239, 0.055); font-size: 10px; line-height: 1.5; }
+    .llm-boundary strong { color: var(--cyan); }
+    .llm-confirm { display: flex; align-items: flex-start; gap: 8px; margin: 3px 0 2px; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
+    .llm-confirm input { margin: 2px 0 0; accent-color: var(--lime); }
     .command-input { display: flex; align-items: center; gap: 10px; padding: 15px 16px; border-bottom: 1px solid var(--line); }
     .command-input span { color: var(--lime); font-family: var(--mono); }
     .command-input input { width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 13px; }
@@ -581,6 +610,20 @@
   </style>
 </head>
 <body>
+  <section class="workspace-error" id="workspace-error" hidden role="alert" aria-live="assertive">
+    <div class="workspace-error-card">
+      <div class="eyebrow">Local workspace unavailable</div>
+      <h1>Local artifact unavailable</h1>
+      <p class="workspace-error-copy" id="workspace-error-copy">VibeWiki could not load the local evidence artifact. The static preview is disabled so it cannot be mistaken for your repository.</p>
+      <pre class="workspace-error-command">vibewiki scan /path/to/repository
+vibewiki build /path/to/repository
+vibewiki serve /path/to/repository</pre>
+      <div class="workspace-error-actions">
+        <button class="text-button primary" type="button" id="workspace-retry">Retry loading artifact</button>
+        <span class="workspace-error-status" id="workspace-error-status" role="status"></span>
+      </div>
+    </div>
+  </section>
   <div class="app-shell">
     <aside class="sidebar" aria-label="Main navigation">
       <div class="brand">
@@ -934,6 +977,7 @@
       <div class="command-input"><span>✦</span><strong>Configure LLM</strong></div>
       <form class="settings-form" id="llm-form">
         <p class="settings-copy">Cấu hình được giữ trong memory của server local. API key không được ghi vào source hoặc artifact.</p>
+        <div class="llm-boundary" id="llm-boundary"><strong>Local boundary:</strong> Evidence-only và Ollama xử lý trên máy này. OpenAI-compatible sẽ nhận bounded, secret-redacted source excerpts cùng path/line citations sau khi bạn xác nhận.</div>
         <div class="settings-field">
           <label for="llm-provider">Provider</label>
           <select id="llm-provider">
@@ -954,6 +998,10 @@
           <label for="llm-api-key">API key</label>
           <input id="llm-api-key" type="password" placeholder="Để trống để giữ key hiện tại" autocomplete="new-password" />
         </div>
+        <label class="llm-confirm" id="llm-remote-confirm-field" hidden>
+          <input id="llm-remote-confirm" type="checkbox" />
+          <span>I understand that this remote provider will receive bounded source excerpts. Secrets are redacted, but source context leaves this machine only after my confirmation.</span>
+        </label>
         <div class="settings-status" id="llm-settings-status" role="status"></div>
         <div class="settings-actions">
           <button class="text-button" type="button" id="llm-cancel">Cancel</button>
@@ -1372,6 +1420,9 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     const staleBanner = document.getElementById('stale-banner');
     const staleBannerCopy = document.getElementById('stale-banner-copy');
     const staleRescan = document.getElementById('stale-rescan');
+    const workspaceError = document.getElementById('workspace-error');
+    const workspaceErrorCopy = document.getElementById('workspace-error-copy');
+    const workspaceErrorStatus = document.getElementById('workspace-error-status');
     const browsePicker = document.getElementById('browse-picker');
     const browsePickerSummary = document.getElementById('browse-picker-summary');
     const sourcePackage = document.getElementById('source-package');
@@ -1400,6 +1451,26 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     function setBrowseStatus(message, kind = 'info') {
       browseStatus.textContent = message;
       browseStatus.className = `browse-status show ${kind}`;
+    }
+    function showWorkspaceUnavailable(message = '') {
+      document.documentElement.classList.remove('workspace-loading');
+      document.documentElement.classList.add('workspace-unavailable');
+      document.getElementById('graph-canvas')?.replaceChildren();
+      document.getElementById('evidence-list')?.replaceChildren();
+      document.getElementById('impact-list')?.replaceChildren();
+      if (workspaceError) workspaceError.hidden = false;
+      if (workspaceErrorCopy) {
+        workspaceErrorCopy.textContent = message
+          ? `VibeWiki could not load the local evidence artifact. ${message} The static preview is disabled so it cannot be mistaken for your repository.`
+          : 'VibeWiki could not load the local evidence artifact. The static preview is disabled so it cannot be mistaken for your repository.';
+      }
+      if (workspaceErrorStatus) workspaceErrorStatus.textContent = 'Artifact load failed · retry is safe';
+    }
+    function beginWorkspaceLoad() {
+      document.documentElement.classList.add('workspace-loading');
+      document.documentElement.classList.remove('workspace-unavailable');
+      if (workspaceError) workspaceError.hidden = true;
+      if (workspaceErrorStatus) workspaceErrorStatus.textContent = 'Loading local artifact…';
     }
     function renderStaleBanner(files = []) {
       if (!staleBanner || !staleBannerCopy) return;
@@ -2012,12 +2083,19 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     async function submitQuestion(input) {
       const question = input.value.trim();
       if (!question) return input.focus();
+      const status = await refreshLLMStatus();
+      if (status?.provider === 'openai-compatible' && !remoteLLMConfirmed) {
+        renderAskResult('Remote LLM confirmation is required before any source excerpt is sent. Review and confirm the data boundary in LLM setup.', 'error');
+        showToast('Confirm the remote source boundary in LLM setup before asking.');
+        await openLLMSettings();
+        return;
+      }
       renderAskResult('', 'busy');
       try {
         const response = await fetch('/api/ask', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({question, mode: askMode.value, history: questionHistory.slice(-6)})
+          body: JSON.stringify({question, mode: askMode.value, history: questionHistory.slice(-6), remote_confirmed: remoteLLMConfirmed})
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.message || 'Không thể gọi LLM local.');
@@ -2174,9 +2252,14 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     const llmBaseUrl = document.getElementById('llm-base-url');
     const llmApiKey = document.getElementById('llm-api-key');
     const llmKeyField = document.getElementById('llm-key-field');
+    const llmBoundary = document.getElementById('llm-boundary');
+    const llmRemoteConfirmField = document.getElementById('llm-remote-confirm-field');
+    const llmRemoteConfirm = document.getElementById('llm-remote-confirm');
     const llmSettingsStatus = document.getElementById('llm-settings-status');
+    let remoteLLMConfirmed = false;
     function applyLLMStatus(status) {
       if (!status) return;
+      remoteLLMConfirmed = status.provider === 'openai-compatible' && status.remote_confirmed === true;
       const runtime = document.getElementById('runtime-status');
       if (runtimeObservationLabel) {
         runtime.textContent = runtimeObservationLabel;
@@ -2198,6 +2281,12 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     function updateLLMFormVisibility() {
       const isKeyProvider = llmProvider.value === 'openai-compatible';
       llmKeyField.hidden = !isKeyProvider;
+      llmRemoteConfirmField.hidden = !isKeyProvider;
+      if (llmBoundary) {
+        llmBoundary.innerHTML = isKeyProvider
+          ? '<strong>Remote boundary:</strong> this provider receives only bounded, secret-redacted source excerpts and path/line citations after explicit confirmation. The repository and API key stay local.'
+          : '<strong>Local boundary:</strong> Evidence-only and Ollama process the workspace on this machine. No remote source transfer or confirmation is required.';
+      }
       if (llmProvider.value === 'ollama') llmBaseUrl.placeholder = 'http://127.0.0.1:11434';
       if (isKeyProvider) llmBaseUrl.placeholder = 'https://api.example.com';
     }
@@ -2212,7 +2301,12 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         llmModel.value = status.model || 'qwen2.5:7b';
         llmBaseUrl.value = status.base_url || (llmProvider.value === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com');
         llmApiKey.value = '';
-        llmSettingsStatus.textContent = status.has_api_key ? 'API key hiện tại đang được giữ trong server memory.' : 'Chưa có API key.';
+        llmRemoteConfirm.checked = status.remote_confirmed === true;
+        llmSettingsStatus.textContent = status.provider === 'openai-compatible'
+          ? (status.remote_confirmed
+            ? 'Remote source boundary đã được xác nhận cho cấu hình hiện tại.'
+            : 'Cần xác nhận remote source boundary trước khi Ask gửi excerpt.')
+          : (status.has_api_key ? 'API key hiện tại đang được giữ trong server memory.' : 'Chưa có API key.');
       }
       updateLLMFormVisibility();
       llmModel.focus();
@@ -2237,7 +2331,8 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       const payload = {
         provider: llmProvider.value,
         model: llmModel.value,
-        base_url: llmBaseUrl.value
+        base_url: llmBaseUrl.value,
+        remote_confirmed: llmProvider.value === 'openai-compatible' && llmRemoteConfirm.checked
       };
       if (llmProvider.value === 'openai-compatible' && llmApiKey.value) payload.api_key = llmApiKey.value;
       try {
@@ -2288,12 +2383,11 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     // the repository's built, evidence-backed artifact. The file remains
     // usable as a static design preview when no local API is available.
     async function bootRealWorkspace() {
+      beginWorkspaceLoad();
       try {
         const response = await fetch('/api/summary', { cache: 'no-store' });
         if (!response.ok) {
-          document.documentElement.classList.remove('workspace-loading');
-          showToast('Local artifact unavailable; showing the static preview.');
-          return;
+          throw new Error(`Local artifact request failed (HTTP ${response.status}).`);
         }
         const summary = await response.json();
         const [nodeResponse, edgeResponse, historyResponse, changesResponse, staleResponse, runtimeResponse, reviewsResponse] = await Promise.all([
@@ -2305,7 +2399,9 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           fetch('/api/runtime', { cache: 'no-store' }),
           fetch('/api/reviews', { cache: 'no-store' })
         ]);
-        if (!nodeResponse.ok || !edgeResponse.ok) return;
+        if (!nodeResponse.ok || !edgeResponse.ok) {
+          throw new Error('The local graph API did not return a usable artifact.');
+        }
         const nodePayload = await nodeResponse.json();
         const edgePayload = await edgeResponse.json();
         const nodes = nodePayload.nodes || [];
@@ -2927,14 +3023,17 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           }
         }, 2500);
         renderState();
-        document.documentElement.classList.remove('workspace-loading');
+        document.documentElement.classList.remove('workspace-loading', 'workspace-unavailable');
+        if (workspaceError) workspaceError.hidden = true;
         showToast(`Loaded ${summary.counts.facts} facts from the local build.`);
       } catch (error) {
-        // Static preview mode intentionally stays available without an API.
-        document.documentElement.classList.remove('workspace-loading');
-        showToast('Local API unavailable; showing the static preview.');
+        showWorkspaceUnavailable(error?.message || 'The local API is unavailable.');
+        showToast('Local artifact unavailable. Retry after checking scan/build/serve.');
       }
     }
+    document.getElementById('workspace-retry')?.addEventListener('click', () => {
+      bootRealWorkspace();
+    });
     bootRealWorkspace();
   </script>
 </body>

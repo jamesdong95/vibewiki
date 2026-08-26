@@ -64,6 +64,93 @@ _STOPWORDS = frozenset(
     }
 )
 
+# These patterns run only on the bounded text that would be sent to a remote
+# provider. They deliberately target literal values, not ordinary identifiers
+# such as ``tokenCount`` or calls such as ``getToken()``.
+_SENSITIVE_ASSIGNMENT = re.compile(
+    r"(?P<prefix>(?<![A-Za-z0-9_])(?:"
+    r"api[_-]?key|secret|password|passwd|token|"
+    r"(?:client|server|database|db|access|refresh|auth|private|session|"
+    r"signing|encryption|jwt)[_-]?(?:key|secret|token)"
+    r")(?![A-Za-z0-9_])\s*(?:[:=])\s*)"
+    r"(?P<quote>[\"'`])(?P<value>[^\r\n]*?)(?P=quote)",
+    re.IGNORECASE,
+)
+_SENSITIVE_BARE_ASSIGNMENT = re.compile(
+    r"(?P<prefix>(?<![A-Za-z0-9_])(?:"
+    r"api[_-]?key|secret|password|passwd|token|"
+    r"(?:client|server|database|db|access|refresh|auth|private|session|"
+    r"signing|encryption|jwt)[_-]?(?:key|secret|token)"
+    r")(?![A-Za-z0-9_])\s*(?:[:=])\s*)"
+    r"(?P<value>(?![\"'`])[^\s,;}\]]+)",
+    re.IGNORECASE,
+)
+_PRIVATE_KEY = re.compile(
+    r"-----BEGIN (?:[A-Z0-9][A-Z0-9 ]+ )?PRIVATE KEY-----.*?"
+    r"-----END (?:[A-Z0-9][A-Z0-9 ]+ )?PRIVATE KEY-----",
+    re.IGNORECASE | re.DOTALL,
+)
+_JWT = re.compile(
+    r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
+)
+_KNOWN_API_KEY = re.compile(
+    r"(?i)\b(?:sk-[A-Za-z0-9_-]{8,}|rk-[A-Za-z0-9_-]{8,}|"
+    r"gh[pousr]_[A-Za-z0-9_-]{12,}|AKIA[0-9A-Z]{16}|"
+    r"AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[0-9A-Za-z-]{10,})\b"
+)
+_BEARER_VALUE = re.compile(r"(?i)(\bBearer\s+)([A-Za-z0-9._~+/=-]{12,})")
+
+
+def _redact_sensitive_assignment(match: re.Match[str]) -> str:
+    quote = match.group("quote")
+    return f"{match.group('prefix')}{quote}[REDACTED]{quote}"
+
+
+def _redact_bare_assignment(match: re.Match[str]) -> str:
+    value = match.group("value")
+    # Do not turn ordinary code references into secrets. Bare values that look
+    # like literals (digits, separators, or mixed-case secret material) remain
+    # protected; environment lookups and function/identifier references do not.
+    safe_reference = re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?",
+        value,
+    )
+    if safe_reference and (
+        value.casefold() in {"true", "false", "null", "none", "undefined"}
+        or any(character in value for character in ".()")
+        or any(character.isupper() for character in value)
+    ):
+        return match.group(0)
+    return f"{match.group('prefix')}[REDACTED]"
+
+
+def _redact_private_key(match: re.Match[str]) -> str:
+    """Keep one safe marker per line so prefixed citations stay addressable."""
+
+    redacted_lines = []
+    for line in match.group(0).splitlines():
+        prefix = re.match(r"^(.*?:\d+:\s*)", line)
+        redacted_lines.append(
+            f"{prefix.group(1) if prefix else ''}[REDACTED_PRIVATE_KEY]"
+        )
+    return "\n".join(redacted_lines)
+
+
+def redact_source_context(value: str) -> str:
+    """Redact literal credentials from text before a remote LLM call.
+
+    The function returns a new string and never touches the repository file or
+    artifact. Path/line prefixes remain intact, so citations continue to point
+    at the original source location.
+    """
+
+    redacted = _PRIVATE_KEY.sub(_redact_private_key, value)
+    redacted = _SENSITIVE_ASSIGNMENT.sub(_redact_sensitive_assignment, redacted)
+    redacted = _SENSITIVE_BARE_ASSIGNMENT.sub(_redact_bare_assignment, redacted)
+    redacted = _JWT.sub("[REDACTED_JWT]", redacted)
+    redacted = _KNOWN_API_KEY.sub("[REDACTED_API_KEY]", redacted)
+    return _BEARER_VALUE.sub(r"\1[REDACTED_BEARER]", redacted)
+
 
 @dataclass(frozen=True, slots=True)
 class LLMSettings:
@@ -71,6 +158,7 @@ class LLMSettings:
     model: str
     base_url: str
     api_key: str | None
+    remote_confirmed: bool = False
 
     @classmethod
     def from_values(
@@ -79,6 +167,7 @@ class LLMSettings:
         model: str,
         base_url: str,
         api_key: str | None,
+        remote_confirmed: bool = False,
     ) -> LLMSettings:
         provider = provider.strip().casefold()
         model = model.strip()
@@ -97,7 +186,7 @@ class LLMSettings:
                 ErrorCode.LLM_UNAVAILABLE,
                 "an API key is required for the configured provider",
             )
-        return cls(provider, model, base_url, api_key)
+        return cls(provider, model, base_url, api_key, bool(remote_confirmed))
 
     @classmethod
     def from_environment(cls) -> LLMSettings:
@@ -135,6 +224,9 @@ def llm_status(settings: LLMSettings | None = None) -> dict[str, Any]:
         "mode": "local" if settings.provider == "ollama" else settings.provider,
         "base_url": settings.base_url,
         "has_api_key": bool(settings.api_key),
+        "remote": settings.provider == "openai-compatible",
+        "remote_confirmation_required": settings.provider == "openai-compatible",
+        "remote_confirmed": bool(settings.remote_confirmed),
     }
 
 
@@ -172,7 +264,28 @@ def configure_llm(
         raise VibeWikiError(ErrorCode.INVALID_OUTPUT, "LLM API key is invalid")
     if provider == "none":
         api_key = None
-    return LLMSettings.from_values(provider, model, base_url, api_key)
+    confirmation = payload.get("remote_confirmed", False)
+    if not isinstance(confirmation, bool):
+        raise VibeWikiError(
+            ErrorCode.INVALID_OUTPUT, "remote LLM confirmation must be boolean"
+        )
+    same_configuration = bool(
+        current
+        and current.provider == provider
+        and current.model == model.strip()
+        and current.base_url == base_url.strip().rstrip("/")
+        and (supplied_key is None or current.api_key == api_key)
+    )
+    remote_confirmed = (
+        confirmation
+        if "remote_confirmed" in payload
+        else bool(current.remote_confirmed) if same_configuration and current else False
+    )
+    if provider != "openai-compatible":
+        remote_confirmed = False
+    return LLMSettings.from_values(
+        provider, model, base_url, api_key, remote_confirmed=remote_confirmed
+    )
 
 
 def _tokens(value: str) -> set[str]:
@@ -445,9 +558,26 @@ def ask_repository(
             ErrorCode.INVALID_OUTPUT,
             "analysis mode must be general, flow, impact, or unknowns",
         )
-    selected, evidence, edges, context = _retrieval(root, artifact, question, mode)
     settings = settings or LLMSettings.from_environment()
     provider = _provider(settings)
+    is_remote = provider.name in {"openai", "openai-compatible"}
+    if is_remote and not (
+        payload.get("remote_confirmed") is True
+        or getattr(settings, "remote_confirmed", False)
+    ):
+        raise VibeWikiError(
+            ErrorCode.PERMISSION_DENIED,
+            "remote LLM confirmation is required before source excerpts are sent; "
+            "review the data boundary and confirm in LLM setup",
+        )
+    selected, evidence, edges, context = _retrieval(root, artifact, question, mode)
+    history = _history(payload.get("history"))
+    if is_remote:
+        context = redact_source_context(context)
+        history = [
+            {"role": item["role"], "content": redact_source_context(item["content"])}
+            for item in history
+        ]
     messages = [
         {
             "role": "system",
@@ -460,7 +590,7 @@ def ask_repository(
                 f"Retrieved evidence:\n{context or 'No matching evidence was found.'}"
             ),
         },
-        *_history(payload.get("history")),
+        *history,
         {"role": "user", "content": question},
     ]
     response = provider.generate(messages, model=settings.model)

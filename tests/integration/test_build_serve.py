@@ -583,6 +583,12 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "data-source-diff-path" in html
     assert "/api/changes/source" in html
     assert "source-diff-line" in html
+    assert 'id="workspace-error"' in html
+    assert "Local artifact unavailable" in html
+    assert 'id="workspace-retry"' in html
+    assert 'id="llm-boundary"' in html
+    assert 'id="llm-remote-confirm"' in html
+    assert "remote_confirmed" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
@@ -1012,48 +1018,118 @@ def test_github_import_api_rejects_non_loopback_server(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     scan_repository(root)
     build_repository(root)
-    server = create_server(root, host="0.0.0.0", port=0)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    request = Request(
-        f"http://127.0.0.1:{server.server_address[1]}/api/import-github",
-        data=json.dumps({"url": "https://github.com/acme/demo"}).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with pytest.raises(HTTPError) as raised:
-            urlopen(request)
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
-
-    assert raised.value.code == 422
+    with pytest.raises(VibeWikiError, match="non-loopback"):
+        create_server(root, host="0.0.0.0", port=0)
 
 
 def test_local_path_import_rejects_non_loopback_server(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     scan_repository(root)
     build_repository(root)
-    server = create_server(root, host="0.0.0.0", port=0)
+    with pytest.raises(VibeWikiError, match="non-loopback"):
+        create_server(root, host="0.0.0.0", port=0)
+
+
+def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
+    tmp_path: Path,
+) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, host="0.0.0.0", port=0, share=True)
+    assert server.auth_required is True
+    assert isinstance(server.access_token, str) and len(server.access_token) >= 32
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    request = Request(
-        f"http://127.0.0.1:{server.server_address[1]}/api/import-path",
-        data=json.dumps({"path": str(root)}).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def request(
+        path: str,
+        *,
+        method: str = "GET",
+        payload: dict | None = None,
+        authorized: bool = False,
+    ):
+        headers = {}
+        body = None
+        if payload is not None:
+            body = json.dumps(payload).encode()
+            headers["Content-Type"] = "application/json"
+        if authorized:
+            headers["Authorization"] = f"Bearer {server.access_token}"
+        return Request(f"{base}{path}", data=body, method=method, headers=headers)
+
+    protected_gets = (
+        "/",
+        "/api/nodes",
+        "/api/source?path=app%2Fpage.tsx",
+        "/api/export",
+    )
+    protected_posts = (
+        ("/api/llm/config", {"provider": "none"}),
+        ("/api/ask", {"question": "signup"}),
+        ("/api/observe", {"target": "http://127.0.0.1:1"}),
+        ("/api/import", {}),
+        ("/api/import-path", {"path": str(root)}),
+        ("/api/import-github", {"url": "https://github.com/acme/demo"}),
+        ("/api/rescan", {}),
+        ("/api/reviews", {"subject": "x", "status": "reviewed"}),
+        ("/api/reviews/batch", {"items": []}),
+        ("/api/intent", {"product": {"name": "x"}}),
     )
     try:
-        with pytest.raises(HTTPError) as raised:
-            urlopen(request)
+        for path in protected_gets:
+            with pytest.raises(HTTPError) as raised:
+                urlopen(request(path))
+            assert raised.value.code == 401
+        for path, payload in protected_posts:
+            with pytest.raises(HTTPError) as raised:
+                urlopen(request(path, method="POST", payload=payload))
+            assert raised.value.code == 401
+        with pytest.raises(HTTPError) as wrong_token:
+            urlopen(
+                Request(
+                    f"{base}/api/nodes",
+                    headers={"Authorization": "Bearer definitely-not-the-token"},
+                )
+            )
+        assert wrong_token.value.code == 401
+
+        with urlopen(request("/", authorized=True)) as response:
+            html = response.read().decode("utf-8")
+            assert response.headers.get("Access-Control-Allow-Origin") is None
+        assert server.access_token not in html
+
+        with urlopen(request("/api/nodes", authorized=True)) as response:
+            assert json.load(response)["nodes"]
+        with urlopen(
+            request("/api/source?path=app%2Fpage.tsx", authorized=True)
+        ) as response:
+            assert json.load(response)["path"] == "app/page.tsx"
+        with urlopen(request("/api/export", authorized=True)) as response:
+            assert response.headers["Content-Type"] == "application/zip"
+        with urlopen(
+            request(
+                "/api/llm/config",
+                method="POST",
+                payload={"provider": "none"},
+                authorized=True,
+            )
+        ) as response:
+            assert json.load(response)["saved"] is True
+        with urlopen(
+            request(
+                "/api/ask",
+                method="POST",
+                payload={"question": "signup"},
+                authorized=True,
+            )
+        ) as response:
+            assert json.load(response)["provider"] == "none"
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
-
-    assert raised.value.code == 422
 
 
 def test_import_limit_ignores_sensitive_and_unsupported_payloads(monkeypatch) -> None:

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import io
+import ipaddress
 import json
 import os
+import secrets
 import sysconfig
 import threading
 import zipfile
@@ -69,6 +71,39 @@ def _viewer_directory() -> Path:
         ErrorCode.INVALID_OUTPUT,
         "viewer asset is not installed; reinstall the vibewiki package",
     )
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return whether a bind host is unambiguously loopback-only.
+
+    Unknown hostnames are treated as non-loopback. Refusing to resolve an
+    arbitrary hostname avoids a DNS change turning a safe command into a
+    network-facing server.
+    """
+
+    value = str(host).strip().lower()
+    if value in {"localhost", "ip6-localhost"}:
+        return True
+    if value.startswith("[") and value.endswith("]"):
+        value = value[1:-1]
+    if "%" in value:
+        value = value.split("%", 1)[0]
+    try:
+        return ipaddress.ip_address(value).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_bind_host(host: str, share: bool) -> bool:
+    """Validate a server bind and return whether it is loopback-only."""
+
+    loopback = _is_loopback_host(host)
+    if not loopback and not share:
+        raise VibeWikiError(
+            ErrorCode.PERMISSION_DENIED,
+            "non-loopback server binds require --share authentication",
+        )
+    return loopback
 
 
 def _artifact(root: Path) -> dict[str, Any]:
@@ -712,8 +747,13 @@ def api_payload(
 
 
 def create_server(
-    repository: str | Path, host: str = "127.0.0.1", port: int = 0
+    repository: str | Path,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    *,
+    share: bool = False,
 ) -> ThreadingHTTPServer:
+    loopback_host = _validate_bind_host(host, share)
     root = Path(repository).absolute()
     auto_analyzed = _ensure_artifact(root)
     artifact = _artifact(root)
@@ -723,7 +763,40 @@ def create_server(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, directory=str(viewer), **kwargs)
 
+        def _authorized(self) -> bool:
+            """Check the shared-server bearer token without logging it."""
+
+            if not self.server.auth_required:
+                return True
+            authorization = self.headers.get("Authorization", "")
+            scheme, _, credential = authorization.partition(" ")
+            candidate = credential.strip() if scheme.casefold() == "bearer" else ""
+            expected = self.server.access_token or ""
+            # Always compare a string, including for malformed/missing headers.
+            # compare_digest prevents timing differences from revealing the
+            # generated token one character at a time.
+            return secrets.compare_digest(candidate, expected)
+
+        def _require_authorization(self) -> bool:
+            if self._authorized():
+                return True
+            body = canonical_json(
+                {
+                    "error": "unauthorized",
+                    "message": "a valid Authorization: Bearer token is required",
+                }
+            ).encode("utf-8")
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", "Bearer")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return False
+
         def do_GET(self) -> None:  # noqa: N802
+            if not self._require_authorization():
+                return
             parsed = urlparse(self.path)
             if parsed.path == "/api/export":
                 try:
@@ -781,6 +854,8 @@ def create_server(
             super().do_GET()
 
         def do_POST(self) -> None:  # noqa: N802
+            if not self._require_authorization():
+                return
             parsed = urlparse(self.path)
             if parsed.path == "/api/reviews/batch":
                 try:
@@ -1271,6 +1346,16 @@ def create_server(
                     {"error": "invalid_output", "message": str(error)},
                 )
 
+        def do_HEAD(self) -> None:  # noqa: N802
+            if not self._require_authorization():
+                return
+            super().do_HEAD()
+
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            if not self._require_authorization():
+                return
+            self.send_error(405, "method not allowed")
+
         def _write_json(self, status: int, payload: dict[str, Any]) -> None:
             body = canonical_json(payload).encode("utf-8")
             self.send_response(status)
@@ -1295,7 +1380,11 @@ def create_server(
         "provider": "local-workspace",
         "label": root.name,
     }
-    server.local_path_import_allowed = host in {"127.0.0.1", "localhost", "::1"}
+    server.bind_is_loopback = loopback_host
+    server.share_mode = bool(share)
+    server.auth_required = bool(share and not loopback_host)
+    server.access_token = secrets.token_urlsafe(32) if share else None
+    server.local_path_import_allowed = loopback_host
     server.github_import_allowed = server.local_path_import_allowed
     server.workspace_lock = threading.RLock()
     server.rescan_lock = threading.Lock()
@@ -1308,6 +1397,7 @@ def serve_repository(
     host: str = "127.0.0.1",
     port: int = 4173,
     *,
+    share: bool = False,
     llm_provider: str | None = None,
     llm_model: str | None = None,
     llm_base_url: str | None = None,
@@ -1323,23 +1413,25 @@ def serve_repository(
             os.environ[key] = value
     server: ThreadingHTTPServer | None = None
     try:
-        server = create_server(repository, host, port)
+        server = create_server(repository, host, port, share=share)
         actual_port = server.server_address[1]
-        print(
-            canonical_json(
-                {
-                    "bind": host,
-                    "command": "serve",
-                    "port": actual_port,
-                    "artifact_root": MANIFEST_DIRECTORY,
-                    "auto_analyzed": server.auto_analyzed,
-                    "schema_version": SCHEMA_VERSION,
-                    "status": "ready",
-                }
-            ),
-            end="",
-            flush=True,
-        )
+        ready = {
+            "bind": host,
+            "command": "serve",
+            "port": actual_port,
+            "artifact_root": MANIFEST_DIRECTORY,
+            "auto_analyzed": server.auto_analyzed,
+            "schema_version": SCHEMA_VERSION,
+            "status": "ready",
+            "share": server.share_mode,
+            "auth": "bearer" if server.auth_required else "loopback",
+        }
+        if server.access_token is not None:
+            # This is the one intentional token disclosure: the local ready
+            # event lets the person who launched the process connect. The
+            # token is never copied into HTML, artifacts, or request logs.
+            ready["access_token"] = server.access_token
+        print(canonical_json(ready), flush=True)
         server.serve_forever()
     finally:
         if server is not None and server.imported_workspace is not None:

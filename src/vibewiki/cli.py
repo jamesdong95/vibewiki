@@ -110,8 +110,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="serve the built local viewer on loopback",
     )
     serve_parser.add_argument("repository", help="repository directory to serve")
-    serve_parser.add_argument("--host", default="127.0.0.1", help="bind address")
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address (non-loopback requires --share)",
+    )
     serve_parser.add_argument("--port", default=4173, type=int, help="bind port")
+    serve_parser.add_argument(
+        "--share",
+        action="store_true",
+        help=(
+            "allow a non-loopback bind; print a per-server bearer token "
+            "in the ready event"
+        ),
+    )
     serve_parser.add_argument(
         "--llm-provider",
         choices=("none", "ollama", "openai-compatible"),
@@ -188,6 +200,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             arguments.repository,
             arguments.host,
             arguments.port,
+            share=arguments.share,
             llm_provider=arguments.llm_provider,
             llm_model=arguments.llm_model,
             llm_base_url=arguments.llm_base_url,
