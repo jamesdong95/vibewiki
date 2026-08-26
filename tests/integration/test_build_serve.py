@@ -659,9 +659,7 @@ def test_source_diff_api_exposes_bounded_local_detail_and_excludes_export(
     try:
         with urlopen(f"{base}/api/changes") as response:
             changes = json.load(response)
-        with urlopen(
-            f"{base}/api/changes/source?path=app%2Fpage.tsx"
-        ) as response:
+        with urlopen(f"{base}/api/changes/source?path=app%2Fpage.tsx") as response:
             changed_detail = json.load(response)
         with urlopen(f"{base}/api/changes/source?path=app%2Fnew.js") as response:
             added_detail = json.load(response)
@@ -699,9 +697,7 @@ def test_source_diff_api_exposes_bounded_local_detail_and_excludes_export(
     }
     assert "text" not in json.dumps(source_summary)
     changed_lines = [
-        line
-        for hunk in changed_detail["file"]["hunks"]
-        for line in hunk["lines"]
+        line for hunk in changed_detail["file"]["hunks"] for line in hunk["lines"]
     ]
     assert any(line["kind"] == "removed" for line in changed_lines)
     assert any(line["kind"] == "added" for line in changed_lines)
@@ -918,9 +914,7 @@ def test_serve_imports_a_local_repository_path_without_browser_picker(
     root = _fixture_copy(tmp_path)
     source = tmp_path / "local-path-source"
     (source / "src").mkdir(parents=True)
-    (source / "src/main.js").write_text(
-        "export function start() { return true; }\n"
-    )
+    (source / "src/main.js").write_text("export function start() { return true; }\n")
     scan_repository(root)
     build_repository(root)
     server = create_server(root, port=0)
@@ -949,8 +943,10 @@ def test_serve_imports_a_local_repository_path_without_browser_picker(
 
     assert imported["import_mode"] == "local-path"
     assert imported["counts"]["scanned_files"] == 1
+    assert imported["import_source"]["selected_files"] == 1
     assert summary["project"] == "local-path-source"
     assert summary["counts"]["facts"] == 1
+    assert summary["source"]["selected_files"] == 1
 
 
 def test_serve_imports_public_github_repository_through_loopback_api(

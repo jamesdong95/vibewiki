@@ -1849,7 +1849,10 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const response = await fetch('/api/import', { method: 'POST', body: form });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(importErrorMessage(result));
-        setBrowseStatus(`Scan thành công: ${result.counts.facts} facts, ${result.counts.scanned_files} file source. Đang tải graph mới…`, 'success');
+        const source = result.import_source || {};
+        const selectedCount = Number(source.selected_files || result.counts.scanned_files || 0);
+        const skippedCount = Number(source.skipped_files || skipped || 0);
+        setBrowseStatus(`Scan thành công: ${result.counts.facts} facts, ${selectedCount.toLocaleString()} file supported, bỏ qua ${skippedCount.toLocaleString()} file. Đang tải graph mới…`, 'success');
         showToast(`Scan xong: ${result.counts.facts} facts found.`);
         window.setTimeout(() => window.location.reload(), 1400);
       } catch (error) {

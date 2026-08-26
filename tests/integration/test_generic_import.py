@@ -11,10 +11,13 @@ import pytest
 from vibewiki.build import build_repository
 from vibewiki.errors import ErrorCode, VibeWikiError
 from vibewiki.importer import (
+    _multipart_candidates,
     _multipart_files,
+    _select_import,
     cleanup_workspace,
     import_github_workspace,
     import_local_workspace,
+    import_uploaded_workspace,
 )
 from vibewiki.scan import scan_repository
 
@@ -97,9 +100,7 @@ def test_generic_javascript_repository_builds_without_app(tmp_path: Path) -> Non
 def test_local_path_import_builds_bounded_snapshot(tmp_path: Path) -> None:
     source = tmp_path / "source-project"
     (source / "src").mkdir(parents=True)
-    (source / "src/main.js").write_text(
-        "export function start() { return true; }\n"
-    )
+    (source / "src/main.js").write_text("export function start() { return true; }\n")
     (source / ".env.local").write_text("API_KEY=not-read\n")
     (source / "image.png").write_bytes(b"not-indexed")
 
@@ -156,9 +157,7 @@ def test_github_import_uses_public_archive_and_selects_web_package(
         return _FakeArchiveResponse(archive)
 
     monkeypatch.setattr("vibewiki.importer.urlopen", fake_urlopen)
-    imported = import_github_workspace(
-        "https://github.com/acme/demo.git", ref="main"
-    )
+    imported = import_github_workspace("https://github.com/acme/demo.git", ref="main")
     try:
         source = imported.build_summary["import_source"]
         assert source["provider"] == "github"
@@ -166,13 +165,55 @@ def test_github_import_uses_public_archive_and_selects_web_package(
         assert source["ref"] == "main"
         assert source["selected_files"] == 1
         assert source["skipped_files"] >= 4
-        assert requests == [
-            "https://codeload.github.com/acme/demo/tar.gz/main"
-        ]
-        assert (imported.root / "app/page.tsx").is_file()
+        assert requests == ["https://codeload.github.com/acme/demo/tar.gz/main"]
+        assert (imported.root / "packages/web/app/page.tsx").is_file()
         assert not (imported.root / "packages/web/.env.local").exists()
         assert not (imported.root / "src/root.js").exists()
         assert not (imported.root / "src/link.js").exists()
+    finally:
+        cleanup_workspace(imported)
+
+
+def test_github_monorepo_keeps_transitive_workspace_dependency_closure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _github_archive(
+        {
+            "package.json": '{"private":true,"workspaces":["packages/*"]}\n',
+            "packages/web/package.json": '{"name":"@demo/web"}\n',
+            "packages/web/app/page.tsx": (
+                "import { Button } from '@demo/ui/button';\n"
+                "export default function Home() { return Button(); }\n"
+            ),
+            "packages/ui/package.json": (
+                '{"name":"@demo/ui","exports":{"./button":"./src/button.ts"}}\n'
+            ),
+            "packages/ui/src/button.ts": (
+                "export function Button() { return 'ok'; }\n"
+            ),
+            "packages/api/package.json": '{"name":"@demo/api"}\n',
+            "packages/api/src/index.ts": (
+                "export function unrelated() { return false; }\n"
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "vibewiki.importer.urlopen",
+        lambda *args, **kwargs: _FakeArchiveResponse(archive),
+    )
+    imported = import_github_workspace("https://github.com/acme/demo")
+    try:
+        source = imported.build_summary["import_source"]
+        assert source["primary_package"] == "packages/web"
+        assert source["selected_files"] == 5
+        assert source["closure_packages"] == [".", "packages/ui", "packages/web"]
+        assert not (imported.root / "packages/api/src/index.ts").exists()
+        graph = json.loads((imported.root / ".vibewiki/graph.json").read_text())
+        assert (
+            "module:packages/web/app/page.tsx",
+            "module:packages/ui/src/button.ts",
+        ) in {(edge["source"], edge["target"]) for edge in graph["module_edges"]}
     finally:
         cleanup_workspace(imported)
 
@@ -211,9 +252,7 @@ def test_github_import_reports_archive_and_source_limits(
     with pytest.raises(VibeWikiError, match="download limit"):
         import_github_workspace("https://github.com/acme/demo")
 
-    monkeypatch.setattr(
-        "vibewiki.importer.MAX_GITHUB_ARCHIVE_BYTES", len(archive) + 1
-    )
+    monkeypatch.setattr("vibewiki.importer.MAX_GITHUB_ARCHIVE_BYTES", len(archive) + 1)
     monkeypatch.setattr("vibewiki.importer.MAX_IMPORT_BYTES", 1)
     with pytest.raises(VibeWikiError, match="byte limit"):
         import_github_workspace("https://github.com/acme/demo")
@@ -234,9 +273,7 @@ def test_vite_react_fixture_emits_router_objects_and_api_wrapper_edges(
     }
     assert "route:generic:src/router.jsx:GET:/settings" in route_keys
     assert "api_call:src/App.jsx:/api/health" in {
-        item["semantic_key"]
-        for item in artifact["facts"]
-        if item["kind"] == "api_call"
+        item["semantic_key"] for item in artifact["facts"] if item["kind"] == "api_call"
     }
     assert any(
         edge["source"] == "api_call:src/App.jsx:/api/health"
@@ -261,9 +298,12 @@ def test_next_pages_fixture_emits_page_and_api_routes(tmp_path: Path) -> None:
     assert "route:next_pages:pages/index.tsx:GET:/" in routes
     assert "route:next_pages:pages/account.jsx:GET:/account" in routes
     assert "route:next_pages:pages/api/users.js:ANY:/api/users" in routes
-    assert routes["route:next_pages:pages/api/users.js:ANY:/api/users"][
-        "attributes"
-    ]["methods"] == []
+    assert (
+        routes["route:next_pages:pages/api/users.js:ANY:/api/users"]["attributes"][
+            "methods"
+        ]
+        == []
+    )
     assert any(
         edge["source"] == "api_call:src/client.ts:/api/users"
         and edge["target"] == "route:next_pages:pages/api/users.js:ANY:/api/users"
@@ -381,9 +421,7 @@ def test_generic_framework_routes_and_api_calls_build_reverse_graph(
         "}\n"
     )
     (tmp_path / "api.py").write_text(
-        "@app.get('/users')\n"
-        "def users():\n"
-        "    return []\n"
+        "@app.get('/users')\ndef users():\n    return []\n"
     )
     (tmp_path / "main.go").write_text(
         'package main\nimport "net/http"\n'
@@ -398,9 +436,7 @@ def test_generic_framework_routes_and_api_calls_build_reverse_graph(
         item["semantic_key"] for item in artifact["facts"] if item["kind"] == "route"
     }
     api_keys = {
-        item["semantic_key"]
-        for item in artifact["facts"]
-        if item["kind"] == "api_call"
+        item["semantic_key"] for item in artifact["facts"] if item["kind"] == "api_call"
     }
     assert "route:generic:server.js:GET:/health" in route_keys
     assert "route:generic:server.js:POST:/api/items" in route_keys
@@ -447,9 +483,7 @@ def test_generic_analyzer_detects_angular_and_nest_routes(tmp_path: Path) -> Non
     build_repository(tmp_path)
     graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
     routes = {
-        item["semantic_key"]: item
-        for item in graph["facts"]
-        if item["kind"] == "route"
+        item["semantic_key"]: item for item in graph["facts"] if item["kind"] == "route"
     }
 
     assert "route:angular:src/app-routing.module.ts:GET:/" in routes
@@ -465,9 +499,7 @@ def test_generic_analyzer_detects_astro_and_nuxt_filesystem_routes(
     (tmp_path / "src/pages/blog").mkdir(parents=True)
     (tmp_path / "packages/admin/pages").mkdir(parents=True)
     (tmp_path / "src/pages/index.astro").write_text("<h1>Home</h1>\n")
-    (tmp_path / "src/pages/blog/[slug].astro").write_text(
-        "<h1>Blog</h1>\n"
-    )
+    (tmp_path / "src/pages/blog/[slug].astro").write_text("<h1>Blog</h1>\n")
     (tmp_path / "packages/admin/pages/about.vue").write_text(
         "<template><h1>About</h1></template>\n"
     )
@@ -497,7 +529,61 @@ def test_importer_selects_nested_web_package_deterministically() -> None:
 
     selected = _multipart_files(content_type, body)
 
-    assert [item[1] for item in selected] == ["app/page.js", "src/main.js"]
+    assert [item[1] for item in selected] == [
+        "packages/ui/src/Button.jsx",
+        "packages/web/app/page.js",
+        "packages/web/src/main.js",
+    ]
+
+
+def test_multipart_monorepo_keeps_transitive_workspace_dependency_closure() -> None:
+    content_type, body = _multipart(
+        {
+            "repo/package.json": '{"private":true,"workspaces":["packages/*"]}\n',
+            "repo/packages/web/package.json": '{"name":"@demo/web"}\n',
+            "repo/packages/web/app/page.tsx": (
+                "import { Button } from '@demo/ui/button';\n"
+                "export default function Home() { return Button(); }\n"
+            ),
+            "repo/packages/ui/package.json": (
+                '{"name":"@demo/ui","exports":{"./button":"./src/button.ts"}}\n'
+            ),
+            "repo/packages/ui/src/button.ts": (
+                "export function Button() { return 'ok'; }\n"
+            ),
+            "repo/packages/api/package.json": '{"name":"@demo/api"}\n',
+            "repo/packages/api/src/index.ts": (
+                "export function unrelated() { return false; }\n"
+            ),
+        }
+    )
+
+    selection = _select_import(_multipart_candidates(content_type, body))
+    assert selection.primary_package == "packages/web"
+    assert [item.repo_relative_path for item in selection.files] == [
+        "package.json",
+        "packages/ui/package.json",
+        "packages/ui/src/button.ts",
+        "packages/web/app/page.tsx",
+        "packages/web/package.json",
+    ]
+    assert selection.closure_packages == (".", "packages/ui", "packages/web")
+    assert selection.unresolved_workspace_imports == ()
+
+    imported = import_uploaded_workspace(content_type, body)
+    try:
+        graph = json.loads((imported.root / ".vibewiki/graph.json").read_text())
+        assert (
+            "module:packages/web/app/page.tsx",
+            "module:packages/ui/src/button.ts",
+        ) in {(edge["source"], edge["target"]) for edge in graph["module_edges"]}
+        source = imported.build_summary["import_source"]
+        assert source["primary_package"] == "packages/web"
+        assert source["selected_files"] == 5
+        assert source["closure_packages"] == [".", "packages/ui", "packages/web"]
+        assert not (imported.root / "packages/api/src/index.ts").exists()
+    finally:
+        cleanup_workspace(imported)
 
 
 def test_importer_rejects_unsupported_source_with_actionable_error() -> None:

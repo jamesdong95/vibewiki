@@ -1194,6 +1194,7 @@ def create_server(
                         self.server.workspace_artifact = _artifact(imported.root)
                         self.server.imported_workspace = imported
                         self.server.workspace_source = {
+                            **imported.build_summary.get("import_source", {}),
                             "provider": "local-path",
                             "label": Path(payload["path"]).expanduser().name
                             or imported.root.name,
@@ -1355,6 +1356,7 @@ def create_server(
                     self.server.workspace_artifact = _artifact(imported.root)
                     self.server.imported_workspace = imported
                     self.server.workspace_source = {
+                        **imported.build_summary.get("import_source", {}),
                         "provider": "browser-folder",
                         "label": imported.root.name,
                     }

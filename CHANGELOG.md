@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.45-preview] - 2026-08-26
+
+### Added
+
+- Browse, local-path, and public GitHub imports now preserve repository-relative
+  paths and select a deterministic primary package for nested repositories.
+- Multipart and GitHub imports retain the transitive workspace dependency
+  closure resolved from local imports, package exports/entrypoints, and
+  TypeScript/JavaScript path aliases; unrelated packages are left out.
+- Import responses and workspace summaries expose selected/skipped files,
+  retained bytes, primary package, closure packages, and unresolved workspace
+  imports for an inspectable local scan.
+- Added monorepo regression coverage for multipart/GitHub closure, reverse graph
+  edges, path evidence, API summary propagation, and safe import limits.
+
 ## [0.1.44-preview] - 2026-08-26
 
 ### Added
