@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.43-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.43-preview) · scan a repository locally or import a public GitHub URL, build a reverse graph, review file and graph changes after every rescan, inspect bounded inline source diffs with line numbers, triage every Unknown through an Open/All queue, bulk-review selected findings atomically, mark findings reviewed with local notes and reopen them later, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, inspect source-linked facts, and observe a local runtime.
+**Latest verified preview:** [`v0.1.44-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.44-preview) · scan a repository locally or import a public GitHub URL, build a reverse graph, review file and graph changes after every rescan, inspect bounded inline source diffs with line numbers, triage every Unknown through an Open/All queue, bulk-review selected findings atomically, mark findings reviewed with local notes and reopen them later, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, accept mixed root/nested package routes, browse common source/config formats, resolve workspace package imports, format grounded AI answers, inspect source-linked facts, observe a local runtime, and keep shared binds behind bearer authentication with remote-LLM source redaction.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -87,6 +87,17 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory viewer
 ```
 
 Then open <http://127.0.0.1:4173/>.
+
+For a deliberate LAN/shared preview, opt in explicitly:
+
+```bash
+uv run vibewiki serve /path/to/repository --host 0.0.0.0 --port 4173 --share
+```
+
+The ready JSON prints a one-time browser access URL and bearer token. The first
+browser visit exchanges the token for an HttpOnly session cookie and cleans the
+URL; all viewer/API routes remain protected. Keep the token private and prefer
+loopback when sharing is not needed.
 
 The local product provides:
 
@@ -384,6 +395,8 @@ See the detailed phase plan in [`docs/product-development-plan.md`](docs/product
 
 - Local-first by default; scanning should not require a hosted service.
 - No full-repository prompt by default; retrieve only relevant symbols/modules.
+- Non-loopback viewer binds require explicit `--share` bearer authentication;
+  remote LLM prompts require confirmation and redact detected credential values.
 - No credential storage or proxying by VibeWiki.
 - Redact secrets and sensitive values before writing evidence or claims.
 - Separate deterministic facts from model-generated interpretation.

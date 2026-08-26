@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.44-preview] - 2026-08-26
+
+### Added
+
+- Trusted shared-workspace mode: non-loopback binds require explicit
+  `--share`, bearer authentication, and a per-server random token. Browser
+  bootstrap exchanges the printed access URL for an HttpOnly session cookie.
+- Central authentication coverage for viewer, source, export, graph, import,
+  rescan, review, intent, runtime-observation, and LLM endpoints.
+- Remote LLM confirmation and bounded secret redaction for source excerpts,
+  including API keys, JWTs, private keys, bearer values, and sensitive
+  assignments while preserving path/line citations.
+- Explicit artifact-unavailable UI with retry and local scan/build/serve
+  instructions; static demo data is never presented as a real workspace.
+- Regression and browser coverage for share auth, cookie bootstrap, redaction,
+  remote confirmation, and artifact failure behavior.
+
 ## [0.1.43-preview] - 2026-08-26
 
 ### Added
