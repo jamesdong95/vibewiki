@@ -797,9 +797,7 @@ def _initial_llm_settings(store: WorkspaceStore) -> LLMSettings | None:
         "provider": preferences.get(
             "provider", settings.provider if settings else "none"
         ),
-        "model": preferences.get(
-            "model", settings.model if settings else "qwen2.5:7b"
-        ),
+        "model": preferences.get("model", settings.model if settings else "qwen2.5:7b"),
         "base_url": preferences.get(
             "base_url",
             settings.base_url if settings else "https://api.openai.com",
@@ -962,6 +960,11 @@ def create_server(
                         "project": None,
                         "source": {"provider": "onboarding", "label": "No workspace"},
                         "workspaces": self.server.workspace_store.public(),
+                        "capabilities": {
+                            "browse": self.server.local_path_import_allowed,
+                            "local_path": self.server.local_path_import_allowed,
+                            "github": self.server.github_import_allowed,
+                        },
                     },
                 )
                 return
@@ -1654,6 +1657,11 @@ def create_server(
                 self.send_error(404, "not found")
                 return
             try:
+                if not self.server.local_path_import_allowed:
+                    raise VibeWikiError(
+                        ErrorCode.PERMISSION_DENIED,
+                        "source import is available only on a loopback server",
+                    )
                 content_length = int(self.headers.get("Content-Length", "0"))
                 if content_length <= 0:
                     raise VibeWikiError(

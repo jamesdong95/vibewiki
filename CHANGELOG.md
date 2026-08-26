@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.47-preview] - 2026-08-26
+
+### Added
+
+- Added a first-run onboarding screen with Choose folder, Use local path, and
+  Import public GitHub entry points when no workspace is open.
+- Exposed loopback/shared-server import capabilities so unavailable actions are
+  disabled with an actionable explanation instead of leaving Browse blocked.
+- Added browser regression markers and API coverage for onboarding capabilities.
+
+### Changed
+
+- Updated the README and product plan to document persistent local snapshots,
+  restart-safe workspaces, and the current browser picker fallback behavior.
+
 ## [0.1.46-preview] - 2026-08-26
 
 ### Added

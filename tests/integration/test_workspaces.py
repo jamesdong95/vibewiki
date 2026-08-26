@@ -104,6 +104,11 @@ def test_serve_without_repository_exposes_first_run_browse_flow(tmp_path: Path) 
         onboarding = _json_request(base, "/api/summary")
         assert onboarding["status"] == "onboarding"
         assert onboarding["workspace_available"] is False
+        assert onboarding["capabilities"] == {
+            "browse": True,
+            "local_path": True,
+            "github": True,
+        }
         assert _json_request(base, "/api/workspaces")["workspaces"] == []
         imported = _json_request(base, "/api/import-path", {"path": str(source)})
         assert imported["import_source"]["selected_files"] == 1

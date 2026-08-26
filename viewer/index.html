@@ -84,6 +84,13 @@
     .workspace-error-command { overflow: auto; margin: 0 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--cyan); background: rgba(3, 7, 8, 0.72); font: 10px/1.65 var(--mono); white-space: pre-wrap; }
     .workspace-error-actions { display: flex; align-items: center; gap: 10px; }
     .workspace-error-status { min-height: 16px; color: var(--muted); font: 9px/1.4 var(--mono); }
+    .onboarding-actions[hidden] { display: none; }
+    .onboarding-actions { display: grid; gap: 10px; margin: 0 0 18px; padding: 13px; border: 1px solid rgba(166,233,239,0.25); border-radius: 8px; background: rgba(3, 7, 8, 0.45); }
+    .onboarding-actions strong { color: var(--cyan); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+    .onboarding-actions p { margin: 0; color: var(--muted); font: 9px/1.45 var(--mono); }
+    .onboarding-action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .onboarding-action-row .text-button:disabled { cursor: not-allowed; opacity: .42; }
+    .onboarding-capability-status { min-height: 14px; color: var(--muted-2); font: 8px/1.4 var(--mono); }
 
     body::before {
       content: "";
@@ -627,6 +634,16 @@
       <pre class="workspace-error-command">vibewiki scan /path/to/repository
 vibewiki build /path/to/repository
 vibewiki serve /path/to/repository</pre>
+      <div class="onboarding-actions" id="onboarding-actions" hidden>
+        <strong>Start with a real local workspace</strong>
+        <p id="onboarding-copy">Choose a source folder, enter a local path, or import a public GitHub repository.</p>
+        <div class="onboarding-action-row">
+          <button class="text-button primary" type="button" id="onboarding-browse">Choose folder</button>
+          <button class="text-button" type="button" id="onboarding-local-path">Use local path</button>
+          <button class="text-button" type="button" id="onboarding-github">Import public GitHub</button>
+        </div>
+        <span class="onboarding-capability-status" id="onboarding-capability-status" role="status"></span>
+      </div>
       <div class="workspace-error-actions">
         <button class="text-button primary" type="button" id="workspace-retry">Retry loading artifact</button>
         <span class="workspace-error-status" id="workspace-error-status" role="status"></span>
@@ -1435,6 +1452,12 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     const workspaceError = document.getElementById('workspace-error');
     const workspaceErrorCopy = document.getElementById('workspace-error-copy');
     const workspaceErrorStatus = document.getElementById('workspace-error-status');
+    const onboardingActions = document.getElementById('onboarding-actions');
+    const onboardingCopy = document.getElementById('onboarding-copy');
+    const onboardingBrowse = document.getElementById('onboarding-browse');
+    const onboardingLocalPath = document.getElementById('onboarding-local-path');
+    const onboardingGitHub = document.getElementById('onboarding-github');
+    const onboardingCapabilityStatus = document.getElementById('onboarding-capability-status');
     const browsePicker = document.getElementById('browse-picker');
     const browsePickerSummary = document.getElementById('browse-picker-summary');
     const sourcePackage = document.getElementById('source-package');
@@ -1470,6 +1493,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       document.documentElement.classList.remove('workspace-loading');
       document.documentElement.classList.remove('workspace-onboarding');
       document.documentElement.classList.add('workspace-unavailable');
+      if (onboardingActions) onboardingActions.hidden = true;
       document.getElementById('graph-canvas')?.replaceChildren();
       document.getElementById('evidence-list')?.replaceChildren();
       document.getElementById('impact-list')?.replaceChildren();
@@ -1481,16 +1505,31 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       }
       if (workspaceErrorStatus) workspaceErrorStatus.textContent = 'Artifact load failed · retry is safe';
     }
-    function showWorkspaceOnboarding(workspaces = []) {
+    function showWorkspaceOnboarding(workspaces = [], capabilities = {}) {
       document.documentElement.classList.remove('workspace-loading');
       document.documentElement.classList.add('workspace-unavailable', 'workspace-onboarding');
       document.getElementById('graph-canvas')?.replaceChildren();
       if (workspaceError) workspaceError.hidden = false;
+      if (onboardingActions) onboardingActions.hidden = false;
       if (workspaceErrorCopy) {
         workspaceErrorCopy.textContent = workspaces.length
           ? 'Choose a saved local workspace below, or Browse source to import another repository.'
           : 'No local workspace is open yet. Browse source to create a private, bounded snapshot and build the evidence graph.';
       }
+      const canBrowse = capabilities.browse !== false;
+      const canUseLocalPath = capabilities.local_path === true;
+      const canUseGitHub = capabilities.github === true;
+      if (onboardingBrowse) onboardingBrowse.disabled = !canBrowse;
+      if (onboardingLocalPath) onboardingLocalPath.disabled = !canUseLocalPath;
+      if (onboardingGitHub) onboardingGitHub.disabled = !canUseGitHub;
+      if (onboardingCopy) onboardingCopy.textContent = canUseLocalPath || canUseGitHub
+        ? 'Choose a source folder, enter a local path, or import a public GitHub repository.'
+        : 'This shared server does not accept source imports. Run VibeWiki on loopback to start a workspace.';
+      if (onboardingCapabilityStatus) onboardingCapabilityStatus.textContent = [
+        canBrowse ? 'folder picker available' : 'folder picker disabled',
+        canUseLocalPath ? 'local path available' : 'local path loopback-only',
+        canUseGitHub ? 'GitHub available' : 'GitHub loopback-only'
+      ].join(' · ');
       const retry = document.getElementById('workspace-retry');
       if (retry) retry.textContent = 'Browse source';
       if (workspaceErrorStatus) workspaceErrorStatus.textContent = `${workspaces.length} saved workspace${workspaces.length === 1 ? '' : 's'} available`;
@@ -1498,6 +1537,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     function beginWorkspaceLoad() {
       document.documentElement.classList.remove('workspace-unavailable', 'workspace-onboarding');
       document.documentElement.classList.add('workspace-loading');
+      if (onboardingActions) onboardingActions.hidden = true;
       const retry = document.getElementById('workspace-retry');
       if (retry) retry.textContent = 'Retry loading artifact';
       document.documentElement.classList.remove('workspace-unavailable');
@@ -1523,7 +1563,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       localPathModal.classList.add('open');
       localPathModal.setAttribute('aria-hidden', 'false');
       localPathStatus.className = 'settings-status';
-      localPathStatus.textContent = 'Loopback only · snapshot is copied into a temporary workspace.';
+      localPathStatus.textContent = 'Loopback only · source is copied into a private managed snapshot.';
       sourcePath.focus();
     }
     function closeLocalPathImport() {
@@ -2028,6 +2068,9 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       setBrowseStatus('Đã hủy chọn package. Bạn có thể Browse lại một thư mục hoặc package khác.', 'info');
     });
     document.getElementById('project-switcher').addEventListener('click', openProjectProfile);
+    onboardingBrowse?.addEventListener('click', chooseSourceFolder);
+    onboardingLocalPath?.addEventListener('click', openLocalPathImport);
+    onboardingGitHub?.addEventListener('click', openGitHubImport);
     document.getElementById('profile-close').addEventListener('click', closeProjectProfile);
     document.getElementById('profile-browse').addEventListener('click', () => {
       closeProjectProfile();
@@ -2519,7 +2562,10 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         }
         const summary = await response.json();
         if (summary.workspace_available === false || summary.status === 'onboarding') {
-          showWorkspaceOnboarding(Array.isArray(workspaceIndex.workspaces) ? workspaceIndex.workspaces : []);
+          showWorkspaceOnboarding(
+            Array.isArray(workspaceIndex.workspaces) ? workspaceIndex.workspaces : [],
+            summary.capabilities || {}
+          );
           return;
         }
         const [nodeResponse, edgeResponse, historyResponse, changesResponse, staleResponse, runtimeResponse, reviewsResponse] = await Promise.all([

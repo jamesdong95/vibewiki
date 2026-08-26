@@ -15,7 +15,7 @@
 > VibeWiki is a local-first codebase intelligence tool for developers who need
 > to understand what an AI-assisted codebase actually does.
 
-**Latest verified preview:** [`v0.1.46-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.46-preview) · scan a repository locally or import a public GitHub URL, preserve nested monorepo paths, select a primary package, retain only its transitive workspace dependency closure, build a reverse graph, review file and graph changes after every rescan, inspect bounded inline source diffs with line numbers, triage every Unknown through an Open/All queue, bulk-review selected findings atomically, mark findings reviewed with local notes and reopen them later, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, browse common source/config formats, resolve workspace package imports and path aliases, persist imported snapshots across restarts, reopen or refresh recent workspaces, forget only managed cache copies, restore non-secret LLM preferences, format grounded AI answers, inspect source-linked facts, observe a local runtime, and keep shared binds behind bearer authentication with remote-LLM source redaction.
+**Latest verified preview:** [`v0.1.47-preview`](https://github.com/jamesdong95/vibewiki/releases/tag/v0.1.47-preview) · scan a repository locally or import a public GitHub URL, preserve nested monorepo paths, select a primary package, retain only its transitive workspace dependency closure, build a reverse graph, review file and graph changes after every rescan, inspect bounded inline source diffs with line numbers, triage every Unknown through an Open/All queue, bulk-review selected findings atomically, mark findings reviewed with local notes and reopen them later, configure product intent from the viewer, compare expected flows to implementation evidence, detect Astro/Nuxt filesystem routes, browse common source/config formats, resolve workspace package imports and path aliases, persist imported snapshots across restarts, reopen or refresh recent workspaces, forget only managed cache copies, restore non-secret LLM preferences, format grounded AI answers, inspect source-linked facts, observe a local runtime, and keep shared binds behind bearer authentication with remote-LLM source redaction.
 
 When implementation moves faster than documentation, VibeWiki is designed to connect:
 
@@ -207,16 +207,18 @@ skipped-file or size-limit errors before import. If the whole repository is
 larger than the local safety limit, Browse offers bounded package candidates
 such as `apps/frontend` or `packages/web` instead of failing the entire scan.
 Selected supported files are sent only to this loopback process, scanned
-locally, and the temporary imported workspace is removed when the server exits.
+locally, and stored as a private bounded snapshot that can be reopened after a
+server restart. Recent local workspaces can be opened, refreshed, or forgotten;
+Forget removes only VibeWiki's managed copy and never the original repository.
 If the browser cannot open a directory picker, use **Use local path** in the
 viewer; the loopback server reads the path locally, applies the same limits and
-secret filters, and imports a temporary snapshot without mutating the source.
+secret filters, and saves a private managed snapshot without mutating the source.
 For an explicit remote workflow, **Import GitHub** accepts a public HTTPS
 `github.com/owner/repo` URL and optional branch/tag. It downloads a bounded
 archive only after the user submits the form, applies the same supported-file,
-ignore, secret, package-scope, file-count, and byte limits, and removes the
-temporary snapshot when the server exits. Private repositories and authenticated
-GitHub access stay local: clone them first, then use Browse or Use local path.
+ignore, secret, package-scope, file-count, and byte limits, and stores a private
+local snapshot. Private repositories and authenticated GitHub access stay local:
+clone them first, then use Browse or Use local path.
 The project switcher and workspace summary retain a safe provenance label after
 the graph reloads, such as `GitHub · owner/repo@main` or `local-path · my-app`;
 absolute local paths and credentials are never exposed in the viewer.
@@ -241,7 +243,7 @@ remain local.
 
 Every build also exposes `/api/profile`, `/api/files`, `/api/packages`, `/api/modules`,
 `/api/symbols`, `/api/source`, `/api/history`, `/api/stale`, `/api/impact`,
-`/api/intent`, `/api/changes`, `/api/import-github`, `/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
+`/api/intent`, `/api/changes`, `/api/workspaces`, `/api/import-github`, `/api/llm/status`, and `/api/ask` for bounded local evidence inspection and
 optional grounded discussion. `/api/impact` accepts a node subject plus
 `direction=upstream|downstream|both`, and returns a bounded deterministic
 neighborhood with the original edge evidence. Use `vibewiki history
@@ -302,9 +304,11 @@ results. When a model is enabled, retrieval sends only bounded graph neighbors
 and cited source excerpts, never the whole repository. API keys stay server-side
 and are not written to `.vibewiki` or returned by the status endpoint.
 
-You can also click **LLM setup** in the viewer's Local runtime card. The form
-updates the running server in memory; restarting the server clears that runtime
-configuration unless environment variables or CLI flags are supplied again.
+You can also click **LLM setup** in the viewer's Local runtime card. Provider,
+model, and base URL preferences are restored from the local state directory;
+API keys, remote confirmation, source excerpts, and chat history remain
+process-local and are never written to the repository or artifact. Use
+`vibewiki serve --state-dir /path/to/state` for an explicit local state path.
 
 The Ask panel supports four grounded use cases: **Discuss** for general
 questions, **Explain flow** for graph-connected execution paths, **Impact

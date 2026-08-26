@@ -45,7 +45,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Route/module/package/symbol/API/test graph với evidence path/line và unknowns deterministic.
 - Viewer đọc artifact thật, search/graph/inspector/source preview, Browse source và
   trạng thái lỗi import.
-- LLM setup memory-only, Ollama/OpenAI-compatible BYOK, Ask grounded với Discuss,
+- LLM setup restores non-secret provider preferences, keeps BYOK keys process-local,
+  and provides grounded Ask with Discuss,
   Flow, Impact và Unknowns modes; câu trả lời Markdown được render an toàn.
 - Export thật qua nút/command palette và `/api/export`: ZIP wiki, Mermaid, graph,
   evidence manifests và unknowns, không chứa source files.
@@ -139,10 +140,17 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Bulk review actions now validate and persist up to 100 selected findings in
   one atomic local batch, preserving existing notes and preventing partial
   updates.
+- Imported workspaces now persist as private bounded snapshots across server
+  restarts. First-run onboarding exposes Browse, local-path, and public GitHub
+  entry points; Recent Workspaces supports Open, Refresh, and managed-cache-only
+  Forget, with atomic refresh rollback and non-secret LLM preference storage.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
 - Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
+- Native folder-picker behavior depends on the host browser; the onboarding
+  screen always keeps loopback local-path and public GitHub fallbacks visible
+  when they are available.
 - Flow authoring beyond the compact intent form (rich step editing and reusable
   templates) is not yet included; review state is currently local to one
   workspace and does not provide multi-user audit history.
@@ -154,9 +162,12 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 ### Thứ tự implementation tự động tiếp theo
 
 1. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
-2. **User workflow:** thêm project profile/scan selection và tiếp tục bounded
-   large-repo import khi nhu cầu người dùng thật chứng minh giới hạn hiện tại
-   chưa đủ.
+2. **Grounded collaboration:** persist bounded per-workspace discussion context
+   only when explicitly enabled, add answer/source feedback, and keep API keys,
+   source excerpts, and remote consent out of durable state.
+3. **User workflow:** rich flow authoring, reusable intent templates, and
+   bounded large-repo import when real usage shows the current limits are too
+   restrictive.
 
 ### Giả định để triển khai
 

@@ -532,6 +532,9 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert 'id="profile-scope"' in html
     assert 'id="profile-focus"' in html
     assert 'id="recent-workspaces"' in html
+    assert 'id="onboarding-actions"' in html
+    assert 'id="onboarding-local-path"' in html
+    assert 'id="onboarding-github"' in html
     assert "/api/workspaces" in html
     assert "Supports JS/JSX/TS/TSX" in html
     assert "TypeScript only" not in html
@@ -1103,6 +1106,16 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
 
         with urlopen(request("/api/nodes", authorized=True)) as response:
             assert json.load(response)["nodes"]
+        with pytest.raises(HTTPError) as blocked_import:
+            urlopen(
+                request(
+                    "/api/import-path",
+                    method="POST",
+                    payload={"path": str(root)},
+                    authorized=True,
+                )
+            )
+        assert blocked_import.value.code == 422
         with urlopen(
             request("/api/source?path=app%2Fpage.tsx", authorized=True)
         ) as response:
