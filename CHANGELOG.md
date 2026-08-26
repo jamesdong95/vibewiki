@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.43-preview] - 2026-08-26
+
+### Added
+
+- Bounded local-only inline source diffs for added, changed, and removed files
+  after a scan or rescan, with deterministic hunks and line numbers.
+- Scan history now exposes an inline diff viewer without reloading the app.
+- Source snapshots and diff details stay local and are excluded from exports;
+  snapshot, file, line, and character limits produce explicit unavailable or
+  truncated states.
+- API and regression coverage for diff detail path validation, rollback-safe
+  snapshots, add/change/remove files, and export privacy.
+
 ## [0.1.42-preview] - 2026-08-25
 
 ### Added
