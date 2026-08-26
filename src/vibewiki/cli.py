@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "allow a non-loopback bind; print a per-server bearer token "
-            "in the ready event"
+            "and browser access URL in the ready event"
         ),
     )
     serve_parser.add_argument(

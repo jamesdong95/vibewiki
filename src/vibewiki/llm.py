@@ -224,8 +224,9 @@ def llm_status(settings: LLMSettings | None = None) -> dict[str, Any]:
         "mode": "local" if settings.provider == "ollama" else settings.provider,
         "base_url": settings.base_url,
         "has_api_key": bool(settings.api_key),
-        "remote": settings.provider == "openai-compatible",
-        "remote_confirmation_required": settings.provider == "openai-compatible",
+        "remote": settings.provider in {"openai", "openai-compatible"},
+        "remote_confirmation_required": settings.provider
+        in {"openai", "openai-compatible"},
         "remote_confirmed": bool(settings.remote_confirmed),
     }
 

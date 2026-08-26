@@ -2084,7 +2084,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       const question = input.value.trim();
       if (!question) return input.focus();
       const status = await refreshLLMStatus();
-      if (status?.provider === 'openai-compatible' && !remoteLLMConfirmed) {
+      if (status?.remote_confirmation_required && !remoteLLMConfirmed) {
         renderAskResult('Remote LLM confirmation is required before any source excerpt is sent. Review and confirm the data boundary in LLM setup.', 'error');
         showToast('Confirm the remote source boundary in LLM setup before asking.');
         await openLLMSettings();
@@ -2259,7 +2259,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     let remoteLLMConfirmed = false;
     function applyLLMStatus(status) {
       if (!status) return;
-      remoteLLMConfirmed = status.provider === 'openai-compatible' && status.remote_confirmed === true;
+      remoteLLMConfirmed = status.remote === true && status.remote_confirmed === true;
       const runtime = document.getElementById('runtime-status');
       if (runtimeObservationLabel) {
         runtime.textContent = runtimeObservationLabel;

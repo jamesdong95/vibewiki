@@ -8,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from io import BytesIO
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.parse import quote
+from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 import pytest
 
@@ -1126,6 +1127,33 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
             )
         ) as response:
             assert json.load(response)["provider"] == "none"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_shared_server_bootstrap_url_sets_cookie_and_cleans_browser_url(
+    tmp_path: Path,
+) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    server = create_server(root, host="0.0.0.0", port=0, share=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    opener = build_opener(HTTPCookieProcessor())
+    try:
+        with opener.open(
+            f"{base}/?access_token={quote(server.access_token or '', safe='')}"
+        ) as response:
+            assert response.status == 200
+            assert response.geturl() == f"{base}/"
+            html = response.read().decode("utf-8")
+        assert server.access_token not in html
+        with opener.open(f"{base}/api/nodes") as response:
+            assert json.load(response)["nodes"]
     finally:
         server.shutdown()
         server.server_close()

@@ -11,10 +11,11 @@ import sysconfig
 import threading
 import zipfile
 from collections import deque
+from http.cookies import CookieError, SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .config import MANIFEST_DIRECTORY
@@ -775,7 +776,27 @@ def create_server(
             # Always compare a string, including for malformed/missing headers.
             # compare_digest prevents timing differences from revealing the
             # generated token one character at a time.
-            return secrets.compare_digest(candidate, expected)
+            if secrets.compare_digest(candidate, expected):
+                return True
+            cookies = SimpleCookie()
+            try:
+                cookies.load(self.headers.get("Cookie", ""))
+            except CookieError:
+                cookies = SimpleCookie()
+            cookie = cookies.get("vibewiki_access")
+            if cookie is not None and secrets.compare_digest(cookie.value, expected):
+                return True
+            parsed = urlparse(self.path)
+            if parsed.path not in {"/", "/index.html"}:
+                return False
+            query_token = parse_qs(parsed.query).get("access_token", [""])[0]
+            if secrets.compare_digest(query_token, expected):
+                # The first browser navigation cannot set Authorization headers.
+                # A valid bootstrap token is exchanged for a session cookie, then
+                # the URL is cleaned before the HTML is served.
+                self._bootstrap_authorized = True
+                return True
+            return False
 
         def _require_authorization(self) -> bool:
             if self._authorized():
@@ -798,6 +819,12 @@ def create_server(
             if not self._require_authorization():
                 return
             parsed = urlparse(self.path)
+            if getattr(self, "_bootstrap_authorized", False):
+                self.send_response(302)
+                self.send_header("Location", parsed.path or "/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if parsed.path == "/api/export":
                 try:
                     with self.server.workspace_lock:
@@ -1365,6 +1392,12 @@ def create_server(
             self.wfile.write(body)
 
         def end_headers(self) -> None:
+            if getattr(self, "_bootstrap_authorized", False):
+                token = quote(self.server.access_token or "", safe="")
+                self.send_header(
+                    "Set-Cookie",
+                    f"vibewiki_access={token}; Path=/; HttpOnly; SameSite=Strict",
+                )
             self.send_header("Cache-Control", "no-store, max-age=0")
             super().end_headers()
 
@@ -1431,6 +1464,10 @@ def serve_repository(
             # event lets the person who launched the process connect. The
             # token is never copied into HTML, artifacts, or request logs.
             ready["access_token"] = server.access_token
+            ready["access_url"] = (
+                f"http://{host}:{actual_port}/?access_token="
+                f"{quote(server.access_token, safe='')}"
+            )
         print(canonical_json(ready), flush=True)
         server.serve_forever()
     finally:
