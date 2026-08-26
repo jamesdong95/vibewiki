@@ -578,6 +578,11 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "function saveReviewBatch" in html
     assert "data-unknown-select" in html
     assert "/api/reviews/batch" in html
+    assert 'id="source-diff-section"' in html
+    assert "Inline source diff" in html
+    assert "data-source-diff-path" in html
+    assert "/api/changes/source" in html
+    assert "source-diff-line" in html
 
 
 def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
@@ -620,6 +625,94 @@ def test_rescan_rebuilds_graph_after_source_changes(tmp_path: Path) -> None:
     assert summary["staleness"]["status"] == "current"
     assert changes["status"] == "changed"
     assert changes["graph"]["counts"]["nodes_added"] >= 1
+
+
+def test_source_diff_api_exposes_bounded_local_detail_and_excludes_export(
+    tmp_path: Path,
+) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    page = root / "app/page.tsx"
+    page.write_text(
+        page.read_text(encoding="utf-8").replace(
+            "Next TS Demo", "Next TS Updated Demo"
+        ),
+        encoding="utf-8",
+    )
+    new_file = root / "app/new.js"
+    new_file.write_text("export const created = true;\n", encoding="utf-8")
+    (root / "app/admin/page.tsx").unlink()
+    rescan_repository(root)
+
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        with urlopen(f"{base}/api/changes") as response:
+            changes = json.load(response)
+        with urlopen(
+            f"{base}/api/changes/source?path=app%2Fpage.tsx"
+        ) as response:
+            changed_detail = json.load(response)
+        with urlopen(f"{base}/api/changes/source?path=app%2Fnew.js") as response:
+            added_detail = json.load(response)
+        with urlopen(
+            f"{base}/api/changes/source?path=app%2Fadmin%2Fpage.tsx"
+        ) as response:
+            removed_detail = json.load(response)
+        with pytest.raises(HTTPError) as traversal:
+            urlopen(f"{base}/api/changes/source?path=..%2Fsecret.js")
+        traversal_payload = json.load(traversal.value)
+        with pytest.raises(HTTPError) as unknown_path:
+            urlopen(f"{base}/api/changes/source?path=app%2Fmissing.js")
+        unknown_payload = json.load(unknown_path.value)
+        with urlopen(f"{base}/api/export") as response:
+            exported_bytes = response.read()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    source_summary = changes["source_diff"]
+    assert source_summary["status"] == "available"
+    assert source_summary["counts"] == {
+        "added": 1,
+        "available": 3,
+        "changed": 1,
+        "files": 3,
+        "removed": 1,
+        "unavailable": 0,
+    }
+    assert {item["path"] for item in source_summary["files"]} == {
+        "app/admin/page.tsx",
+        "app/new.js",
+        "app/page.tsx",
+    }
+    assert "text" not in json.dumps(source_summary)
+    changed_lines = [
+        line
+        for hunk in changed_detail["file"]["hunks"]
+        for line in hunk["lines"]
+    ]
+    assert any(line["kind"] == "removed" for line in changed_lines)
+    assert any(line["kind"] == "added" for line in changed_lines)
+    assert changed_detail["file"]["path"] == "app/page.tsx"
+    assert added_detail["file"]["status"] == "added"
+    assert removed_detail["file"]["status"] == "removed"
+    assert added_detail["file"]["hunks"][0]["lines"][0]["new_number"] == 1
+    assert removed_detail["file"]["hunks"][0]["lines"][0]["old_number"] == 1
+    assert traversal.value.code == 404
+    assert traversal_payload["error"] == "path_not_found"
+    assert unknown_path.value.code == 404
+    assert unknown_payload["error"] == "path_not_found"
+
+    with zipfile.ZipFile(BytesIO(exported_bytes)) as exported:
+        names = set(exported.namelist())
+    assert not any("source-snapshot" in name for name in names)
+    assert not any(name.endswith("source-diff.json") for name in names)
+    assert not any(name.endswith("page.tsx") for name in names)
 
 
 def test_review_api_returns_clear_validation_errors(tmp_path: Path) -> None:

@@ -416,6 +416,17 @@
     .external-arrow { color: var(--muted-2); font-family: var(--mono); }
     .source-viewer { overflow: auto; max-height: 250px; margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft); background: rgba(3,7,8,0.72); font-family: var(--mono); font-size: 9px; line-height: 1.55; white-space: pre; }
     .source-viewer-label { margin-bottom: 8px; overflow: hidden; color: var(--muted-2); font-family: var(--mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+    .source-diff-viewer { overflow: auto; max-height: 360px; margin: 0; padding: 7px 0; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft); background: rgba(3,7,8,0.72); font: 9px/1.55 var(--mono); }
+    .source-diff-line { display: grid; grid-template-columns: 38px 38px minmax(0, 1fr); min-width: max-content; padding: 1px 9px; white-space: pre; }
+    .source-diff-line.added { color: #d8f99b; background: rgba(216,249,139,0.09); }
+    .source-diff-line.removed { color: #ffb4a8; background: rgba(255,129,111,0.09); }
+    .source-diff-line.context { color: var(--muted); }
+    .source-diff-number { color: var(--muted-2); user-select: none; }
+    .source-diff-marker { color: var(--muted-2); text-align: center; user-select: none; }
+    .source-diff-line.added .source-diff-marker { color: var(--lime); }
+    .source-diff-line.removed .source-diff-marker { color: #ff816f; }
+    .source-diff-hunk { padding: 6px 9px; color: var(--cyan); background: rgba(103,232,249,0.06); }
+    .source-diff-message { margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: rgba(255,255,255,0.025); font: 9px/1.55 var(--mono); }
     .impact-list { display: grid; gap: 8px; }
     .impact-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 11px; }
     .impact-row span:last-child { color: var(--muted); font-family: var(--mono); font-size: 9px; }
@@ -854,6 +865,12 @@
         <pre class="source-viewer" id="source-viewer" aria-label="Source preview"></pre>
       </div>
 
+      <div class="inspector-section" id="source-diff-section" hidden>
+        <div class="inspector-label">Inline source diff</div>
+        <div class="source-viewer-label" id="source-diff-label"></div>
+        <div class="source-diff-viewer" id="source-diff-viewer" aria-label="Inline source diff"></div>
+      </div>
+
       <div class="inspector-section" id="runtime-inspector-section" hidden>
         <div class="inspector-label">Runtime evidence</div>
         <div class="evidence-list" id="runtime-inspector-list"></div>
@@ -1115,6 +1132,9 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       sourceSection: document.getElementById('source-viewer-section'),
       sourceLabel: document.getElementById('source-viewer-label'),
       sourceViewer: document.getElementById('source-viewer'),
+      sourceDiffSection: document.getElementById('source-diff-section'),
+      sourceDiffLabel: document.getElementById('source-diff-label'),
+      sourceDiffViewer: document.getElementById('source-diff-viewer'),
       runtimeSection: document.getElementById('runtime-inspector-section'),
       runtimeList: document.getElementById('runtime-inspector-list'),
       reviewSection: document.getElementById('review-section'),
@@ -1135,6 +1155,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     let zoom = 1;
     let runtimeObservationLabel = '';
     let traversalRequest = 0;
+    let sourceDiffRequest = 0;
 
     function showToast(message) {
       els.toastText.textContent = message;
@@ -1213,6 +1234,63 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         els.sourceViewer.scrollTop = 0;
       } catch (error) {
         showToast(error.message || 'Không thể đọc source evidence.');
+      }
+    }
+
+    function clearSourcePanels() {
+      sourceDiffRequest += 1;
+      if (els.sourceSection) els.sourceSection.hidden = true;
+      if (els.sourceDiffSection) els.sourceDiffSection.hidden = true;
+      if (els.sourceDiffLabel) els.sourceDiffLabel.textContent = '';
+      if (els.sourceDiffViewer) els.sourceDiffViewer.replaceChildren();
+    }
+
+    function sourceDiffMessage(message) {
+      return `<p class="source-diff-message">${escapeHtml(message)}</p>`;
+    }
+
+    function renderSourceDiffLine(line) {
+      const kind = ['added', 'removed', 'context'].includes(line.kind) ? line.kind : 'context';
+      const oldNumber = line.old_number == null ? '' : String(line.old_number);
+      const newNumber = line.new_number == null ? '' : String(line.new_number);
+      const marker = kind === 'added' ? '+' : kind === 'removed' ? '−' : ' ';
+      return `<div class="source-diff-line ${kind}"><span class="source-diff-number">${escapeHtml(oldNumber)}</span><span class="source-diff-number">${escapeHtml(newNumber)}</span><span><span class="source-diff-marker">${marker}</span> ${escapeHtml(line.text || '')}</span></div>`;
+    }
+
+    async function openSourceDiff(path) {
+      if (!els.sourceDiffSection) return;
+      const requestId = ++sourceDiffRequest;
+      if (els.sourceSection) els.sourceSection.hidden = true;
+      els.sourceDiffSection.hidden = false;
+      els.sourceDiffLabel.textContent = `${path} · loading inline diff…`;
+      els.sourceDiffViewer.innerHTML = sourceDiffMessage('Loading the bounded local source diff…');
+      try {
+        const query = new URLSearchParams({path});
+        const response = await fetch(`/api/changes/source?${query.toString()}`, {cache: 'no-store'});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Inline source diff is unavailable.');
+        if (requestId !== sourceDiffRequest) return;
+        const file = result.file || {};
+        const labelStatus = file.available ? file.status : (file.reason || 'unavailable');
+        els.sourceDiffLabel.textContent = `${path} · ${labelStatus}${file.truncated ? ' · bounded output' : ''}`;
+        if (!file.available) {
+          els.sourceDiffViewer.innerHTML = sourceDiffMessage(file.reason || 'The source snapshot for this file is unavailable.');
+          return;
+        }
+        const hunks = file.hunks || [];
+        const rendered = hunks.flatMap(hunk => [
+          `<div class="source-diff-hunk">@@ -${hunk.old_start},${hunk.old_count} +${hunk.new_start},${hunk.new_count} @@</div>`,
+          ...(hunk.lines || []).map(renderSourceDiffLine)
+        ]).join('');
+        els.sourceDiffViewer.innerHTML = rendered || sourceDiffMessage('No line-level text changed in this file.');
+        if (file.truncated || result.truncated) {
+          els.sourceDiffViewer.insertAdjacentHTML('beforeend', sourceDiffMessage('Diff output is bounded; review the file in Source files for the complete current content.'));
+        }
+        els.sourceDiffViewer.scrollTop = 0;
+      } catch (error) {
+        if (requestId !== sourceDiffRequest) return;
+        els.sourceDiffLabel.textContent = `${path} · unavailable`;
+        els.sourceDiffViewer.innerHTML = sourceDiffMessage(error.message || 'Inline source diff is unavailable.');
       }
     }
 
@@ -2237,6 +2315,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const historyPayload = historyResponse.ok ? await historyResponse.json() : { runs: [] };
         const changesPayload = changesResponse.ok ? await changesResponse.json() : {status: 'unavailable'};
         const latestChanges = changesPayload.graph || {};
+        const latestSourceDiff = changesPayload.source_diff || {status: 'unavailable', files: []};
         const reviewsPayload = reviewsResponse.ok ? await reviewsResponse.json() : (changesPayload.reviews || {items: {}});
         let reviewItems = reviewsPayload.items || {};
         const stalePayload = staleResponse.ok ? await staleResponse.json() : { files: [] };
@@ -2519,6 +2598,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           const data = realData.get(id);
           const node = nodeById.get(id);
           if (!data || !node) return;
+          clearSourcePanels();
           state.selected = id;
           nodeList().forEach(item => item.classList.toggle('selected', item.dataset.realNode === id));
           els.title.textContent = data.title;
@@ -2611,6 +2691,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         function renderUnknownInspector(subject = state.selectedUnknown) {
           const unknown = unknowns.find(item => item.subject === subject)
             || unknowns[0];
+          clearSourcePanels();
           state.selectedUnknown = unknown?.subject;
           els.reverseGraphSection.hidden = true;
           els.reverseGraphList.innerHTML = '';
@@ -2637,6 +2718,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         function renderHistoryInspector() {
           const latest = historyRuns[0];
           const graph = latestChanges || {};
+          clearSourcePanels();
           const graphCounts = graph.counts || {};
           const fileChanges = latest ? Object.entries(latest.changes || {})
             .flatMap(([kind, paths]) => paths.map(path => ({kind, path}))) : [];
@@ -2664,6 +2746,7 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
               target
             };
           }));
+          const sourceDiffByPath = new Map((latestSourceDiff.files || []).map(item => [item.path, item]));
           els.reverseGraphSection.hidden = true;
           els.reverseGraphList.innerHTML = '';
           els.runtimeSection.hidden = true;
@@ -2680,7 +2763,13 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           els.badge.querySelector('.legend-dot').className = `legend-dot ${graph.status === 'changed' || staleSources.length ? 'stale' : 'verified'}`;
           const historyReviewSubject = graphChanges[0]?.reviewSubject || (fileChanges[0] ? `file:${fileChanges[0].path}` : '');
           renderReviewControls(historyReviewSubject, 'open');
-          const fileRows = fileChanges.map(item => `<div class="evidence-row" data-review-subject="file:${escapeHtml(item.path)}" data-toast="${escapeHtml(item.kind)}: ${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">file change · latest scan${reviewMarker(`file:${item.path}`)}</span></span><span class="external-arrow">↗</span></div>`);
+          const fileRows = fileChanges.map(item => {
+            const diff = sourceDiffByPath.get(item.path);
+            const diffHint = diff?.available
+              ? `${diff.hunks || 0} hunk${diff.hunks === 1 ? '' : 's'}`
+              : (diff?.reason || 'click for inline diff');
+            return `<div class="evidence-row" data-review-subject="file:${escapeHtml(item.path)}" data-source-diff-path="${escapeHtml(item.path)}"><span class="file-icon">${escapeHtml(item.kind.toUpperCase())}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.path)}</span><span class="evidence-line">${escapeHtml(item.kind)} · ${escapeHtml(diffHint)}${reviewMarker(`file:${item.path}`)}</span></span><span class="external-arrow">↗</span></div>`;
+          });
           const graphRows = graphChanges.map(item => `<div class="evidence-row" data-change-node="${escapeHtml(item.node)}" data-review-subject="${escapeHtml(item.reviewSubject)}" data-toast="${escapeHtml(item.label)}: ${escapeHtml(item.target)}"><span class="file-icon">${item.label.startsWith('edge') ? '↝' : '◇'}</span><span class="evidence-info"><span class="evidence-path">${escapeHtml(item.target)}</span><span class="evidence-line">${escapeHtml(item.label)} · ${escapeHtml(item.path)}${reviewMarker(item.reviewSubject)}</span></span><span class="external-arrow">↗</span></div>`);
           const rows = [...fileRows, ...graphRows];
           els.evidence.innerHTML = rows.length ? rows.slice(0, 80).join('') : '<div class="empty-state">No file or graph changes in the latest scan.</div>';
@@ -2697,7 +2786,10 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
           els.evidence.querySelectorAll('[data-review-subject]').forEach(item => {
             item.addEventListener('contextmenu', event => event.preventDefault());
             if (!item.dataset.changeNode) {
-              item.onclick = () => renderReviewControls(item.dataset.reviewSubject, 'open');
+              item.onclick = () => {
+                renderReviewControls(item.dataset.reviewSubject, 'open');
+                if (item.dataset.sourceDiffPath) openSourceDiff(item.dataset.sourceDiffPath);
+              };
             }
           });
         }

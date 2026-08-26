@@ -13,7 +13,7 @@ from .config import MANIFEST_DIRECTORY
 from .discovery.hashing import hash_file
 from .discovery.manifest import canonical_json
 from .errors import ErrorCode, VibeWikiError
-from .history import record_graph_snapshot
+from .history import record_graph_snapshot, record_source_snapshot
 from .intent import compare_product_intent
 from .profile import build_project_profile
 
@@ -311,6 +311,7 @@ def build_repository(repository: str | Path) -> dict[str, Any]:
     _write_graph_db(output / "graph.db", graph_artifact)
     wiki_paths = _write_wiki(output, graph_artifact)
     record_graph_snapshot(root, graph_artifact)
+    record_source_snapshot(root, manifest)
     paths = [
         f"{MANIFEST_DIRECTORY}/{name}"
         for name in (

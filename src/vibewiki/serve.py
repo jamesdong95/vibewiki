@@ -18,7 +18,13 @@ from . import ANALYZER_VERSION, SCHEMA_VERSION
 from .config import MANIFEST_DIRECTORY
 from .discovery.manifest import canonical_json
 from .errors import ErrorCode, VibeWikiError
-from .history import history_for_subject, load_history, stale_files
+from .history import (
+    history_for_subject,
+    load_history,
+    load_source_diff_detail,
+    load_source_diff_summary,
+    stale_files,
+)
 from .importer import (
     MAX_IMPORT_BYTES,
     ImportedWorkspace,
@@ -620,8 +626,12 @@ def api_payload(
             "graph": graph_changes,
             "reviews": load_reviews(root),
             "run": latest,
+            "source_diff": load_source_diff_summary(root),
             "status": graph_changes.get("status", "unavailable"),
         }
+    if path == "/api/changes/source":
+        requested = params.get("path", [""])[0]
+        return load_source_diff_detail(root, _safe_source_path(requested))
     if path == "/api/history/subject":
         subject = params.get("subject", [""])[0]
         return history_for_subject(root, subject)
