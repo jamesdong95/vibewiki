@@ -1,0 +1,7 @@
+{
+  "name": "vite-react-demo",
+  "private": true,
+  "scripts": {"dev": "vite"},
+  "dependencies": {"react": "latest", "react-router-dom": "latest"},
+  "devDependencies": {"vite": "latest"}
+}

@@ -1,0 +1,389 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from vibewiki.build import build_repository
+from vibewiki.errors import ErrorCode, VibeWikiError
+from vibewiki.scan import scan_repository
+from vibewiki.serve import api_payload
+
+
+def test_build_emits_repository_inventory_and_reverse_module_edges(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "src/main.js").write_text(
+        "import { helper } from './helper.js';\n"
+        "export function main() { return helper(); }\n"
+    )
+    (tmp_path / "src/helper.js").write_text("export function helper() { return 1; }\n")
+    (tmp_path / "docs/README.md").write_text("kept as text inventory evidence\n")
+    (tmp_path / "assets.bin").write_bytes(b"\x00\x01\x02")
+    (tmp_path / ".env.local").write_text("SECRET=never read\n")
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    inventory_paths = {item["path"] for item in graph["inventory"]["files"]}
+    assert inventory_paths == {
+        "assets.bin",
+        "docs/README.md",
+        "src/helper.js",
+        "src/main.js",
+    }
+    assert {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+    } == {("module:src/main.js", "module:src/helper.js")}
+    assert {
+        (edge["source"], edge["target"])
+        for edge in graph["symbol_edges"]
+        if edge["relation"] == "calls"
+    } == {("symbol:src/main.js:main", "symbol:src/helper.js:helper")}
+
+
+def test_build_resolves_typescript_path_aliases_in_nested_package(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "packages/web"
+    (package / "src/shared").mkdir(parents=True)
+    (package / "tsconfig.json").write_text(
+        '{"compilerOptions":{"baseUrl":".","paths":{"@web/*":["src/*"],"@shared/*":["src/shared/*"]}}}\n'
+    )
+    (package / "src/main.ts").write_text(
+        "import { helper } from '@shared/helper';\n"
+        "export function main() { return helper(); }\n"
+    )
+    (package / "src/shared/helper.ts").write_text(
+        "export function helper() { return true; }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    module_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+        if edge["relation"] == "imports"
+    }
+    symbol_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["symbol_edges"]
+        if edge["relation"] == "calls"
+    }
+    assert (
+        "module:packages/web/src/main.ts",
+        "module:packages/web/src/shared/helper.ts",
+    ) in module_edges
+    assert (
+        "symbol:packages/web/src/main.ts:main",
+        "symbol:packages/web/src/shared/helper.ts:helper",
+    ) in symbol_edges
+
+
+def test_build_resolves_workspace_package_names_and_exports(
+    tmp_path: Path,
+) -> None:
+    app = tmp_path / "packages/app"
+    ui = tmp_path / "packages/ui"
+    api = tmp_path / "packages/api"
+    (app / "src").mkdir(parents=True)
+    (ui / "src").mkdir(parents=True)
+    (api / "src").mkdir(parents=True)
+    (tmp_path / "package.json").write_text(
+        '{"private":true,"workspaces":["packages/*"]}\n'
+    )
+    (app / "package.json").write_text('{"name":"@demo/app"}\n')
+    (ui / "package.json").write_text(
+        '{"name":"@demo/ui","exports":{".":{"import":"./src/index.ts"},'
+        '"./button":{"import":"./src/button.ts"}}}\n'
+    )
+    (api / "package.json").write_text(
+        '{"name":"@demo/api","exports":{"import":"./src/index.ts",'
+        '"default":"./src/index.ts"}}\n'
+    )
+    (app / "src/main.ts").write_text(
+        "import { Button } from '@demo/ui/button';\n"
+        "import { request } from '@demo/api';\n"
+        "export function start() { return Button() + request(); }\n"
+    )
+    (ui / "src/index.ts").write_text("export function Ui() { return 'ui'; }\n")
+    (ui / "src/button.ts").write_text(
+        "export function Button() { return 'button'; }\n"
+    )
+    (api / "src/index.ts").write_text(
+        "export function request() { return 'ok'; }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    module_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+        if edge["relation"] == "imports"
+    }
+    symbol_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["symbol_edges"]
+        if edge["relation"] == "calls"
+    }
+    assert (
+        "module:packages/app/src/main.ts",
+        "module:packages/ui/src/button.ts",
+    ) in module_edges
+    assert (
+        "module:packages/app/src/main.ts",
+        "module:packages/api/src/index.ts",
+    ) in module_edges
+    assert (
+        "symbol:packages/app/src/main.ts:start",
+        "symbol:packages/ui/src/button.ts:Button",
+    ) in symbol_edges
+    assert not any(
+        edge["target"] in {"external:@demo/ui/button", "external:@demo/api"}
+        for edge in graph["module_edges"]
+    )
+
+
+def test_build_detects_nested_app_router_routes_without_losing_paths(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "packages/web"
+    (package / "app/api/users").mkdir(parents=True)
+    (package / "app/page.tsx").write_text(
+        "export default function Home() { return null; }\n"
+    )
+    (package / "app/api/users/route.ts").write_text(
+        "export async function GET() { return Response.json({ ok: true }); }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    route_facts = {
+        item["semantic_key"]: item
+        for item in graph["facts"]
+        if item["kind"] == "route"
+    }
+    page = route_facts["route:page:packages/web:/"]
+    handler = route_facts["route:handler:packages/web:/api/users"]
+    assert page["attributes"] == {
+        "file": "packages/web/app/page.tsx",
+        "path": "/",
+    }
+    assert handler["attributes"]["file"] == "packages/web/app/api/users/route.ts"
+    assert handler["attributes"]["path"] == "/api/users"
+    assert page["evidence"][0]["path"] == "packages/web/app/page.tsx"
+    assert handler["evidence"][0]["path"] == "packages/web/app/api/users/route.ts"
+
+
+def test_scan_accepts_root_and_nested_app_router_packages(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "packages/web/app").mkdir(parents=True)
+    (tmp_path / "app/page.tsx").write_text(
+        "export default function RootHome() { return null; }\n"
+    )
+    (tmp_path / "packages/web/app/page.tsx").write_text(
+        "export default function WebHome() { return null; }\n"
+    )
+
+    scan_repository(tmp_path)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    route_keys = {
+        item["semantic_key"] for item in graph["facts"] if item["kind"] == "route"
+    }
+    assert "route:page:/" in route_keys
+    assert "route:page:packages/web:/" in route_keys
+
+
+def test_build_emits_multilanguage_reverse_module_edges(tmp_path: Path) -> None:
+    (tmp_path / "src/internal").mkdir(parents=True)
+    (tmp_path / "src/main/java/com/demo").mkdir(parents=True)
+    (tmp_path / "src/native").mkdir(parents=True)
+    (tmp_path / "src/com/demo").mkdir(parents=True)
+    (tmp_path / "src/main.py").write_text(
+        "from .helpers import helper\n\nhelper()\n"
+    )
+    (tmp_path / "src/helpers.py").write_text("def helper():\n    return True\n")
+    (tmp_path / "src/main.go").write_text(
+        'package main\nimport "./internal"\nfunc main() { internal.Run() }\n'
+    )
+    (tmp_path / "src/internal/health.go").write_text(
+        "package internal\nfunc Run() {}\n"
+    )
+    (tmp_path / "src/lib.rs").write_text("mod helper;\nuse crate::helper::compute;\n")
+    (tmp_path / "src/helper.rs").write_text("pub fn compute() -> i32 { 1 }\n")
+    (tmp_path / "src/main/java/com/demo/App.java").write_text(
+        "package com.demo;\nimport com.demo.Helper;\nclass App {}\n"
+    )
+    (tmp_path / "src/main/java/com/demo/Helper.java").write_text(
+        "package com.demo;\nclass Helper {}\n"
+    )
+    (tmp_path / "src/native/main.c").write_text(
+        '#include "util.h"\nint main(void) { return 0; }\n'
+    )
+    (tmp_path / "src/native/util.h").write_text("int helper(void);\n")
+    (tmp_path / "src/Feature.swift").write_text("import Utility\nstruct Feature {}\n")
+    (tmp_path / "src/Utility.swift").write_text("struct Utility {}\n")
+    (tmp_path / "src/main.dart").write_text("import 'helper.dart';\nvoid main() {}\n")
+    (tmp_path / "src/helper.dart").write_text("String helper() => 'ok';\n")
+    (tmp_path / "src/main.scala").write_text(
+        "import com.demo.ScalaHelper\nobject Main {}\n"
+    )
+    (tmp_path / "src/com/demo/ScalaHelper.scala").write_text(
+        "object ScalaHelper {}\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+    assert graph["profile"]["scan_mode"] == "generic"
+    assert graph["profile"]["package_scope"] == "single-package"
+    assert graph["profile"]["limits"]["max_import_files"] == 10_000
+    module_edges = {
+        (edge["source"], edge["target"])
+        for edge in graph["module_edges"]
+        if edge["relation"] == "imports"
+    }
+
+    assert ("module:src/main.py", "module:src/helpers.py") in module_edges
+    assert ("module:src/main.go", "module:src/internal/health.go") in module_edges
+    assert ("module:src/lib.rs", "module:src/helper.rs") in module_edges
+    assert (
+        "module:src/main/java/com/demo/App.java",
+        "module:src/main/java/com/demo/Helper.java",
+    ) in module_edges
+    assert ("module:src/native/main.c", "module:src/native/util.h") in module_edges
+    assert ("module:src/Feature.swift", "module:src/Utility.swift") in module_edges
+    assert ("module:src/main.dart", "module:src/helper.dart") in module_edges
+    assert (
+        "module:src/main.scala",
+        "module:src/com/demo/ScalaHelper.scala",
+    ) in module_edges
+
+
+def test_build_groups_nested_package_manifests(tmp_path: Path) -> None:
+    (tmp_path / "packages/web/src").mkdir(parents=True)
+    (tmp_path / "packages/api/src").mkdir(parents=True)
+    (tmp_path / "packages/web/package.json").write_text(
+        '{"name":"@demo/web","private":true}\n'
+    )
+    (tmp_path / "packages/api/package.json").write_text(
+        '{"name":"@demo/api","private":true}\n'
+    )
+    (tmp_path / "packages/web/src/app.jsx").write_text(
+        "export const App = () => null;\n"
+    )
+    (tmp_path / "packages/api/src/main.js").write_text(
+        "export function main() { return true; }\n"
+    )
+
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    assert [item["id"] for item in graph["packages"]] == [
+        "package:packages/api",
+        "package:packages/web",
+    ]
+    assert graph["profile"]["package_scope"] == "monorepo"
+    assert graph["profile"]["package_paths"] == [
+        "packages/api",
+        "packages/web",
+    ]
+    assert graph["profile"]["source_roots"] == ["packages"]
+    contains = {
+        (edge["source"], edge["target"])
+        for edge in graph["package_edges"]
+        if edge["relation"] == "contains"
+    }
+    assert ("package:packages/web", "module:packages/web/src/app.jsx") in contains
+    assert any(
+        item["id"] == "symbol:packages/web/src/app.jsx:App"
+        for item in graph["symbols"]
+    )
+
+
+def test_source_api_returns_bounded_lines_and_rejects_traversal(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/main.js").write_text("one\ntwo\nthree\nfour\n")
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    source = api_payload(
+        tmp_path,
+        graph,
+        "/api/source",
+        params={"path": ["src/main.js"], "start": ["2"], "end": ["3"]},
+    )
+    assert [line["text"] for line in source["lines"]] == ["two", "three"]
+
+    with pytest.raises(VibeWikiError) as rejected:
+        api_payload(
+            tmp_path,
+            graph,
+            "/api/source",
+            params={"path": ["../src/main.js"]},
+        )
+    assert rejected.value.code is ErrorCode.PATH_NOT_FOUND
+
+
+def test_impact_api_returns_bounded_upstream_and_downstream_evidence(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/main.js").write_text(
+        "import { helper } from './helper.js';\n"
+        "export function main() { return helper(); }\n"
+    )
+    (tmp_path / "src/helper.js").write_text(
+        "export function helper() { return 1; }\n"
+    )
+    scan_repository(tmp_path, allow_generic=True)
+    build_repository(tmp_path)
+    graph = json.loads((tmp_path / ".vibewiki/graph.json").read_text())
+
+    helper_id = "symbol:src/helper.js:helper"
+    upstream = api_payload(
+        tmp_path,
+        graph,
+        "/api/impact",
+        params={"subject": [helper_id], "direction": ["upstream"]},
+    )
+    downstream = api_payload(
+        tmp_path,
+        graph,
+        "/api/impact",
+        params={"subject": [helper_id], "direction": ["downstream"]},
+    )
+
+    assert upstream["node"]["id"] == helper_id
+    assert any(
+        item["node"]["id"] == "symbol:src/main.js:main"
+        and item["direction"] == "upstream"
+        for item in upstream["nodes"]
+    )
+    assert downstream["nodes"] == []
+    assert upstream["counts"]["nodes"] <= 100
+
+    with pytest.raises(VibeWikiError, match="direction"):
+        api_payload(
+            tmp_path,
+            graph,
+            "/api/impact",
+            params={"subject": [helper_id], "direction": ["sideways"]},
+        )

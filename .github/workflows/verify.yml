@@ -11,15 +11,20 @@ permissions:
 
 jobs:
   package-quality:
-    name: Package quality
-    runs-on: ubuntu-latest
+    name: Package quality (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -28,9 +33,33 @@ jobs:
       - name: Install locked development dependencies
         run: uv sync --locked --dev
       - name: Run Ruff
-        run: uv run ruff check .
+        run: uv run ruff check src tests scripts
       - name: Run tests
-        run: uv run pytest -q
+        run: uv run pytest -q -m "not runtime"
+      - name: Verify viewer JavaScript syntax
+        run: >-
+          node -e 'const fs=require("fs"); const html=fs.readFileSync("viewer/index.html","utf8");
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+          scripts.forEach(source=>new Function(source)); console.log(`JS_SYNTAX_PASS scripts=${scripts.length}`);'
+      - name: Build and smoke-test clean wheel install
+        run: |
+          rm -rf /tmp/vibewiki-dist /tmp/vibewiki-install
+          uv build --out-dir /tmp/vibewiki-dist
+          python -m venv /tmp/vibewiki-install
+          /tmp/vibewiki-install/bin/python -m pip install --no-index /tmp/vibewiki-dist/*.whl
+          /tmp/vibewiki-install/bin/vibewiki --version
+          cp -R tests/fixtures/next-ts-demo /tmp/vibewiki-quickstart
+          /tmp/vibewiki-install/bin/vibewiki scan /tmp/vibewiki-quickstart
+          /tmp/vibewiki-install/bin/vibewiki build /tmp/vibewiki-quickstart
+          /tmp/vibewiki-install/bin/vibewiki serve /tmp/vibewiki-quickstart --port 4173 >/tmp/vibewiki-serve.log 2>&1 &
+          server_pid=$!
+          for attempt in $(seq 1 20); do
+            curl --fail --silent http://127.0.0.1:4173/ && break
+            sleep 0.25
+          done
+          curl --fail --silent http://127.0.0.1:4173/ | grep -q "Browse source"
+          kill "$server_pid"
+          wait "$server_pid" || true
 
   preview:
     name: Presentation preview
@@ -44,3 +73,27 @@ jobs:
           python-version: "3.11"
       - name: Run deterministic repository checks
         run: python3 scripts/verify_preview.py
+      - name: Check whitespace
+        run: git diff --check
+
+  runtime-acceptance:
+    name: Browser runtime acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+      - name: Install runtime dependencies
+        run: uv sync --locked --dev --extra runtime
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+      - name: Run browser runtime acceptance
+        run: uv run pytest -q -m runtime

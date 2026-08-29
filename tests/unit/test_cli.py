@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vibewiki.cli import main
+from vibewiki.cli import build_parser, main
 from vibewiki.errors import CLI_EXIT_CODES, ErrorCode, VibeWikiError
 
 
@@ -40,10 +40,55 @@ def test_version_is_stable_and_reports_metadata(
 
     assert code == 0
     assert stdout == (
-        "vibewiki 0.1.0-preview "
-        "(analyzer 0.1.0-preview, schema 1)\n"
+        "vibewiki 0.1.49-preview "
+        "(analyzer 0.6.0-preview, schema 1)\n"
     )
     assert stderr == ""
+
+
+def test_serve_accepts_optional_llm_runtime_flags() -> None:
+    arguments = build_parser().parse_args(
+        [
+            "serve",
+            "repo",
+            "--llm-provider",
+            "ollama",
+            "--llm-model",
+            "qwen2.5:7b",
+            "--llm-base-url",
+            "http://127.0.0.1:11434",
+        ]
+    )
+
+    assert arguments.llm_provider == "ollama"
+    assert arguments.llm_model == "qwen2.5:7b"
+    assert arguments.llm_base_url == "http://127.0.0.1:11434"
+
+
+def test_serve_exposes_explicit_share_flag() -> None:
+    arguments = build_parser().parse_args(
+        ["serve", "repo", "--host", "0.0.0.0", "--share"]
+    )
+
+    assert arguments.host == "0.0.0.0"
+    assert arguments.share is True
+
+
+def test_observe_accepts_browser_runtime_flags() -> None:
+    arguments = build_parser().parse_args(
+        [
+            "observe",
+            "http://127.0.0.1:3000",
+            "--repository",
+            "repo",
+            "--mode",
+            "browser",
+            "--screenshots",
+        ]
+    )
+
+    assert arguments.mode == "browser"
+    assert arguments.screenshots is True
 
 
 @pytest.mark.parametrize("error_code", list(ErrorCode))

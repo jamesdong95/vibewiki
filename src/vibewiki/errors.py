@@ -15,6 +15,7 @@ class ErrorCode(StrEnum):
     PERMISSION_DENIED = "permission_denied"
     INVALID_OUTPUT = "invalid_output"
     CORRUPT_DATABASE = "corrupt_database"
+    LLM_UNAVAILABLE = "llm_unavailable"
 
 
 CLI_EXIT_CODES: Mapping[ErrorCode, int] = {
@@ -23,6 +24,7 @@ CLI_EXIT_CODES: Mapping[ErrorCode, int] = {
     ErrorCode.PERMISSION_DENIED: 4,
     ErrorCode.INVALID_OUTPUT: 5,
     ErrorCode.CORRUPT_DATABASE: 6,
+    ErrorCode.LLM_UNAVAILABLE: 7,
 }
 
 _DEFAULT_MESSAGES: Mapping[ErrorCode, str] = {
@@ -31,6 +33,7 @@ _DEFAULT_MESSAGES: Mapping[ErrorCode, str] = {
     ErrorCode.PERMISSION_DENIED: "permission denied while reading the repository",
     ErrorCode.INVALID_OUTPUT: "generated output is invalid",
     ErrorCode.CORRUPT_DATABASE: "local VibeWiki database is corrupt",
+    ErrorCode.LLM_UNAVAILABLE: "LLM provider is unavailable",
 }
 
 _FILESYSTEM_POSIX_PATH = re.compile(

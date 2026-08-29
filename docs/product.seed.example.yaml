@@ -1,0 +1,25 @@
+# Optional product intent seed. Keep this file at the repository root as
+# product.seed.yaml before running `vibewiki scan` and `vibewiki build`.
+product:
+  name: Signup and checkout demo
+audience: developers
+flows:
+  - id: signup
+    name: User signup
+    steps:
+      - id: open-form
+        name: Open signup form
+        description: User reaches the signup screen.
+        expected:
+          - route: /signup
+      - id: submit-form
+        name: Submit signup form
+        expected:
+          - api: /api/users
+          - test: tests/signup.test.ts
+  - id: checkout
+    name: Checkout
+    expected:
+      - route: /checkout
+      - api: /api/orders
+      - function: createOrder

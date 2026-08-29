@@ -32,20 +32,146 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 
 ---
 
-## 2. Baseline hiện tại và giả định
+## 2. Baseline hiện tại và kế hoạch tự động tiếp theo
 
-### Đã có
+> Cập nhật 2026-08-18 từ worktree và live preview hiện tại. Mỗi phase chỉ được
+> gọi hoàn thành khi có artifact, test và smoke evidence tương ứng.
 
-- Prototype UI standalone tại `vibewiki-ui/index.html`.
-- Giao diện dark developer-tool gồm sidebar, metrics, product graph, inspector, search, zoom, command palette và local runtime status.
-- Preview local đã được kiểm tra bằng ad-hoc verification: UI hooks, graph nodes, JavaScript syntax và HTTP serving đều pass.
+### Đã triển khai
 
-### Chưa có
+- CLI `scan → build → serve` với artifact `.vibewiki/` và SQLite graph.
+- Browse/import local cho repository generic, monorepo/package lồng nhau, JS/JSX/TS/TSX,
+  Python, Go, Rust, Java/Kotlin, C-family, Swift/Dart, shell, SQL, config/docs và Prisma.
+- Route/module/package/symbol/API/test graph với evidence path/line và unknowns deterministic.
+- Viewer đọc artifact thật, search/graph/inspector/source preview, Browse source và
+  trạng thái lỗi import.
+- LLM setup restores non-secret provider preferences, keeps BYOK keys process-local,
+  and provides grounded Ask with Discuss,
+  Flow, Impact và Unknowns modes; câu trả lời Markdown được render an toàn.
+- Export thật qua nút/command palette và `/api/export`: ZIP wiki, Mermaid, graph,
+  evidence manifests và unknowns, không chứa source files.
+- Product intent seed tùy chọn qua `product.seed.yaml`, comparator deterministic,
+  `.vibewiki/intent.json`, `/api/intent`, và Unknowns intent gaps trong viewer.
+- Scan history local qua `.vibewiki/history.json`, `vibewiki history`,
+  `/api/history`, `/api/stale`; changed/removed source được đánh dấu stale trên
+  node, edge, source và export runtime.
+- Bounded reverse graph traversal qua `/api/impact` và viewer inspector: upstream,
+  downstream, both, depth/limit safeguards và edge evidence giữ nguyên.
+- README, changelog, screenshot live preview, release metadata và draft PR đã có.
+- Packaging baseline đã hoàn tất: wheel chứa viewer asset, clean-install
+  quickstart và CI smoke gate chạy trên Python 3.11–3.13 ở Ubuntu/macOS.
+- Runtime acceptance baseline đã hoàn tất: fixture browser local, Playwright /
+  Chromium smoke, route/API/console graph linkage và CI runtime job.
+- Generic adapter coverage có fixture Vite/React, Next.js Pages Router, Vue
+  Router và SvelteKit; viewer có Source files inventory để đi từ indexed file
+  đến bounded source preview.
+- Browse large-repo preflight nhóm package monorepo, hiển thị file/byte counts,
+  cho phép scan package nằm trong safety limit và giữ artifact cũ khi import
+  thất bại.
+- Reverse module graph có evidence cho Python, Go, Rust, Java/Kotlin và C/C++
+  local imports; external dependencies vẫn được đánh dấu inferred.
+- Project profile deterministic có API `/api/profile`, hiển thị scan mode,
+  framework/language coverage, package scope và giới hạn import trong viewer;
+  project switcher đã trở thành control Browse scope thật; selector package
+  focus graph/evidence/inspector mà không cần import lại.
+- CLI onboarding tự nhận diện direct Next App Router hoặc generic repository;
+  `vibewiki analyze` chạy scan + build trong một bước, còn `--strict-next` giữ
+  contract legacy cho CI và fixture golden.
+- Generic adapter coverage đã thêm Angular Router route arrays và NestJS
+  controller decorators với route evidence deterministic.
+- Browse có fallback **Use local path** qua loopback API cho môi trường không
+  cung cấp folder picker; snapshot vẫn đi qua ignore, secret và size limits.
+- Viewer có **Rescan workspace** thật qua loopback API; rescan snapshot artifact
+  hiện tại, cập nhật graph sau khi source đổi, và rollback `.vibewiki/` nếu scan
+  hoặc build thất bại.
+- `vibewiki serve REPOSITORY` tự bootstrap scan + build khi chưa có artifact,
+  để người dùng mới có thể chạy một lệnh và mở được viewer.
+- Viewer tự phát hiện stale source trong lúc đang mở, hiển thị path bị đổi và
+  chỉ rescan khi người dùng bấm xác nhận.
+- Placeholder Share đã được thay bằng Copy local link, có clipboard fallback và
+  thông báo rõ link chỉ hoạt động khi local server còn chạy.
+- Local server khóa workspace swap/read trong lúc Browse, rescan, Ask hoặc
+  Observe để tránh graph và source root bị lệch khi request chạy đồng thời.
+- Viewer có **Import GitHub** explicit action cho public HTTPS repository URL và
+  branch/tag tùy chọn; archive bị giới hạn trước khi đọc, chỉ regular supported
+  files được copy, secrets/ignored paths bị loại, và private/authenticated
+  repositories vẫn dùng local clone/path để không đưa credential vào MVP.
+- Workspace summary giữ provenance an toàn sau import/reload (`GitHub ·
+  owner/repo@ref`, `local-path · folder`, hoặc `browser-folder`) để người dùng
+  luôn biết graph hiện tại đến từ đâu mà không lộ absolute path.
+- Reverse module/symbol graph resolve `paths` aliases từ `tsconfig.json` và
+  `jsconfig.json`, kể cả config nằm trong package lồng nhau (`@/*`,
+  `@shared/*`), với evidence line/path deterministic.
+- Reverse module/symbol graph resolve local workspace package names và
+  subpaths (`@demo/ui`, `@demo/ui/button`) qua `types`/`module`/`main` và
+  `exports` an toàn, không thực thi package scripts.
+- Nested App Router/Pages Router paths such as `packages/web/app/...` and
+  `apps/frontend/pages/...` retain route facts, package-scoped semantic keys,
+  and source evidence when the repository root is scanned directly.
+- Viewer graph summary counts now use the combined artifact edge set (facts,
+  modules, packages, and symbols), so the displayed total matches the graph
+  users can inspect.
+- Grounded answer normalization separates inline numbered step headings such as
+  `**Bước 1 — ...**` before the viewer renders Markdown, keeping model output
+  readable even when a provider returns one long line.
+- Generic scanning now accepts repositories that contain both a root `app/`
+  and nested package routers; strict Next mode keeps its legacy validation while
+  package-scoped route keys prevent collisions.
+- Browse/import generic registry now covers additional real-world source and
+  infrastructure formats (Astro, GraphQL, Protobuf, Terraform/HCL, PowerShell,
+  Perl, R, Solidity, Objective-C, F#, and related templates/scripts) with
+  discovery and local-path regression coverage.
+- Astro `src/pages` and Nuxt `pages` filesystem routes now produce framework-
+  labeled route facts for index and bracket-style dynamic segments, with exact
+  source path evidence.
+- Product intent onboarding is now available in the viewer: users can define
+  product name, audience, and multiple expected flow facts without hand-writing
+  YAML; the loopback API validates and atomically writes `product.seed.yaml`,
+  rescans, and refreshes intent gaps in the graph.
+- Scan history now persists a bounded, source-free graph index and exposes
+  `/api/changes`; the viewer separates file changes from added/changed/removed
+  nodes and edges so a rescan becomes a reviewable change set.
+- Human review workflow now persists a bounded local overlay in
+  `.vibewiki/reviews.json`; Unknowns and change subjects can be marked
+  `reviewed`, annotated, and reopened from the inspector without mutating the
+  deterministic graph.
+- Unknowns now have a selectable Open/All queue so a repository with multiple
+  findings can be triaged without losing the source-linked inspector context.
+- Bulk review actions now validate and persist up to 100 selected findings in
+  one atomic local batch, preserving existing notes and preventing partial
+  updates.
+- Imported workspaces now persist as private bounded snapshots across server
+  restarts. First-run onboarding exposes Browse, local-path, and public GitHub
+  entry points; Recent Workspaces supports Open, Refresh, and managed-cache-only
+  Forget, with atomic refresh rollback and non-secret LLM preference storage.
+- Ask now supports opt-in bounded discussion memory per workspace, stale-context
+  confirmation after rescan, and local answer/source feedback without persisting
+  credentials, raw retrieval excerpts, or remote request metadata.
+- Product intent now has a step-based editor and reusable local templates; the
+  legacy flat `expected[]` seed shape remains supported and step evidence is
+  preserved in the intent API and deterministic gap subjects.
 
-- Repository sản phẩm VibeWiki thực tế.
-- CLI, static analyzer, SQLite schema, graph persistence, wiki generator, local API hoặc Ollama integration.
-- Test suite, fixture repository và CI.
-- Product seed YAML thực tế.
+### Khoảng trống còn lại theo ưu tiên người dùng
+
+- Adapter coverage cho các framework/language chưa có fixture chuyên biệt.
+- Native folder-picker behavior depends on the host browser; the onboarding
+  screen always keeps loopback local-path and public GitHub fallbacks visible
+  when they are available.
+- Review state and intent templates are currently local to one state directory;
+  they do not provide multi-user audit history or hosted collaboration.
+- Change review currently compares consecutive local builds only; it does not
+  yet provide a GitHub PR-style multi-commit comparison or inline source diff.
+- GitHub private-repository OAuth, webhook sync và hosted multi-user workspace
+  chưa nằm trong local-first MVP; public archive import là boundary chủ động.
+
+### Thứ tự implementation tự động tiếp theo
+
+1. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
+2. **User workflow:** bounded large-repo import, richer change review, and
+   reusable intent-template sharing when real usage shows the local limits are
+   too restrictive.
+3. **Collaboration boundary:** evaluate opt-in multi-user audit/export only
+   after local review and template workflows have real usage evidence.
 
 ### Giả định để triển khai
 
@@ -74,6 +200,7 @@ Sau khi chạy scan/build, VibeWiki tạo:
 ├── manifest.json
 ├── claims.json
 ├── sources.json
+├── intent.json
 └── wiki/
     ├── index.md
     ├── routes.md
@@ -356,6 +483,12 @@ MVP không cần lưu source code đầy đủ trong SQLite; chỉ lưu path, ha
 
 **Mục tiêu:** thêm giải thích tự nhiên nhưng vẫn bị ràng buộc bởi graph/evidence.
 
+**Implementation slice hiện tại:** đã bắt đầu với provider interface, fallback
+evidence-only, adapter Ollama/OpenAI-compatible, retrieval bounded và API
+`/api/ask`; UI Ask giữ conversation ngắn, cho chọn Discuss/Flow explainer/
+Impact analyzer/Unknowns investigator và hiển thị citations. Model vẫn là
+optional, API key chỉ được đọc ở server environment.
+
 **Kết quả:**
 
 - `providers/base.py` với interface `generate(prompt, context)`.
@@ -387,7 +520,23 @@ Unknowns
 - Stale evidence khi source thay đổi sau lần scan/build.
 - Wiki hiển thị last observed commit, không suy luận business reason từ commit message nếu không đủ evidence.
 
+**Implementation slice hiện tại:** `history.json` lưu tối đa 50 scan runs với
+commit metadata và `added/changed/removed` paths; `/api/history` và CLI query
+theo path/subject; `/api/stale` đối chiếu hash hiện tại sau build; viewer có
+Scan history inspector; export kèm history và staleness snapshot.
+
 **Gate:** fixture Git nhỏ chứng minh source đổi sẽ đánh dấu claim liên quan stale và re-scan cập nhật đúng node.
+
+**Runtime baseline đã triển khai trong 0.1.4-preview:** `vibewiki observe`
+và `/api/observe` chỉ thực hiện bounded same-origin `GET` trên loopback mặc
+định; `/api/runtime` và `runtime.json` lưu route/network metadata, timestamp,
+và unknown rõ ràng cho JavaScript/console/side effects chưa được chạy. Viewer
+có nút Observe runtime và export chứa runtime artifact. Browser mode đã triển
+khai trong 0.1.5-preview qua `vibewiki[runtime]`, chạy headless Chromium với
+same-origin `GET`, chặn request khác origin/non-GET, thu console error, network
+status và screenshot metadata; side effects/auth vẫn là unknown. Runtime
+records được join deterministic vào route/API node theo path + method, persist
+trong `runtime.json`, và hiển thị trong inspector.
 
 ### Phase 9 — Runtime explorer bằng Playwright
 
@@ -403,9 +552,13 @@ Unknowns
 
 **Gate:** demo app local có route transition và API request được liên kết với graph; lỗi runtime xuất hiện trong inspector.
 
+**Đã đạt trong 0.1.6-preview:** runtime route/network/console records có
+`graph_nodes` deterministic; `/api/nodes`, `/api/runtime` và `/api/inspect/*`
+trả linked evidence; viewer inspector hiển thị status/error cho node được chọn.
+
 ### Phase 10 — Release hardening và open-source distribution
 
-**Mục tiêu:** phát hành bản `0.1.0` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
+**Mục tiêu:** phát hành bản `0.1.14-preview` mà solo coder có thể cài và dùng mà không cần hạ tầng của maintainer.
 
 **Kết quả:**
 
@@ -414,8 +567,17 @@ Unknowns
 - Version CLI hiển thị analyzer version và schema version.
 - CI chạy unit/integration/golden tests trên macOS/Linux.
 - Demo repository không chứa secret và có screenshot/GIF tùy chọn.
+- Viewer có export ZIP thật cho wiki/graph/evidence mà không đóng gói source.
+- Generic analyzer có fixture Vite/React, nhận diện route-object của React Router
+  và nối các API wrapper literal vào generic route tương ứng.
+- Generic analyzer có fixture Vue Router và SvelteKit, nhận diện route-object,
+  filesystem route và `+server` endpoint với reverse API-call evidence.
 - Build/serve error messages có exit code ổn định.
 - Kiểm tra localhost binding và network-offline behavior.
+
+**Đã bổ sung trong 0.1.5-preview:** workflow Verify chạy locked dependency,
+Ruff, tests, viewer JavaScript syntax và preview checks trên Ubuntu/macOS với
+Python 3.11–3.13.
 
 **Gate release:** người dùng mới có thể cài, scan fixture, mở viewer, đọc wiki và xóa `.vibewiki/` mà không cần tài khoản/provider.
 
@@ -520,6 +682,8 @@ Nếu dùng nhiều Hermes profiles, tạo toàn bộ task và links trước kh
 - Build wiki và compare snapshots đã normalize timestamp/path machine-specific.
 - Re-scan unchanged fixture và assert no duplicate rows.
 - Modify one fixture file, rescan và assert affected evidence/node updates.
+- Bấm Rescan workspace sau khi thêm source file và xác nhận graph cập nhật trên
+  browser thật, không có console error.
 - Start local server and test API response schemas.
 
 ### UI verification
@@ -607,6 +771,7 @@ MVP chỉ được gọi là hoàn thành khi tất cả điều kiện sau đú
 7. Sinh wiki/Mermaid không LLM.
 8. Kết nối local API với prototype UI và thay mock data bằng fixture data.
 9. Chạy MVP gate với verifier độc lập.
-10. Chỉ sau gate mới thêm product seed, Ollama, Git history và Playwright theo thứ tự ưu tiên người dùng.
+10. Chỉ sau gate mới thêm runtime observer và adapter coverage; product seed,
+    Ollama và history đã có implementation slice và phải được giữ regression-tested.
 
 **Nguyên tắc release:** không bắt đầu bằng Q&A. Nếu graph và evidence core chưa đáng tin, LLM chỉ làm sản phẩm trông thông minh hơn nhưng khó kiểm chứng hơn.

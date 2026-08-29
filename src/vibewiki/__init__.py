@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.0-preview"
-ANALYZER_VERSION = "0.1.0-preview"
+__version__ = "0.1.49-preview"
+ANALYZER_VERSION = "0.6.0-preview"
 SCHEMA_VERSION = 1
 
 __all__ = ["ANALYZER_VERSION", "SCHEMA_VERSION", "__version__"]

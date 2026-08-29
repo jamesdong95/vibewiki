@@ -53,6 +53,19 @@ The MVP commits to this narrow stack:
 A fixture or repository may contain other files, but only the supported
 patterns are candidates for verified MVP facts.
 
+The generic analyzer expansion in `0.1.8-preview` adds conservative route and
+API facts for common Express/Fastify/Hono-style JavaScript, React Router JSX,
+Flask/FastAPI decorators, and Go `HandleFunc` registrations when the user opts
+into `scan --generic`. It is pattern-based rather than a language compiler:
+unrecognized constructs remain inventory/module evidence and are never promoted
+to verified behavior by filename alone.
+
+When a repository is scanned from its root, the same route detection applies
+inside common workspace packages. For example, `packages/web/app/page.tsx`,
+`apps/frontend/src/app/page.tsx`, and nested `pages/` files retain their exact
+relative evidence paths. Package-scoped semantic keys keep two packages with
+the same `/` route distinct without changing the user-facing route attribute.
+
 ### Unsupported behavior
 
 When the repository is outside this supported surface, or a construct cannot be
@@ -238,6 +251,42 @@ packaging, but the observable contract does not.
 - Its summary includes `schema_version`, `command`, `status`, bind address,
   port, and relative artifact root; no absolute paths or source secrets are
   returned.
+
+### M2 manifest boundary
+
+The first implemented scan slice is intentionally narrower than the full MVP
+contract. It accepts only a direct `<repository>/app` App Router directory with
+at least one regular `.ts` or `.tsx` file. A nested/monorepo App Router layout,
+Pages Router marker, or JS-only app is unsupported. Discovery does not follow
+symlinks, reads no special files, and skips build/cache or sensitive paths by
+name before statting or hashing them.
+
+M2 persists only `.vibewiki/manifest.json`. Each record contains a relative
+POSIX path, language label, byte size, and SHA-256 digest. The manifest is
+canonical JSON sorted by path; its cache identity is the path/language/size/
+digest plus analyzer version. M2 emits no facts, relations, or unknowns, so
+those summary counts remain zero until the static-analysis phase adds a
+separate evidence-producing artifact.
+
+### Current local end-to-end slice
+
+The repository now includes the first deterministic end-to-end slice after M2:
+`build` reads the manifest and emits `facts.json`, `claims.json`, `sources.json`,
+`graph.json`, `graph.db`, and Markdown/Mermaid wiki files below `.vibewiki/`.
+The analyzer covers the supported fixture surface only: App Router pages and
+route handlers, literal API calls, exported functions, Prisma models, direct
+imports/calls/writes, and TypeScript test references. `serve` validates the
+built graph and exposes it through a loopback-only API consumed by the viewer.
+The viewer must display current artifact counts and evidence when served by
+VibeWiki; it may retain a static presentation fallback when opened directly.
+This slice does not claim runtime behavior, exhaustive impact, LLM reasoning,
+or production readiness.
+
+The viewer also provides a `Browse source` action. It uses the browser's local
+directory picker and sends selected files only to the loopback VibeWiki server;
+the server filters sensitive/unsupported paths, builds a temporary workspace,
+and replaces the current local graph. It does not upload source to a cloud
+service or persist the temporary imported workspace after server shutdown.
 
 ## 9. Privacy and reproducibility requirements
 
