@@ -147,6 +147,9 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Ask now supports opt-in bounded discussion memory per workspace, stale-context
   confirmation after rescan, and local answer/source feedback without persisting
   credentials, raw retrieval excerpts, or remote request metadata.
+- Product intent now has a step-based editor and reusable local templates; the
+  legacy flat `expected[]` seed shape remains supported and step evidence is
+  preserved in the intent API and deterministic gap subjects.
 
 ### Khoảng trống còn lại theo ưu tiên người dùng
 
@@ -154,9 +157,8 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 - Native folder-picker behavior depends on the host browser; the onboarding
   screen always keeps loopback local-path and public GitHub fallbacks visible
   when they are available.
-- Flow authoring beyond the compact intent form (rich step editing and reusable
-  templates) is not yet included; review state is currently local to one
-  workspace and does not provide multi-user audit history.
+- Review state and intent templates are currently local to one state directory;
+  they do not provide multi-user audit history or hosted collaboration.
 - Change review currently compares consecutive local builds only; it does not
   yet provide a GitHub PR-style multi-commit comparison or inline source diff.
 - GitHub private-repository OAuth, webhook sync và hosted multi-user workspace
@@ -165,12 +167,11 @@ VibeWiki phải trả lời được câu hỏi “điều gì thực sự tồn
 ### Thứ tự implementation tự động tiếp theo
 
 1. **Adapter coverage:** mở rộng language/framework bằng fixture và evidence gates.
-2. **Grounded collaboration:** persist bounded per-workspace discussion context
-   only when explicitly enabled, add answer/source feedback, and keep API keys,
-   source excerpts, and remote consent out of durable state.
-3. **User workflow:** rich flow authoring, reusable intent templates, and
-   bounded large-repo import when real usage shows the current limits are too
-   restrictive.
+2. **User workflow:** bounded large-repo import, richer change review, and
+   reusable intent-template sharing when real usage shows the local limits are
+   too restrictive.
+3. **Collaboration boundary:** evaluate opt-in multi-user audit/export only
+   after local review and template workflows have real usage evidence.
 
 ### Giả định để triển khai
 

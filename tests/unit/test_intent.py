@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from vibewiki.errors import ErrorCode, VibeWikiError
 from vibewiki.intent import (
+    IntentTemplateStore,
     compare_product_intent,
     load_product_seed,
+    normalise_product_seed,
     write_product_seed,
 )
 
@@ -134,3 +137,102 @@ def test_product_intent_writer_round_trips_canonical_seed(tmp_path: Path) -> Non
     text = (tmp_path / "product.seed.yaml").read_text(encoding="utf-8")
     assert "Demo" in text
     assert "api" in text
+
+
+def test_product_intent_supports_nested_steps_and_stable_step_gaps(
+    tmp_path: Path,
+) -> None:
+    seed = {
+        "product": {"name": "Demo"},
+        "flows": [
+            {
+                "id": "signup",
+                "name": "Sign up",
+                "steps": [
+                    {
+                        "id": "open",
+                        "name": "Open form",
+                        "description": "Show the signup route.",
+                        "expected": [{"kind": "route", "value": "/signup"}],
+                    },
+                    {
+                        "id": "submit",
+                        "name": "Submit form",
+                        "expected": [{"kind": "api", "value": "/api/users"}],
+                    },
+                ],
+            }
+        ],
+    }
+    write_product_seed(tmp_path, seed)
+
+    loaded = load_product_seed(tmp_path)
+    assert loaded is not None
+    assert [step["id"] for step in loaded["flows"][0]["steps"]] == [
+        "open",
+        "submit",
+    ]
+    assert loaded["flows"][0]["expected"][1]["step_id"] == "submit"
+    result = compare_product_intent(tmp_path, _artifact())
+    assert result["flows"][0]["steps"][0]["status"] == "observed"
+    assert result["flows"][0]["steps"][1]["status"] == "not_observed"
+    assert result["gaps"][0]["subject"] == "intent:signup:step:submit:api:/api/users"
+
+
+def test_intent_templates_are_bounded_atomic_and_isolated(tmp_path: Path) -> None:
+    first = IntentTemplateStore(tmp_path / "one")
+    created = first.create(
+        {
+            "name": "Signup",
+            "flow": {
+                "id": "signup",
+                "name": "Sign up",
+                "steps": [
+                    {
+                        "id": "submit",
+                        "name": "Submit",
+                        "expected": [{"kind": "api", "value": "/api/users"}],
+                    }
+                ],
+            },
+        }
+    )
+    assert created["id"].startswith("it_")
+    assert first.list()[0]["flow"]["steps"][0]["id"] == "submit"
+    assert IntentTemplateStore(tmp_path / "two").list() == []
+    first.path.write_text("not json", encoding="utf-8")
+    assert first.list() == []
+    first.path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "templates": [
+                    {
+                        "id": "it_corrupt",
+                        "name": "Corrupt",
+                        "flow": {"id": "x", "steps": None},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert first.list() == []
+
+
+def test_intent_seed_rejects_duplicate_or_oversized_steps() -> None:
+    with pytest.raises(VibeWikiError, match="duplicate step"):
+        normalise_product_seed(
+            {
+                "product": {"name": "Demo"},
+                "flows": [
+                    {
+                        "id": "flow",
+                        "steps": [
+                            {"id": "same", "expected": [{"route": "/"}]},
+                            {"id": "same", "expected": [{"route": "/"}]},
+                        ],
+                    }
+                ],
+            }
+        )

@@ -37,7 +37,12 @@ from .importer import (
     import_local_workspace,
     import_uploaded_workspace,
 )
-from .intent import SEED_FILENAME, compare_product_intent, write_product_seed
+from .intent import (
+    SEED_FILENAME,
+    IntentTemplateStore,
+    compare_product_intent,
+    write_product_seed,
+)
 from .llm import (
     MAX_QUESTION_CHARS,
     LLMSettings,
@@ -985,6 +990,15 @@ def create_server(
                         },
                     )
                 return
+            if parsed.path == "/api/intent/templates":
+                self._write_json(
+                    200,
+                    {
+                        "schema_version": 1,
+                        "templates": self.server.intent_template_store.list(),
+                    },
+                )
+                return
             if parsed.path == "/api/summary" and not self.server.workspace_available:
                 self._write_json(
                     200,
@@ -1455,6 +1469,34 @@ def create_server(
                         {"error": "invalid_output", "message": str(error)},
                     )
                 return
+            if parsed.path == "/api/intent/templates":
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "template mutations are available only on a loopback "
+                            "server",
+                        )
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length <= 0 or content_length > 64 * 1024:
+                        raise VibeWikiError(
+                            ErrorCode.INVALID_OUTPUT,
+                            "template payload is empty or too large",
+                        )
+                    payload = json.loads(
+                        self.rfile.read(content_length).decode("utf-8")
+                    )
+                    template = self.server.intent_template_store.create(payload)
+                    self._write_json(200, {"saved": True, "template": template})
+                except VibeWikiError as error:
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                except (OSError, UnicodeDecodeError, ValueError, TypeError) as error:
+                    self._write_json(
+                        400, {"error": "invalid_output", "message": str(error)}
+                    )
+                return
             if parsed.path == "/api/observe":
                 try:
                     content_length = int(self.headers.get("Content-Length", "0"))
@@ -1903,6 +1945,27 @@ def create_server(
             if not self._require_authorization():
                 return
             parsed = urlparse(self.path)
+            template_prefix = "/api/intent/templates/"
+            if parsed.path.startswith(template_prefix):
+                try:
+                    if not self.server.local_path_import_allowed:
+                        raise VibeWikiError(
+                            ErrorCode.PERMISSION_DENIED,
+                            "template mutations are available only on a loopback "
+                            "server",
+                        )
+                    template_id = unquote(
+                        parsed.path.removeprefix(template_prefix)
+                    ).strip("/")
+                    self.server.intent_template_store.delete(template_id)
+                    self._write_json(
+                        200, {"deleted": True, "template_id": template_id}
+                    )
+                except VibeWikiError as error:
+                    self._write_json(
+                        422, {"error": error.code.value, "message": error.message}
+                    )
+                return
             discussion_prefix = "/api/discussions/"
             if parsed.path.startswith(discussion_prefix):
                 discussion_id = unquote(
@@ -1970,6 +2033,7 @@ def create_server(
     server.llm_settings = _initial_llm_settings(workspace_store)
     server.imported_workspace: ImportedWorkspace | None = None
     server.workspace_store = workspace_store
+    server.intent_template_store = IntentTemplateStore(workspace_store.root)
     server.workspace_id = workspace_id
     _set_discussion_store(server)
     server.workspace_source = {

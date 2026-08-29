@@ -120,6 +120,10 @@ The local product provides:
 - A **Product intent** form that writes a validated local seed, rescans the
   workspace, and turns missing expected route/API/file/test evidence into
   explicit Unknowns without requiring manual YAML editing.
+- A rich Product intent editor with ordered flow steps, step descriptions,
+  evidence expectations, and reusable bounded templates stored only in the
+  local VibeWiki state directory. Choosing a template fills a draft; only
+  **Save and compare** writes `product.seed.yaml` and rescans the workspace.
 - A local-first visual language that does not require a hosted backend.
 
 Runtime observation is available as an explicit, safe baseline. Start a local

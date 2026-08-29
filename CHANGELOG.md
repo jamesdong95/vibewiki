@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.49-preview] - 2026-08-29
+
+### Added
+
+- Added a rich Product intent editor with ordered flow steps, descriptions,
+  evidence expectations, and clear validation errors.
+- Added bounded local reusable intent templates with restart persistence,
+  atomic writes, state-directory isolation, and shared-server mutation guards.
+- Preserved legacy flat `expected[]` seeds while exposing deterministic step
+  metadata and step-linked intent gaps in the API and graph review queue.
+- Added unit, API, restart, isolation, shared-auth, and viewer marker coverage.
+
+### Privacy
+
+- Templates contain only user-entered intent metadata and stay outside source
+  repositories, `.vibewiki` artifacts, and exports.
+
 ## [0.1.48-preview] - 2026-08-26
 
 ### Added

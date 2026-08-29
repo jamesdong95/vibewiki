@@ -6,10 +6,17 @@ audience: developers
 flows:
   - id: signup
     name: User signup
-    expected:
-      - route: /signup
-      - api: /api/users
-      - test: tests/signup.test.ts
+    steps:
+      - id: open-form
+        name: Open signup form
+        description: User reaches the signup screen.
+        expected:
+          - route: /signup
+      - id: submit-form
+        name: Submit signup form
+        expected:
+          - api: /api/users
+          - test: tests/signup.test.ts
   - id: checkout
     name: Checkout
     expected:

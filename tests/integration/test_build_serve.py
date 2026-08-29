@@ -528,6 +528,187 @@ def test_serve_configures_product_intent_from_local_ui(tmp_path: Path) -> None:
     }
 
 
+def test_intent_steps_and_templates_persist_without_rescanning_templates(
+    tmp_path: Path,
+) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    state_dir = tmp_path / "state"
+    server = create_server(root, port=0, state_dir=state_dir)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    flow = {
+        "id": "signup",
+        "name": "Sign up",
+        "steps": [
+            {
+                "id": "open",
+                "name": "Open form",
+                "description": "User opens the signup screen.",
+                "expected": [{"kind": "route", "value": "/signup"}],
+            },
+            {
+                "id": "submit",
+                "name": "Submit form",
+                "expected": [{"kind": "api", "value": "/api/missing-users"}],
+            },
+        ],
+    }
+
+    def request(path: str, method: str = "GET", payload: dict | None = None):
+        body = json.dumps(payload).encode() if payload is not None else None
+        headers = {"Content-Type": "application/json"} if body else {}
+        return Request(f"{base}{path}", data=body, method=method, headers=headers)
+
+    try:
+        with urlopen(
+            request(
+                "/api/intent/templates", "POST", {"name": "Signup", "flow": flow}
+            )
+        ) as response:
+            created = json.load(response)
+        with urlopen(f"{base}/api/intent/templates") as response:
+            templates = json.load(response)
+        assert created["saved"] is True
+        assert templates["templates"][0]["flow"]["steps"][1]["id"] == "submit"
+
+        with urlopen(
+            request(
+                "/api/intent",
+                "POST",
+                {"product": {"name": "Demo"}, "flows": [flow]},
+            )
+        ) as response:
+            saved = json.load(response)
+        assert saved["intent"]["flows"][0]["steps"][0]["status"] == "observed"
+        assert saved["intent"]["flows"][0]["steps"][1]["status"] == "not_observed"
+
+        with urlopen(
+            request(f"/api/intent/templates/{created['template']['id']}", "DELETE")
+        ) as response:
+            assert json.load(response)["deleted"] is True
+        with urlopen(f"{base}/api/intent/templates") as response:
+            assert json.load(response)["templates"] == []
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_intent_template_library_survives_server_restart(tmp_path: Path) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    state_dir = tmp_path / "state"
+    flow = {
+        "id": "checkout",
+        "name": "Checkout",
+        "steps": [
+            {
+                "id": "place-order",
+                "name": "Place order",
+                "expected": [{"kind": "route", "value": "/checkout"}],
+            }
+        ],
+    }
+
+    def run_server() -> tuple[object, threading.Thread, str]:
+        instance = create_server(root, port=0, state_dir=state_dir)
+        worker = threading.Thread(target=instance.serve_forever, daemon=True)
+        worker.start()
+        return instance, worker, f"http://127.0.0.1:{instance.server_address[1]}"
+
+    server, thread, base = run_server()
+    try:
+        payload = json.dumps({"name": "Checkout", "flow": flow}).encode()
+        with urlopen(
+            Request(
+                f"{base}/api/intent/templates",
+                data=payload,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+        ):
+            pass
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    server, thread, base = run_server()
+    try:
+        with urlopen(f"{base}/api/intent/templates") as response:
+            templates = json.load(response)["templates"]
+        assert [item["name"] for item in templates] == ["Checkout"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_intent_save_restores_seed_and_artifact_when_rescan_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _fixture_copy(tmp_path)
+    scan_repository(root)
+    build_repository(root)
+    seed_path = root / "product.seed.yaml"
+    seed_path.write_text(
+        "product: Existing\n"
+        "flows:\n"
+        "  - id: old\n"
+        "    expected:\n"
+        "      - route: /signup\n",
+        encoding="utf-8",
+    )
+    rescan_repository(root)
+    old_seed = seed_path.read_bytes()
+    old_graph = (root / ".vibewiki/graph.json").read_bytes()
+
+    def fail_build(_root: Path) -> None:
+        raise RuntimeError("simulated build failure")
+
+    monkeypatch.setattr("vibewiki.rescan.build_repository", fail_build)
+    server = create_server(root, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    payload = {
+        "product": {"name": "Replacement"},
+        "flows": [
+            {
+                "id": "new",
+                "steps": [
+                    {
+                        "id": "step",
+                        "expected": [{"kind": "route", "value": "/"}],
+                    }
+                ],
+            }
+        ],
+    }
+    try:
+        with pytest.raises(HTTPError) as raised:
+            urlopen(
+                Request(
+                    f"{base}/api/intent",
+                    data=json.dumps(payload).encode(),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+            )
+        assert raised.value.code == 422
+        assert "previous" in raised.value.read().decode().lower()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+    assert seed_path.read_bytes() == old_seed
+    assert (root / ".vibewiki/graph.json").read_bytes() == old_graph
+
+
 def test_nodes_expose_multiple_unknowns_for_review_queue(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     (root / "product.seed.yaml").write_text(
@@ -655,8 +836,12 @@ def test_serve_exposes_viewer_from_source_checkout(tmp_path: Path) -> None:
     assert "TypeScript only" not in html
     assert 'id="intent-button"' in html
     assert 'id="intent-modal"' in html
-    assert 'id="intent-flows"' in html
-    assert "function parseIntentFlows" in html
+    assert 'id="intent-flow-list"' in html
+    assert 'id="intent-template-select"' in html
+    assert 'id="intent-template-save"' in html
+    assert "/api/intent/templates" in html
+    assert "function renderIntentEditor" in html
+    assert "function collectIntentFlows" in html
     assert "/api/intent" in html
     assert "function nodeMatchesScope" in html
     assert "setScope(scope)" in html
@@ -1184,6 +1369,7 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
         "/api/source?path=app%2Fpage.tsx",
         "/api/export",
         "/api/discussions",
+        "/api/intent/templates",
     )
     protected_posts = (
         ("/api/llm/config", {"provider": "none"}),
@@ -1197,6 +1383,10 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
         ("/api/reviews/batch", {"items": []}),
         ("/api/intent", {"product": {"name": "x"}}),
         ("/api/discussions", {"title": "x"}),
+        (
+            "/api/intent/templates",
+            {"name": "x", "flow": {"id": "x", "steps": []}},
+        ),
         (
             "/api/discussions/d_missing/feedback",
             {"message_id": "d_missing", "rating": "up"},
@@ -1237,6 +1427,27 @@ def test_shared_server_requires_bearer_for_viewer_and_every_api_mutation(
                 )
             )
         assert blocked_import.value.code == 422
+        with pytest.raises(HTTPError) as blocked_template:
+            urlopen(
+                request(
+                    "/api/intent/templates",
+                    method="POST",
+                    payload={
+                        "name": "x",
+                        "flow": {
+                            "id": "x",
+                            "steps": [
+                                {
+                                    "id": "step",
+                                    "expected": [{"kind": "route", "value": "/"}],
+                                }
+                            ],
+                        },
+                    },
+                    authorized=True,
+                )
+            )
+        assert blocked_template.value.code == 422
         with urlopen(
             request("/api/source?path=app%2Fpage.tsx", authorized=True)
         ) as response:

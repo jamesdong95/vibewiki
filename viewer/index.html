@@ -544,6 +544,7 @@
     .modal-backdrop { position: fixed; z-index: 15; inset: 0; display: grid; place-items: start center; padding-top: 13vh; background: rgba(2,4,5,0.62); backdrop-filter: blur(8px); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
     .modal-backdrop.open { opacity: 1; pointer-events: auto; }
     .command-modal { width: min(560px, calc(100vw - 32px)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 13px; background: #141c1f; box-shadow: 0 28px 90px rgba(0,0,0,0.5); transform: translateY(-12px); transition: transform .2s ease; }
+    #intent-modal .command-modal { max-height: 74vh; overflow: auto; }
     .modal-backdrop.open .command-modal { transform: translateY(0); }
     .settings-form { display: grid; gap: 12px; padding: 16px; }
     .settings-copy { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
@@ -559,6 +560,27 @@
     .settings-status { min-height: 16px; color: var(--muted); font-family: var(--mono); font-size: 9px; }
     .settings-status.success { color: var(--lime); }
     .settings-status.error { color: #ffb4a8; }
+    .intent-flow-list { display: grid; gap: 10px; max-height: 45vh; overflow: auto; padding-right: 3px; }
+    .intent-flow-card { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.025); }
+    .intent-flow-heading, .intent-step-heading, .intent-template-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+    .intent-flow-heading strong, .intent-step-heading strong { flex: 1 1 130px; color: var(--ink); font: 10px var(--mono); }
+    .intent-flow-card input, .intent-flow-card textarea, .intent-flow-card select { min-width: 0; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; outline: 0; color: var(--ink); background: var(--panel-2); font-size: 10px; }
+    .intent-flow-card input:focus, .intent-flow-card textarea:focus, .intent-flow-card select:focus { border-color: var(--lime); }
+    .intent-flow-card .intent-flow-id { flex: 1 1 100px; font-family: var(--mono); }
+    .intent-flow-card .intent-flow-name { flex: 2 1 180px; }
+    .intent-step-list { display: grid; gap: 8px; margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--line); }
+    .intent-step-card { display: grid; gap: 7px; padding: 8px; border: 1px solid rgba(166,233,239,0.16); border-radius: 6px; background: rgba(166,233,239,0.025); }
+    .intent-step-card input, .intent-step-card textarea { flex: 1 1 120px; }
+    .intent-step-card textarea { min-height: 32px; resize: vertical; font: 9px/1.35 var(--mono); }
+    .intent-expectations { display: grid; gap: 5px; }
+    .intent-expectation-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 5px; align-items: center; }
+    .intent-expectation-row input, .intent-expectation-row select { width: 100%; font: 9px var(--mono); }
+    .intent-template-panel { display: grid; gap: 7px; padding: 9px; border: 1px solid rgba(216,249,139,0.18); border-radius: 7px; background: rgba(216,249,139,0.035); }
+    .intent-template-panel select { flex: 1 1 180px; }
+    .intent-template-list { display: grid; gap: 4px; max-height: 110px; overflow: auto; }
+    .intent-template-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: var(--ink-soft); font: 9px var(--mono); }
+    .intent-template-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .intent-muted { color: var(--muted-2); font: 9px var(--mono); }
     .llm-boundary { margin: 4px 0 2px; padding: 10px 11px; border: 1px solid rgba(166, 233, 239, 0.22); border-radius: 8px; color: var(--ink-soft); background: rgba(166, 233, 239, 0.055); font-size: 10px; line-height: 1.5; }
     .llm-boundary strong { color: var(--cyan); }
     .llm-confirm { display: flex; align-items: flex-start; gap: 8px; margin: 3px 0 2px; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
@@ -1148,11 +1170,23 @@ vibewiki serve /path/to/repository</pre>
           <label for="intent-audience">Audience (optional)</label>
           <input id="intent-audience" type="text" placeholder="solo developers" autocomplete="off" />
         </div>
+        <div class="intent-template-panel">
+          <div class="intent-template-row">
+            <strong>Reusable local templates</strong>
+            <select id="intent-template-select" aria-label="Intent template"><option value="">Choose a template…</option></select>
+            <button class="text-button" type="button" id="intent-template-use">Use</button>
+          </div>
+          <div class="intent-template-list" id="intent-template-list" aria-live="polite"></div>
+          <small class="intent-muted">Templates stay in VibeWiki’s local state directory and never enter the repository export.</small>
+        </div>
         <div class="settings-field">
-          <label for="intent-flows">Flows</label>
-          <textarea id="intent-flows" rows="7" required spellcheck="false" placeholder="signup | Sign up | route:/signup; api:/api/users; test:tests/signup.test.ts
-checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
-          <small class="settings-copy">Mỗi dòng: <code>id | Tên flow | kind:value; kind:value</code>. Hỗ trợ route, api, entity, file, function, module, package, symbol, test.</small>
+          <div class="intent-flow-heading"><label>Flows and steps</label><button class="text-button" type="button" id="intent-add-flow">Add flow</button></div>
+          <div class="intent-flow-list" id="intent-flow-list"></div>
+          <small class="settings-copy">Mỗi flow có các bước và expectation có evidence: route, api, entity, file, function, module, package, symbol, test.</small>
+        </div>
+        <div class="settings-field">
+          <label for="intent-template-name">Save current flow as template (optional)</label>
+          <div class="intent-template-row"><input id="intent-template-name" type="text" maxlength="120" placeholder="Signup flow template" autocomplete="off" /><button class="text-button" type="button" id="intent-template-save">Save template</button></div>
         </div>
         <div class="settings-status" id="intent-settings-status" role="status" aria-live="polite"></div>
         <div class="settings-actions">
@@ -1511,7 +1545,13 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
     const intentForm = document.getElementById('intent-form');
     const intentProductName = document.getElementById('intent-product-name');
     const intentAudience = document.getElementById('intent-audience');
-    const intentFlows = document.getElementById('intent-flows');
+    const intentFlowList = document.getElementById('intent-flow-list');
+    const intentTemplateSelect = document.getElementById('intent-template-select');
+    const intentTemplateList = document.getElementById('intent-template-list');
+    const intentTemplateName = document.getElementById('intent-template-name');
+    const intentTemplateUse = document.getElementById('intent-template-use');
+    const intentTemplateSave = document.getElementById('intent-template-save');
+    const intentAddFlow = document.getElementById('intent-add-flow');
     const intentSettingsStatus = document.getElementById('intent-settings-status');
     let currentProjectProfile = null;
     const MAX_IMPORT_FILES = 10000;
@@ -1863,41 +1903,194 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       profileModal.setAttribute('aria-hidden', 'true');
     }
     const INTENT_KINDS = new Set(['api', 'entity', 'file', 'function', 'module', 'package', 'route', 'symbol', 'test']);
-    function parseIntentFlows(value) {
-      const lines = value.split('\n').map(line => line.trim()).filter(Boolean);
-      if (!lines.length) throw new Error('Cần khai báo ít nhất một flow.');
-      const ids = new Set();
-      return lines.map((line, index) => {
-        const parts = line.split('|').map(part => part.trim());
-        if (parts.length < 3 || !parts[0] || !parts[2]) {
-          throw new Error(`Flow dòng ${index + 1} cần dạng id | tên | kind:value; kind:value.`);
-        }
-        if (ids.has(parts[0])) throw new Error(`Flow id bị trùng: ${parts[0]}.`);
-        ids.add(parts[0]);
-        const expected = parts[2].split(';').map(item => item.trim()).filter(Boolean).map(item => {
-          const separator = item.indexOf(':');
-          if (separator <= 0 || separator === item.length - 1) {
-            throw new Error(`Expectation không hợp lệ ở flow ${parts[0]}: ${item}.`);
-          }
-          const kind = item.slice(0, separator).trim().toLowerCase();
-          const value = item.slice(separator + 1).trim();
-          if (!INTENT_KINDS.has(kind)) throw new Error(`Kind chưa được hỗ trợ: ${kind}.`);
-          if (!value) throw new Error(`Expectation ${kind} trong flow ${parts[0]} chưa có value.`);
-          return {kind, value};
+    const intentDraft = {flows: [], templates: []};
+    const intentKindOptions = [...INTENT_KINDS].map(kind => `<option value="${kind}">${kind}</option>`).join('');
+    function freshIntentFlow(index = intentDraft.flows.length) {
+      return {id: `flow-${index + 1}`, name: `New flow ${index + 1}`, steps: [freshIntentStep(0)]};
+    }
+    function freshIntentStep(index = 0) {
+      return {id: `step-${index + 1}`, name: `Step ${index + 1}`, description: '', expected: [{kind: 'route', value: ''}]};
+    }
+    function draftSteps(flow) {
+      if (Array.isArray(flow.steps) && flow.steps.length) return flow.steps.map((step, index) => ({
+        id: step.id || `step-${index + 1}`,
+        name: step.name || `Step ${index + 1}`,
+        description: step.description || '',
+        expected: (step.expected || []).map(item => ({kind: item.kind || 'route', value: item.value || ''}))
+      }));
+      return [{id: `${flow.id || 'flow'}-step-1`, name: flow.name || 'Step 1', description: '', expected: (flow.expected || []).map(item => ({kind: item.kind || 'route', value: item.value || ''}))}];
+    }
+    function draftFlow(flow, index) {
+      return {id: flow.id || `flow-${index + 1}`, name: flow.name || flow.id || `Flow ${index + 1}`, steps: draftSteps(flow)};
+    }
+    function renderIntentEditor() {
+      intentFlowList.replaceChildren();
+      intentDraft.flows.forEach((flow, flowIndex) => {
+        const card = document.createElement('div');
+        card.className = 'intent-flow-card';
+        card.dataset.flowIndex = String(flowIndex);
+        card.innerHTML = `<div class="intent-flow-heading"><strong>Flow ${flowIndex + 1}</strong><input class="intent-flow-id" data-field="id" value="${escapeHtml(flow.id)}" aria-label="Flow id"><input class="intent-flow-name" data-field="name" value="${escapeHtml(flow.name)}" aria-label="Flow name"><button class="text-button" type="button" data-action="remove-flow">Remove</button></div><div class="intent-step-list"></div><button class="text-button" type="button" data-action="add-step">+ Add step</button>`;
+        const stepList = card.querySelector('.intent-step-list');
+        flow.steps.forEach((step, stepIndex) => {
+          const stepCard = document.createElement('div');
+          stepCard.className = 'intent-step-card';
+          stepCard.dataset.stepIndex = String(stepIndex);
+          stepCard.innerHTML = `<div class="intent-step-heading"><strong>Step ${stepIndex + 1}</strong><input data-field="id" value="${escapeHtml(step.id)}" aria-label="Step id"><input data-field="name" value="${escapeHtml(step.name)}" aria-label="Step name"><button class="text-button" type="button" data-action="move-step-up" ${stepIndex === 0 ? 'disabled' : ''}>↑</button><button class="text-button" type="button" data-action="move-step-down" ${stepIndex === flow.steps.length - 1 ? 'disabled' : ''}>↓</button><button class="text-button" type="button" data-action="remove-step" ${flow.steps.length === 1 ? 'disabled' : ''}>Remove</button></div><textarea data-field="description" maxlength="500" aria-label="Step description" placeholder="What should happen in this step?">${escapeHtml(step.description)}</textarea><div class="intent-expectations"></div><button class="text-button" type="button" data-action="add-expectation">+ Add expectation</button>`;
+          const expectations = stepCard.querySelector('.intent-expectations');
+          step.expected.forEach((expected, expectedIndex) => {
+            const row = document.createElement('div');
+            row.className = 'intent-expectation-row';
+            row.dataset.expectedIndex = String(expectedIndex);
+            row.innerHTML = `<select data-field="kind" aria-label="Expectation kind">${intentKindOptions}</select><input data-field="value" value="${escapeHtml(expected.value)}" placeholder="/signup or source/path" aria-label="Expectation value"><button class="text-button" type="button" data-action="remove-expectation" ${step.expected.length === 1 ? 'disabled' : ''}>×</button>`;
+            row.querySelector('select').value = INTENT_KINDS.has(expected.kind) ? expected.kind : 'route';
+            expectations.appendChild(row);
+          });
+          stepList.appendChild(stepCard);
         });
-        if (!expected.length) throw new Error(`Flow ${parts[0]} cần ít nhất một expectation.`);
-        return {id: parts[0], name: parts[1] || parts[0], expected};
+        intentFlowList.appendChild(card);
+      });
+      if (!intentDraft.flows.length) {
+        const empty = document.createElement('p');
+        empty.className = 'intent-muted';
+        empty.textContent = 'Chưa có flow. Bấm Add flow hoặc chọn template.';
+        intentFlowList.appendChild(empty);
+      }
+    }
+    function collectIntentFlows() {
+      const cards = [...intentFlowList.querySelectorAll('.intent-flow-card')];
+      if (!cards.length) throw new Error('Cần khai báo ít nhất một flow.');
+      const ids = new Set();
+      return cards.map((card, flowIndex) => {
+        const id = card.querySelector('[data-field="id"]')?.value.trim();
+        const name = card.querySelector('[data-field="name"]')?.value.trim();
+        if (!id || !name) throw new Error(`Flow ${flowIndex + 1} cần id và tên.`);
+        if (ids.has(id)) throw new Error(`Flow id bị trùng: ${id}.`);
+        ids.add(id);
+        const steps = [...card.querySelectorAll('.intent-step-card')].map((stepCard, stepIndex) => {
+          const stepId = stepCard.querySelector('[data-field="id"]')?.value.trim();
+          const stepName = stepCard.querySelector('[data-field="name"]')?.value.trim();
+          if (!stepId || !stepName) throw new Error(`Flow ${id}, step ${stepIndex + 1} cần id và tên.`);
+          const expected = [...stepCard.querySelectorAll('.intent-expectation-row')].map(row => {
+            const kind = row.querySelector('[data-field="kind"]')?.value;
+            const value = row.querySelector('[data-field="value"]')?.value.trim();
+            if (!INTENT_KINDS.has(kind) || !value) throw new Error(`Flow ${id}, step ${stepName} có expectation chưa hợp lệ.`);
+            return {kind, value};
+          });
+          if (!expected.length) throw new Error(`Flow ${id}, step ${stepName} cần ít nhất một expectation.`);
+          return {id: stepId, name: stepName, description: stepCard.querySelector('[data-field="description"]')?.value.trim() || '', expected};
+        });
+        if (!steps.length) throw new Error(`Flow ${id} cần ít nhất một step.`);
+        return {id, name, steps};
       });
     }
     function renderIntentForm(intent = {}) {
       const product = intent.product || {};
       intentProductName.value = product.name || '';
       intentAudience.value = intent.audience || product.audience || '';
-      intentFlows.value = (intent.flows || []).map(flow => {
-        const expected = (flow.expected || []).map(item => `${item.kind}:${item.value}`).join('; ');
-        return `${flow.id} | ${flow.name || flow.id} | ${expected}`;
-      }).join('\n');
+      intentDraft.flows = (intent.flows || []).map(draftFlow);
+      renderIntentEditor();
     }
+    function renderIntentTemplates() {
+      intentTemplateSelect.replaceChildren();
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = intentDraft.templates.length ? 'Choose a template…' : 'No saved templates yet';
+      intentTemplateSelect.appendChild(empty);
+      intentDraft.templates.forEach(template => {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        intentTemplateSelect.appendChild(option);
+      });
+      intentTemplateList.replaceChildren();
+      if (!intentDraft.templates.length) {
+        const emptyCopy = document.createElement('span');
+        emptyCopy.className = 'intent-muted';
+        emptyCopy.textContent = 'Lưu flow thường dùng để tái sử dụng ở workspace khác.';
+        intentTemplateList.appendChild(emptyCopy);
+        return;
+      }
+      intentDraft.templates.forEach(template => {
+        const row = document.createElement('div');
+        row.className = 'intent-template-item';
+        row.innerHTML = `<span>${escapeHtml(template.name)}</span><button class="text-button" type="button" data-template-delete="${escapeHtml(template.id)}">Delete</button>`;
+        intentTemplateList.appendChild(row);
+      });
+    }
+    async function loadIntentTemplates() {
+      try {
+        const response = await fetch('/api/intent/templates', {cache: 'no-store'});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể đọc template local.');
+        intentDraft.templates = Array.isArray(result.templates) ? result.templates : [];
+        renderIntentTemplates();
+      } catch (error) {
+        intentDraft.templates = [];
+        renderIntentTemplates();
+        intentSettingsStatus.textContent = error.message || 'Template local chưa sẵn sàng.';
+      }
+    }
+    async function deleteIntentTemplate(templateId) {
+      const response = await fetch(`/api/intent/templates/${encodeURIComponent(templateId)}`, {method: 'DELETE'});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Không thể xóa template local.');
+      await loadIntentTemplates();
+      intentSettingsStatus.textContent = 'Đã xóa template local.';
+    }
+    intentTemplateSelect.addEventListener('change', () => {
+      const template = intentDraft.templates.find(item => item.id === intentTemplateSelect.value);
+      intentTemplateUse.disabled = !template;
+    });
+    intentTemplateUse.addEventListener('click', () => {
+      const template = intentDraft.templates.find(item => item.id === intentTemplateSelect.value);
+      if (!template) return;
+      intentDraft.flows = [draftFlow(template.flow, 0)];
+      renderIntentEditor();
+      intentSettingsStatus.textContent = `Đã nạp template “${template.name}”. Save and compare để ghi vào workspace.`;
+    });
+    intentTemplateList.addEventListener('click', async event => {
+      const button = event.target.closest('[data-template-delete]');
+      if (!button) return;
+      button.disabled = true;
+      try { await deleteIntentTemplate(button.dataset.templateDelete); } catch (error) { intentSettingsStatus.className = 'settings-status error'; intentSettingsStatus.textContent = error.message || 'Không thể xóa template local.'; button.disabled = false; }
+    });
+    intentFlowList.addEventListener('click', event => {
+      const button = event.target.closest('[data-action]');
+      if (!button) return;
+      const card = button.closest('.intent-flow-card');
+      const flowIndex = Number(card?.dataset.flowIndex);
+      const stepCard = button.closest('.intent-step-card');
+      const stepIndex = Number(stepCard?.dataset.stepIndex);
+      const flow = intentDraft.flows[flowIndex];
+      if (!flow) return;
+      const action = button.dataset.action;
+      if (action === 'remove-flow') intentDraft.flows.splice(flowIndex, 1);
+      if (action === 'add-step') flow.steps.push(freshIntentStep(flow.steps.length));
+      if (action === 'remove-step' && flow.steps.length > 1) flow.steps.splice(stepIndex, 1);
+      if (action === 'move-step-up' && stepIndex > 0) [flow.steps[stepIndex - 1], flow.steps[stepIndex]] = [flow.steps[stepIndex], flow.steps[stepIndex - 1]];
+      if (action === 'move-step-down' && stepIndex < flow.steps.length - 1) [flow.steps[stepIndex + 1], flow.steps[stepIndex]] = [flow.steps[stepIndex], flow.steps[stepIndex + 1]];
+      if (action === 'add-expectation') flow.steps[stepIndex].expected.push({kind: 'route', value: ''});
+      if (action === 'remove-expectation' && flow.steps[stepIndex].expected.length > 1) flow.steps[stepIndex].expected.splice(Number(button.closest('.intent-expectation-row')?.dataset.expectedIndex), 1);
+      renderIntentEditor();
+    });
+    intentAddFlow.addEventListener('click', () => { intentDraft.flows.push(freshIntentFlow()); renderIntentEditor(); });
+    intentTemplateSave.addEventListener('click', async () => {
+      const name = intentTemplateName.value.trim();
+      if (!name) { intentTemplateName.focus(); return; }
+      try {
+        const flows = collectIntentFlows();
+        const response = await fetch('/api/intent/templates', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, flow: flows[0]})});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Không thể lưu template local.');
+        intentTemplateName.value = '';
+        await loadIntentTemplates();
+        intentSettingsStatus.className = 'settings-status success';
+        intentSettingsStatus.textContent = `Đã lưu template “${result.template.name}”. Template không rescan workspace.`;
+      } catch (error) {
+        intentSettingsStatus.className = 'settings-status error';
+        intentSettingsStatus.textContent = error.message || 'Không thể lưu template local.';
+      }
+    });
     async function openIntentSettings() {
       intentModal.classList.add('open');
       intentModal.setAttribute('aria-hidden', 'false');
@@ -1908,6 +2101,8 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.message || 'Không thể đọc product intent hiện tại.');
         renderIntentForm(result);
+        await loadIntentTemplates();
+        intentTemplateUse.disabled = true;
         intentSettingsStatus.textContent = result.configured
           ? 'Đang chỉnh sửa seed hiện tại. Save sẽ scan lại và cập nhật Unknowns.'
           : 'Chưa có intent. Hãy thêm flow đầu tiên để bắt đầu đối chiếu.';
@@ -1927,10 +2122,10 @@ checkout | Checkout | route:/checkout; api:/api/orders"></textarea>
       if (!productName) return intentProductName.focus();
       let flows;
       try {
-        flows = parseIntentFlows(intentFlows.value);
+        flows = collectIntentFlows();
       } catch (error) {
         intentSettingsStatus.className = 'settings-status error';
-        intentSettingsStatus.textContent = error.message || 'Flow format không hợp lệ.';
+        intentSettingsStatus.textContent = error.message || 'Flow editor không hợp lệ.';
         return;
       }
       intentSettingsStatus.className = 'settings-status';
